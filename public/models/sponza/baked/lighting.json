@@ -6,18 +6,7 @@
   "diffuseBounces": 4,
   "aoDistance": 1.0,
   "uvChannel": 1,
-  "sun": {
-    "direction": [
-      -0.5,
-      -1.0,
-      -0.35
-    ],
-    "intensity": 3.0
-  },
-  "indirectPasses": [
-    "INDIRECT",
-    "COLOR"
-  ],
+  "includesSunBounce": false,
   "sky": {
     "model": "uniform world",
     "colorLinear": [
@@ -41,15 +30,15 @@
     "nonzeroAoTexels": 7210161,
     "aoMean": 0.8245087265968323,
     "aoMinimum": 0.0013888889225199819,
-    "indirectPeak": 0.7456947565078735,
-    "indirectMean": 0.048009779304265976,
-    "sunIndirectMean": 0.0001960564113687724,
+    "indirectPeak": 0.7456948161125183,
+    "indirectMean": 0.04781367629766464,
+    "sunIndirectMean": 0.0,
     "skyMean": 0.04781367629766464
   },
   "sha256": {
     "Sponza.gltf": "eac547bafa8342d6c722be6479ba63ff6ff0775ccea7d06a8e16de8860554af6",
-    "Sponza.bin": "ec9ec7d26b6dc822bc46c9b55bbd49dbe06e89985b4dae25a207ebe723ebf2ef",
+    "Sponza.bin": "a9c90b8328bc94086db86623ac5471f85e3cf7ea628e95880e5fccac92b22dbc",
     "ao.png": "5406be0c3a3dd9fc336b98935f4eea8c7a970fd979b1541f09c8dc26e603b525",
-    "indirect.png": "2ea50c3e8deb23b43cccdf47c0b7808a686bd18652a9a4c8a0e0b147aa50017a"
+    "indirect.png": "73e01ebf1a2594a77cc1c2cfd139f8fb59a2dfb3da2592142fa7d8edea6ee944"
   }
 }

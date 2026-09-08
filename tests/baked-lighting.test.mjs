@@ -55,12 +55,12 @@ test("bake outputs match their hashes and texture dimensions", () => {
 });
 
 
-test("lighting separates sun bounce from diffuse skylight", () => {
+test("baked lighting is independent of the movable sun", () => {
   assert.equal(lighting.samples, 512);
   assert.equal(lighting.includesDiffuseSky, true);
-  assert.deepEqual(lighting.indirectPasses, ["INDIRECT", "COLOR"]);
+  assert.equal(lighting.includesSunBounce, false);
   assert.deepEqual(lighting.sky.passes, ["DIRECT", "INDIRECT", "COLOR"]);
-  assert.ok(lighting.statistics.sunIndirectMean > 0);
+  assert.equal(lighting.statistics.sunIndirectMean, 0);
   assert.ok(lighting.statistics.skyMean > 0);
   const sum = lighting.statistics.sunIndirectMean + lighting.statistics.skyMean;
   assert.ok(Math.abs(lighting.statistics.indirectMean - sum) < 0.00001);

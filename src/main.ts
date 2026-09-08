@@ -16,6 +16,8 @@ const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const controls = document.querySelector<HTMLFieldSetElement>("#controls")!;
 const view = document.querySelector<HTMLSelectElement>("#view")!;
 const shadows = document.querySelector<HTMLSelectElement>("#shadows")!;
+const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
+const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!;
 const exposure = document.querySelector<HTMLInputElement>("#exposure")!;
 const scale = document.querySelector<HTMLSelectElement>("#scale")!;
 const fxaa = document.querySelector<HTMLInputElement>("#fxaa")!;
@@ -141,25 +143,34 @@ async function start() {
     camera.position.copyFrom(positions[view.value]);
     camera.setTarget(new Vector3(center.x, eye + 0.5, center.z));
   }
-  // Fit the native lighting volume to the model in the sun's coordinate system.
-  const lightView = Matrix.LookAtLH(sun.position, sun.position.add(sun.direction), Vector3.Up());
-  let lightMinimum = new Vector3(Infinity, Infinity, Infinity);
-  let lightMaximum = new Vector3(-Infinity, -Infinity, -Infinity);
-  for (const mesh of meshes) {
-    for (const corner of mesh.getBoundingInfo().boundingBox.vectorsWorld) {
-      const point = Vector3.TransformCoordinates(corner, lightView);
-      lightMinimum = Vector3.Minimize(lightMinimum, point);
-      lightMaximum = Vector3.Maximize(lightMaximum, point);
+  function updateSunDirection() {
+    const azimuth = Number(sunAzimuth.value) * Math.PI / 180;
+    const elevation = Number(sunElevation.value) * Math.PI / 180;
+    sun.direction.set(-Math.cos(elevation) * Math.cos(azimuth), -Math.sin(elevation), -Math.cos(elevation) * Math.sin(azimuth));
+    sun.position.copyFrom(center.subtract(sun.direction.scale(Vector3.Distance(minimum, maximum))));
+    document.querySelector<HTMLOutputElement>("#sun-azimuth-value")!.value = sunAzimuth.value;
+    document.querySelector<HTMLOutputElement>("#sun-elevation-value")!.value = sunElevation.value;
+    // Keep shadow coverage fitted to the whole model as the sun rotates.
+    const lightView = Matrix.LookAtLH(sun.position, sun.position.add(sun.direction), Vector3.Up());
+    let lightMinimum = new Vector3(Infinity, Infinity, Infinity);
+    let lightMaximum = new Vector3(-Infinity, -Infinity, -Infinity);
+    for (const mesh of meshes) {
+      for (const corner of mesh.getBoundingInfo().boundingBox.vectorsWorld) {
+        const point = Vector3.TransformCoordinates(corner, lightView);
+        lightMinimum = Vector3.Minimize(lightMinimum, point);
+        lightMaximum = Vector3.Maximize(lightMaximum, point);
+      }
     }
+    sun.autoUpdateExtends = false;
+    sun.shadowOrthoScale = 0;
+    sun.orthoLeft = lightMinimum.x - 1;
+    sun.orthoRight = lightMaximum.x + 1;
+    sun.orthoBottom = lightMinimum.y - 1;
+    sun.orthoTop = lightMaximum.y + 1;
+    sun.shadowMinZ = lightMinimum.z - 1;
+    sun.shadowMaxZ = lightMaximum.z + 1;
   }
-  sun.autoUpdateExtends = false;
-  sun.shadowOrthoScale = 0;
-  sun.orthoLeft = lightMinimum.x - 1;
-  sun.orthoRight = lightMaximum.x + 1;
-  sun.orthoBottom = lightMinimum.y - 1;
-  sun.orthoTop = lightMaximum.y + 1;
-  sun.shadowMinZ = lightMinimum.z - 1;
-  sun.shadowMaxZ = lightMaximum.z + 1;
+  updateSunDirection();
 
   const frameGraph = new FrameGraph(activeScene);
   frameGraph.pausedExecution = true;
@@ -256,6 +267,16 @@ async function start() {
     void rebuildGraph().catch(fail);
   }
   activeScene.onDisposeObservable.add(() => frameGraph.dispose());
+  let sunSettleTimer: ReturnType<typeof setTimeout>;
+  function moveSun() {
+    updateSunDirection();
+    volume.lightingVolume.frequency = 1;
+    clearTimeout(sunSettleTimer);
+    sunSettleTimer = setTimeout(() => { void rebuildGraph().catch(fail); }, 300);
+  }
+  sunAzimuth.addEventListener("input", moveSun);
+  sunElevation.addEventListener("input", moveSun);
+  activeScene.onDisposeObservable.add(() => clearTimeout(sunSettleTimer));
   view.addEventListener("change", resetView);
   shadows.addEventListener("change", () => {
     updateShadows();

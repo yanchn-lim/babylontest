@@ -1,4 +1,4 @@
-"""Bake Sponza AO, diffuse sunlight bounce, and diffuse skylight with Blender 4.5.
+"""Bake Sponza AO and diffuse skylight for a movable sun with Blender 4.5.
 Run: blender --background --factory-startup --python scripts/bake-lighting.py
 Outputs are staged in .tools/baked-lighting for review before publication.
 """
@@ -12,7 +12,6 @@ import zlib
 
 import bpy
 import numpy as np
-from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public/models/sponza"
@@ -20,8 +19,6 @@ OUTPUT = ROOT / ".tools/baked-lighting"
 SIZE = 4096
 SAMPLES = 512
 AO_DISTANCE = 1.0
-SUN_DIRECTION = [-0.5, -1.0, -0.35]
-SUN_INTENSITY = 3.0
 SKY_COLOR = [0.8, 0.85, 1.0]
 SKY_STRENGTH = 1.4
 
@@ -128,14 +125,6 @@ scene.world.use_nodes = True
 scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0
 scene.world.light_settings.distance = AO_DISTANCE
 
-sun_data = bpy.data.lights.new("Sun matching Babylon", type="SUN")
-sun_data.energy = SUN_INTENSITY
-sun_data.angle = 0.01
-sun = bpy.data.objects.new("Sun matching Babylon", sun_data)
-scene.collection.objects.link(sun)
-# Babylon's left-handed Y-up world maps to Blender as (x, z, y).
-sun.rotation_euler = Vector((SUN_DIRECTION[0], SUN_DIRECTION[2], SUN_DIRECTION[1])).to_track_quat("-Z", "Y").to_euler()
-
 target = bpy.data.images.new("BakeTarget", width=SIZE, height=SIZE, alpha=True, float_buffer=True)
 target.colorspace_settings.name = "Non-Color"
 target.generated_color = (0, 0, 0, 0)
@@ -162,12 +151,7 @@ if not coverage.any():
 ao_rgb = np.clip(ao[:, :, :3], 0, 1)
 png(OUTPUT / "ao.png", np.rint(ao_rgb * 255))
 
-log("Baking diffuse INDIRECT + COLOR; direct sunlight is excluded")
-bpy.ops.object.bake(type="DIFFUSE", pass_filter={"INDIRECT", "COLOR"}, uv_layer=bake_uv.name, use_clear=True)
-indirect = read_pixels(target)
-sun_radiance = np.maximum(indirect[:, :, :3], 0)
-log("Baking diffuse skylight DIRECT + INDIRECT + COLOR with the sun disabled")
-sun_data.energy = 0
+log("Baking diffuse skylight DIRECT + INDIRECT + COLOR without sunlight")
 background = scene.world.node_tree.nodes["Background"]
 background.inputs["Color"].default_value = (*SKY_COLOR, 1)
 background.inputs["Strength"].default_value = SKY_STRENGTH
@@ -176,7 +160,7 @@ sky = read_pixels(target)
 sky_radiance = np.maximum(sky[:, :, :3], 0)
 if not sky_radiance.max() > 0:
     raise RuntimeError("Skylight bake contains no light")
-radiance = sun_radiance + sky_radiance
+radiance = sky_radiance
 peak = float(radiance.max())
 if peak <= 0:
     raise RuntimeError("Indirect bake contains no light")
@@ -188,8 +172,7 @@ metadata = {
     "device": devices[0].name if devices else "CPU",
     "resolution": SIZE, "samples": SAMPLES, "diffuseBounces": 4,
     "aoDistance": AO_DISTANCE, "uvChannel": 1,
-    "sun": {"direction": SUN_DIRECTION, "intensity": SUN_INTENSITY},
-    "indirectPasses": ["INDIRECT", "COLOR"],
+    "includesSunBounce": False,
     "sky": {"model": "uniform world", "colorLinear": SKY_COLOR, "strength": SKY_STRENGTH,
             "passes": ["DIRECT", "INDIRECT", "COLOR"]},
     "includesDiffuseSky": True,
@@ -203,7 +186,7 @@ metadata = {
         "aoMinimum": float(ao_rgb[coverage].min()),
         "indirectPeak": peak,
         "indirectMean": float(radiance[coverage].mean()),
-        "sunIndirectMean": float(sun_radiance[coverage].mean()),
+        "sunIndirectMean": 0.0,
         "skyMean": float(sky_radiance[coverage].mean()),
     },
 }
