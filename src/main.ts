@@ -25,8 +25,22 @@ let statistics: ReturnType<typeof setInterval> | undefined;
 function fail(error: unknown) {
   console.error(error);
   status.classList.add("error");
-  status.textContent = "Could not load the scene. Check the console and run the asset setup again.";
+  status.textContent = error instanceof Error
+    ? `${error.name}: ${error.message}`
+    : String(error);
 }
+
+canvas.addEventListener("webglcontextlost", () => {
+  fail("Graphics context lost. The scene may exceed available graphics memory.");
+});
+
+window.addEventListener("error", event => {
+  fail(event.error ?? event.message);
+});
+
+window.addEventListener("unhandledrejection", event => {
+  fail(event.reason);
+});
 
 async function start() {
   engine = new Engine(canvas, false, { stencil: true });
