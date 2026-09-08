@@ -1,0 +1,76 @@
+{
+  "date": "2026-09-08",
+  "worktreeBase": "a081b4ba2b4475eda5f2e5cab2f12ad984127ccf",
+  "note": "Uncommitted bloom output allocation and dev walking route; Vite revision label stale at 7052765. Single matched pair, not phone performance.",
+  "scene": "bukit-merah",
+  "dimensions": [
+    2556,
+    849
+  ],
+  "devicePixelRatio": 1,
+  "route": {
+    "id": "turning-walk-v1",
+    "speed": 0.8,
+    "turnRate": 0.20943951023931953
+  },
+  "settings": {
+    "shadows": "1024",
+    "method": "pcf",
+    "filter": "low",
+    "scale": 1,
+    "shafts": true,
+    "bloom": true,
+    "fxaa": true,
+    "azimuth": 35,
+    "elevation": 58.6,
+    "exposure": 2
+  },
+  "warmupSeconds": 15,
+  "measurementSeconds": 60,
+  "runs": [
+    {
+      "profile": "baseline-7052765",
+      "startedAt": "2026-09-08T21:49:19.872Z",
+      "gpuMedianMs": 2.0459,
+      "gpuP95Ms": 2.48844,
+      "gpuSamples": 3596,
+      "frameSamples": 7200,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "distance": 24.893813157748987
+    },
+    {
+      "profile": "optimized",
+      "startedAt": "2026-09-08T21:50:51.371Z",
+      "gpuMedianMs": 1.17128,
+      "gpuP95Ms": 1.75772,
+      "gpuSamples": 3599,
+      "frameSamples": 7200,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.8,
+      "distance": 24.880253412437444
+    }
+  ],
+  "cameraStart": [
+    -10.5,
+    1.65,
+    -5.8
+  ],
+  "cameraEnd": [
+    -3.8219998855590824,
+    1.65,
+    -4.098000190734863
+  ],
+  "sunChanges": 0,
+  "shadowMapRendersStartEnd": [
+    2,
+    2
+  ],
+  "graphBuildsStartEnd": [
+    1,
+    1
+  ],
+  "surfaceBindingCorrect": true,
+  "gpuScope": "frame",
+  "ratio": 1.7467215354142476
+}

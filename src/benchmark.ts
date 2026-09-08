@@ -2,6 +2,7 @@ import { EngineInstrumentation } from "@babylonjs/core";
 import type { Engine, Scene, UniversalCamera } from "@babylonjs/core";
 import { BenchmarkRun, summarizeFrames } from "./performance";
 import { timeGpuTask } from "./gpu-task-timer";
+import { createWalkingRoute, WALK_ROUTE } from "./benchmark-route";
 
 export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalCamera,
   settings: () => Record<string, unknown>, isPaused: () => boolean, diagnostics: () => Record<string, unknown>) {
@@ -36,6 +37,15 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   const cameraState = () => ({ position: camera.position.asArray(), rotation: camera.rotation.asArray() });
   const view = document.querySelector<HTMLSelectElement>("#view")!;
   const navigation = document.querySelector<HTMLSelectElement>("#navigation")!;
+  const automatedWalk = import.meta.env.DEV && new URLSearchParams(location.search).get("walk-route") === "turning";
+  const advanceRoute = createWalkingRoute(camera);
+  let routeSeconds = 0;
+  const routeObserver = automatedWalk ? scene.onBeforeRenderObservable.add(() => {
+    if (!run || isPaused()) return;
+    const elapsed = Math.max(0, Math.min(60, (performance.now() - run.started - run.warmupMs) / 1000));
+    advanceRoute(elapsed - routeSeconds);
+    routeSeconds = elapsed;
+  }) : null;
 
   function announce(message: string) {
     if (message === lastStatus) return;
@@ -75,6 +85,11 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
       announce("Wait for graphics to finish loading.");
       return;
     }
+    if (automatedWalk && (mode.value !== "walking" || navigation.value !== "walk" || new URLSearchParams(location.search).get("scene") !== "bukit-merah")) {
+      announce("The automated route requires the apartment, Walk navigation, and Manual walking test mode.");
+      return;
+    }
+    routeSeconds = 0;
     const snapshot = settings();
     initialSettings = JSON.stringify(snapshot);
     initialSize = dimensions().join("x");
@@ -86,6 +101,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
     metadata = {
       version: 1, revision: __APP_REVISION__, startedAt: new Date().toISOString(),
       mode: mode.value, scene: new URLSearchParams(location.search).get("scene") || "sponza",
+      walkingRoute: automatedWalk ? WALK_ROUTE : undefined,
       view: view.selectedOptions[0].textContent, navigation: navigation.value,
       settings: snapshot, dimensions: dimensions(), devicePixelRatio: window.devicePixelRatio,
       browser: navigator.userAgent, renderer: "WebGL " + engine.webGLVersion,
@@ -147,6 +163,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   return () => {
     abort.abort();
     engine.onEndFrameObservable.remove(observer);
+    scene.onBeforeRenderObservable.remove(routeObserver);
     taskTimer?.dispose();
     instrumentation.dispose();
   };

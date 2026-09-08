@@ -24,6 +24,7 @@ test("fusion retains blur dependencies and skips merge/copy passes after rebuild
   });
   const bloom = new FrameGraphBloomTask("test-bloom", graph, 0.12, 32, 1, false, 0.5);
   bloom.sourceTexture = source;
+  bloom.targetTexture = source;
   graph.addTask(bloom);
   const tone = new BloomToneMappingTask("test-fused-tone", graph, bloom);
   tone.sourceTexture = source;
@@ -42,4 +43,32 @@ test("fusion retains blur dependencies and skips merge/copy passes after rebuild
       assert.ok(dependencies.has(source));
     }
   } finally { graph.dispose(); scene.dispose(); engine.dispose(); }
+});
+
+test("fused bloom avoids allocating an unused full-resolution HDR output", async () => {
+  const width = 2556, height = 849;
+  async function allocation(alias) {
+    const engine = new NullEngine(), scene = new Scene(engine), graph = new FrameGraph(scene);
+    graph.textureManager._allocateTextures = tasks => {
+      if (tasks) graph.textureManager._optimizeTextureAllocation(tasks);
+    };
+    graph.textureManager.createRenderTarget = () => ({ dispose() {} });
+    const texture = (name, type) => graph.textureManager.createRenderTargetTexture(name, {
+      size: { width, height }, options: { types: [type], formats: [Constants.TEXTUREFORMAT_RGBA] },
+    });
+    const source = texture("hdr", Constants.TEXTURETYPE_HALF_FLOAT);
+    const bloom = new FrameGraphBloomTask("bloom", graph, 0.12, 32, 1, true, 0.5);
+    bloom.sourceTexture = source;
+    if (alias) bloom.targetTexture = source;
+    graph.addTask(bloom);
+    const tone = new BloomToneMappingTask("tone", graph, bloom);
+    tone.sourceTexture = source;
+    tone.targetTexture = texture("display", Constants.TEXTURETYPE_UNSIGNED_BYTE);
+    graph.addTask(tone);
+    try {
+      await graph.buildAsync(false);
+      return graph.textureManager.computeTotalTextureSize(true, width, height);
+    } finally { graph.dispose(); scene.dispose(); engine.dispose(); }
+  }
+  assert.equal(await allocation(false) - await allocation(true), width * height * 8);
 });

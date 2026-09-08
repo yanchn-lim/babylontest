@@ -87,3 +87,26 @@ Matched walking benchmarks, moving-sun timing, additional baseline repeats,
 and device testing remain outstanding. An extra depth pass can behave
 differently on a mobile GPU. Compare both URLs on the phone before drawing a
 conclusion about its benefit.
+
+## First matched walking comparison
+
+The development-only `&walk-route=turning` route uses Babylon camera collision
+movement. Select the apartment, Walk navigation, and Manual walking test mode.
+Reload before each run to restore the same starting camera. The route starts
+after warm-up and runs at 0.8 m/s with two turns per minute.
+
+At 2556 x 849, the first baseline/optimized pair measured 2.04590 / 1.17128 ms
+median whole-frame GPU time (1.75x). GPU p95 was 2.48844 / 1.75772 ms.
+Both runs ended at the same position; travelled distance differed by 1.4 cm
+across approximately 24.9 m. This is one pair and requires repeat validation.
+See [walking results](desktop-walking-benchmarks.json). The 2x target remains unmet.
+
+The fused bloom path now reuses the scene target for its unused output.
+An isolated native FrameGraph allocation test shows 17,360,352 fewer planned
+texture bytes at these dimensions. This is not a measured VRAM or speed gain.
+All 32 tests and the production build pass, including route collision tests.
+
+Static imported meshes now freeze their world matrices after initial bounds
+calculation in the optimized path. Camera, sky, sun, and materials stay mutable.
+This change followed the first walking pair and has no claimed measured speedup.
+If geometry becomes movable later, unfreeze its matrix before changing transforms.

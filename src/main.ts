@@ -180,6 +180,7 @@ async function start() {
   let maximum = new Vector3(-Infinity, -Infinity, -Infinity);
   for (const mesh of meshes) {
     mesh.computeWorldMatrix(true);
+    if (optimizedRenderer) mesh.freezeWorldMatrix();
     mesh.receiveShadows = true;
     mesh.checkCollisions = apartment;
     const bounds = mesh.getBoundingInfo().boundingBox;
@@ -339,6 +340,8 @@ async function start() {
     Number(document.querySelector<HTMLInputElement>("#bloom-strength")!.value), 32, 1.0, true, 0.5);
   bloom.disabled = !bloomEnabled.checked;
   bloom.sourceTexture = shafts.outputTexture;
+  // The fused tone task disables bloom's merge and copy passes.
+  if (optimizedRenderer) bloom.targetTexture = shafts.outputTexture;
   frameGraph.addTask(bloom);
 
   const imageProcessing = optimizedRenderer
