@@ -180,3 +180,14 @@ Defaults remain High filtering with both effects enabled. The sun stays movable.
 Warm up each setting before measuring, use the same camera path, and repeat
 after sustained use on the phone. The displayed frame time is the frame interval,
 not GPU timing. A capped 60 fps does not establish available GPU headroom.
+
+## Settings panel
+
+Use Settings to open grouped controls; Done or Escape closes the panel. On mobile,
+the panel opens from the bottom with a fixed close button and scrollable sections.
+The compact HUD keeps FPS, frame interval, and pixel dimensions visible while walking.
+Both scenes support PCSS, PCF, or hard shadows, independent map resolution and filter
+quality, and PCSS-only softness. Sun and environment brightness, shaft strength,
+and bloom enable/strength are adjustable. Defaults preserve the previous appearance.
+PCF uses filtered edges without PCSS distance-dependent softness. Hard shadows use
+no soft filtering. Compare at the same resolution and camera path on the actual device.

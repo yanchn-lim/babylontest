@@ -36,6 +36,15 @@ document.querySelector<HTMLElement>("#navigation-setting")!.hidden = !apartment;
 const shadows = document.querySelector<HTMLSelectElement>("#shadows")!;
 const shadowFilter = document.querySelector<HTMLSelectElement>("#shadow-filter")!;
 const shaftsEnabled = document.querySelector<HTMLInputElement>("#shafts")!;
+const shadowMethod = document.querySelector<HTMLSelectElement>("#shadow-method")!;
+const shadowSoftness = document.querySelector<HTMLInputElement>("#shadow-softness")!;
+const bloomEnabled = document.querySelector<HTMLInputElement>("#bloom-enabled")!;
+const settingsDialog = document.querySelector<HTMLDialogElement>("#settings-dialog")!;
+document.querySelector<HTMLButtonElement>("#open-settings")!.addEventListener("click", () => {
+  if (document.pointerLockElement) document.exitPointerLock();
+  settingsDialog.showModal();
+});
+document.querySelector<HTMLButtonElement>("#close-settings")!.addEventListener("click", () => settingsDialog.close());
 const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
 const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!;
 const exposure = document.querySelector<HTMLInputElement>("#exposure")!;
@@ -327,7 +336,7 @@ async function start() {
     frameGraph.pausedExecution = true;
     graphBuild = graphBuild.then(() => frameGraph.buildAsync()).then(() => {
       sun.getShadowGenerators()!.set(camera, shadowTask.shadowGenerator!);
-      shadowTask.shadowGenerator!.contactHardeningLightSizeUVRatio = 0.005;
+      shadowTask.shadowGenerator!.contactHardeningLightSizeUVRatio = Number(shadowSoftness.value);
       volume.lightingVolume.frequency = 0;
       frameGraph.pausedExecution = false;
     });
@@ -337,6 +346,10 @@ async function start() {
     const size = Number(shadows.value);
     const enableShafts = shaftsEnabled.checked;
     shadowTask.mapSize = size || 1024;
+    shadowTask.filter = shadowMethod.value === "pcf" ? ShadowGenerator.FILTER_PCF
+      : shadowMethod.value === "hard" ? ShadowGenerator.FILTER_NONE : ShadowGenerator.FILTER_PCSS;
+    shadowFilter.disabled = !size || shadowMethod.value === "hard";
+    shadowSoftness.disabled = !size || shadowMethod.value !== "pcss";
     shadowTask.filteringQuality = shadowFilter.value === "low"
       ? ShadowGenerator.QUALITY_LOW
       : shadowFilter.value === "medium"
@@ -384,12 +397,29 @@ async function start() {
     if (navigation.value === "walk") view.value = "atrium";
     resetView();
   });
-  for (const control of [shadows, shadowFilter, shaftsEnabled]) {
+  for (const control of [shadows, shadowMethod, shadowFilter, shaftsEnabled]) {
     control.addEventListener("change", () => {
       updateShadows();
       void rebuildGraph().catch(fail);
     });
   }
+  shadowSoftness.addEventListener("input", () => {
+    if (shadowTask.shadowGenerator) shadowTask.shadowGenerator.contactHardeningLightSizeUVRatio = Number(shadowSoftness.value);
+    document.querySelector<HTMLOutputElement>("#shadow-softness-value")!.value = Number(shadowSoftness.value).toFixed(3);
+  });
+  function bindSlider(id: string, digits: number, apply: (value: number) => void) {
+    const input = document.querySelector<HTMLInputElement>("#" + id)!;
+    const output = document.querySelector<HTMLOutputElement>("#" + id + "-value")!;
+    input.addEventListener("input", () => {
+      apply(Number(input.value));
+      output.value = Number(input.value).toFixed(digits);
+    });
+  }
+  bindSlider("sun-intensity", 1, value => { sun.intensity = value; });
+  bindSlider("environment-intensity", 2, value => { activeScene.environmentIntensity = value; });
+  bindSlider("shaft-strength", 2, value => { shafts.lightPower = new Color3(value, value, value); });
+  bindSlider("bloom-strength", 2, value => { bloom.bloom.weight = value; });
+  bloomEnabled.addEventListener("change", () => { bloom.disabled = !bloomEnabled.checked; });
   exposure.addEventListener("input", () => {
     activeScene.imageProcessingConfiguration.exposure = Number(exposure.value);
     document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
@@ -401,6 +431,7 @@ async function start() {
   inspector.addEventListener("click", async () => {
     inspector.disabled = true;
     try {
+      settingsDialog.close();
       await import("@babylonjs/inspector");
       if (activeScene.debugLayer.isVisible()) activeScene.debugLayer.hide();
       else await activeScene.debugLayer.show({ embedMode: true });
