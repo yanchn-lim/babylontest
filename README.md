@@ -88,7 +88,7 @@ The original materials and textures are preserved. AO uses a one-unit distance.
 The lightmap combines sunlight bounce with direct and bounced diffuse skylight.
 The sky is a uniform world with linear color (0.8, 0.85, 1.0) and strength 1.4.
 Direct sunlight stays real time. The environment map supplies specular reflections;
-its diffuse contribution is disabled to avoid counting skylight twice.
+its diffuse contribution is reduced to 35% as an artistic fill for shaded areas.
 The artificial hemispheric fill is removed.
 
 To reproduce with Blender 4.5 and an AMD HIP device:

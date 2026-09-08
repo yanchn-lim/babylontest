@@ -4,7 +4,7 @@ import {
   FrameGraphLightingVolumeTask, FrameGraphVolumetricLightingTask,
   FrameGraphBloomTask, FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
   ImageProcessingConfiguration, PBRMaterial, Scene, SceneLoader,
-  ShadowGenerator, SphericalPolynomial, Texture, UniversalCamera, Vector3,
+  ShadowGenerator, SphericalHarmonics, SphericalPolynomial, Texture, UniversalCamera, Vector3,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
@@ -52,12 +52,15 @@ async function start() {
   const activeScene = scene;
   activeScene.clearColor = new Color4(0.16, 0.20, 0.26, 1);
   const environment = CubeTexture.CreateFromPrefilteredData(
-    import.meta.env.BASE_URL + "environments/environmentSpecular.dds", activeScene, undefined, false,
+    import.meta.env.BASE_URL + "environments/environmentSpecular.dds", activeScene,
   );
-  // Diffuse sky is baked; keep the environment's specular reflections only.
-  environment.sphericalPolynomial = new SphericalPolynomial();
+  // Add a reduced diffuse environment fill to the baked skylight.
   environment.onLoadObservable.addOnce(() => {
-    environment.sphericalPolynomial = new SphericalPolynomial();
+    const polynomial = environment.sphericalPolynomial;
+    if (!polynomial) return;
+    const harmonics = SphericalHarmonics.FromPolynomial(polynomial);
+    harmonics.scaleInPlace(0.35);
+    environment.sphericalPolynomial = SphericalPolynomial.FromHarmonics(harmonics);
   });
   activeScene.environmentTexture = environment;
   activeScene.environmentIntensity = 0.65;
