@@ -3,9 +3,10 @@ import {
   FrameGraphClearTextureTask, FrameGraphObjectRendererTask, FrameGraphShadowGeneratorTask,
   FrameGraphLightingVolumeTask, FrameGraphVolumetricLightingTask,
   FrameGraphBloomTask, FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
-  ImageProcessingConfiguration, PBRMaterial, Scene, SceneLoader,
+  ImageProcessingConfiguration, MeshBuilder, PBRMaterial, Scene, SceneLoader,
   ShadowGenerator, SphericalHarmonics, SphericalPolynomial, Texture, UniversalCamera, Vector3,
 } from "@babylonjs/core";
+import { SkyMaterial } from "@babylonjs/materials/sky";
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
@@ -92,6 +93,15 @@ async function start() {
   const sun = new DirectionalLight("sun", new Vector3(-0.5, -1, -0.35), activeScene);
   sun.position = new Vector3(12, 22, 8);
   sun.intensity = 3;
+  const sky = MeshBuilder.CreateBox("sky", { size: 200 }, activeScene);
+  sky.infiniteDistance = true;
+  sky.isPickable = false;
+  const skyMaterial = new SkyMaterial("sky", activeScene);
+  skyMaterial.backFaceCulling = false;
+  skyMaterial.disableDepthWrite = true;
+  skyMaterial.useSunPosition = true;
+  skyMaterial.turbidity = 2;
+  sky.material = skyMaterial;
 
   activeEngine.runRenderLoop(() => activeScene.render());
   const bakedUrl = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/baked/" : "models/sponza/baked/");
@@ -177,6 +187,7 @@ async function start() {
     const elevation = Number(sunElevation.value) * Math.PI / 180;
     sun.direction.set(-Math.cos(elevation) * Math.cos(azimuth), -Math.sin(elevation), -Math.cos(elevation) * Math.sin(azimuth));
     sun.position.copyFrom(center.subtract(sun.direction.scale(Vector3.Distance(minimum, maximum))));
+    skyMaterial.sunPosition.copyFrom(sun.direction).scaleInPlace(-1000);
     document.querySelector<HTMLOutputElement>("#sun-azimuth-value")!.value = sunAzimuth.value;
     document.querySelector<HTMLOutputElement>("#sun-elevation-value")!.value = sunElevation.value;
     // Keep shadow coverage fitted to the whole model as the sun rotates.
@@ -246,7 +257,7 @@ async function start() {
   const renderTask = new FrameGraphObjectRendererTask("scene", frameGraph, activeScene);
   renderTask.targetTexture = clear.outputTexture;
   renderTask.depthTexture = clear.outputDepthTexture;
-  renderTask.objectList = { meshes, particleSystems: [] };
+  renderTask.objectList = { meshes: [sky, ...meshes], particleSystems: [] };
   renderTask.camera = camera;
   renderTask.disableImageProcessing = true;
   renderTask.isMainObjectRenderer = true;

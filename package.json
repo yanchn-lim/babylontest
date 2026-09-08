@@ -16,8 +16,9 @@
   },
   "dependencies": {
     "@babylonjs/core": "9.25.0",
+    "@babylonjs/inspector": "9.25.0",
     "@babylonjs/loaders": "9.25.0",
-    "@babylonjs/inspector": "9.25.0"
+    "@babylonjs/materials": "9.25.0"
   },
   "devDependencies": {
     "typescript": "5.9.3",
