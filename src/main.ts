@@ -202,7 +202,7 @@ async function start() {
   shafts.light = sun;
   shafts.lightingVolumeMesh = volume.outputMeshLightingVolume;
   shafts.lightingVolumeTexture = volumeColor;
-  shafts.lightPower = new Color3(0.4, 0.4, 0.2);
+  shafts.lightPower = new Color3(0.1, 0.1, 0.1);
   shafts.phaseG = 0.05;
   frameGraph.addTask(shafts);
 
