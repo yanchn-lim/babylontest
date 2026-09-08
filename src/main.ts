@@ -237,6 +237,7 @@ async function start() {
   function rebuildGraph() {
     frameGraph.pausedExecution = true;
     graphBuild = graphBuild.then(() => frameGraph.buildAsync()).then(() => {
+      shadowTask.shadowGenerator!.contactHardeningLightSizeUVRatio = 0.005;
       volume.lightingVolume.frequency = 0;
       frameGraph.pausedExecution = false;
     });
