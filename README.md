@@ -47,10 +47,11 @@ Select Atrium, Reverse atrium, or Upper overview to reset the camera.
 Controls expose shadow resolution, exposure, render scale, FXAA, and the Babylon inspector.
 
 The initial renderer uses WebGL, preferring WebGL 2 where available.
-Lighting uses one directional sun, a weak hemispheric fill, and a prefiltered
-environment map with ACES tone mapping. This is an initial real-time lighting
-baseline; it does not implement bounced global illumination, ambient occlusion,
-or WebGPU yet. Camera movement has no collision detection.
+Lighting uses one directional sun, baked ambient occlusion (AO), baked diffuse
+sunlight bounce, and a prefiltered environment map with ACES tone mapping.
+AO reduces ambient light in crevices. The indirect lightmap adds sunlight that
+bounces off surfaces; direct sunlight and shadows remain real time.
+Camera movement has no collision detection. WebGPU is not enabled.
 
 For comparisons, hold the camera view, browser, GPU, viewport, render scale,
 and exposure constant. Frame time is the interval between rendered frames,
@@ -78,3 +79,26 @@ the committed source and assets on each push to `main`.
 In repository Settings > Pages, select GitHub Actions as the deployment source.
 Vite uses relative URLs so the viewer also works under a repository subdirectory.
 The model and textures are committed in `public`; CI does not download them again.
+
+## Baked lighting
+
+The viewer loads `public/models/sponza/baked/Sponza.gltf` with a separate UV set
+for two 4096×4096 maps. Blender Cycles bakes 128 samples with four diffuse bounces.
+The original materials and textures are preserved. AO uses a one-unit distance.
+The indirect map includes material color and excludes direct light and the sky;
+the existing environment map supplies approximate sky lighting and reflections.
+The artificial hemispheric fill is removed.
+
+To reproduce with Blender 4.5 and an AMD HIP device:
+
+```powershell
+blender --background --factory-startup --python-exit-code 1 --python scripts/bake-lighting.py
+```
+
+Outputs are staged in `.tools/baked-lighting`. Review them before copying the five
+output files to `public/models/sponza/baked`. `lighting.json` records the settings,
+source hash, and output hashes. Tests check the committed assets.
+Changes to geometry, materials, or the sun require a new bake. Disabling real-time
+shadows does not remove baked shading. Maps use no mipmaps to avoid mixing their
+small UV gutters; distant surfaces can alias. Two RGB maps use about 96 MiB of
+uncompressed texture memory, which adds memory pressure on mobile devices.

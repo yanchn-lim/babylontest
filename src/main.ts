@@ -1,7 +1,7 @@
 import {
   Color4, CubeTexture, DefaultRenderingPipeline, DirectionalLight, Engine,
-  HemisphericLight, ImageProcessingConfiguration, Scene, SceneLoader,
-  ShadowGenerator, UniversalCamera, Vector3,
+  ImageProcessingConfiguration, PBRMaterial, Scene, SceneLoader,
+  ShadowGenerator, Texture, UniversalCamera, Vector3,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
@@ -47,13 +47,36 @@ async function start() {
   const sun = new DirectionalLight("sun", new Vector3(-0.5, -1, -0.35), activeScene);
   sun.position = new Vector3(12, 22, 8);
   sun.intensity = 3;
-  const fill = new HemisphericLight("fill", Vector3.Up(), activeScene);
-  fill.intensity = 0.12;
 
   const pipeline = new DefaultRenderingPipeline("rendering", true, activeScene, [camera]);
   pipeline.fxaaEnabled = true;
   activeEngine.runRenderLoop(() => activeScene.render());
-  const result = await SceneLoader.ImportMeshAsync("", import.meta.env.BASE_URL + "models/sponza/", "Sponza.gltf", activeScene);
+  const bakedUrl = import.meta.env.BASE_URL + "models/sponza/baked/";
+  const response = await fetch(bakedUrl + "lighting.json");
+  if (!response.ok) throw new Error("Could not load baked lighting metadata.");
+  const lighting = await response.json();
+  if (!Number.isFinite(lighting.lightmapScale) || lighting.lightmapScale <= 0) {
+    throw new Error("Invalid baked lightmap scale.");
+  }
+  const result = await SceneLoader.ImportMeshAsync("", bakedUrl, "Sponza.gltf", activeScene);
+  // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
+  const ao = new Texture(bakedUrl + "ao.png", activeScene, true, false);
+  const indirect = new Texture(bakedUrl + "indirect.png", activeScene, true, false);
+  for (const texture of [ao, indirect]) {
+    texture.coordinatesIndex = 1;
+    texture.wrapU = texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+  }
+  ao.gammaSpace = false;
+  indirect.gammaSpace = true;
+  indirect.level = lighting.lightmapScale;
+  for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
+    if (!(material instanceof PBRMaterial)) continue;
+    material.ambientTexture = ao;
+    material.useAmbientInGrayScale = true;
+    material.ambientTextureImpactOnAnalyticalLights = 0;
+    material.lightmapTexture = indirect;
+    material.useLightmapAsShadowmap = false;
+  }
   const meshes = result.meshes.filter(mesh => mesh.getTotalVertices() > 0);
   if (!meshes.length) throw new Error("Sponza contains no renderable meshes.");
   let minimum = new Vector3(Infinity, Infinity, Infinity);

@@ -1,0 +1,38 @@
+{
+  "blender": "4.5.3 LTS",
+  "device": "AMD Radeon RX 5700 XT",
+  "resolution": 4096,
+  "samples": 128,
+  "diffuseBounces": 4,
+  "aoDistance": 1.0,
+  "uvChannel": 1,
+  "sun": {
+    "direction": [
+      -0.5,
+      -1.0,
+      -0.35
+    ],
+    "intensity": 3.0
+  },
+  "indirectPasses": [
+    "INDIRECT",
+    "COLOR"
+  ],
+  "indirectEncoding": "gamma2.2 RGB8 with linear scale",
+  "lightmapScale": 1.0,
+  "sourceSha256": "646c10cbc8fab990ca29f363e90e2d65155f3a3569506852eb1434a9465b9501",
+  "statistics": {
+    "uvAreaCoverage": 0.4149719178676605,
+    "nonzeroAoTexels": 7211258,
+    "aoMean": 0.8243840336799622,
+    "aoMinimum": 0.0015625000232830644,
+    "indirectPeak": 0.051289983093738556,
+    "indirectMean": 0.0001961234083864838
+  },
+  "sha256": {
+    "Sponza.gltf": "eac547bafa8342d6c722be6479ba63ff6ff0775ccea7d06a8e16de8860554af6",
+    "Sponza.bin": "47009b01a73e92ebc2227c6444d83e31807d19e0a1f24966085c26316cd69b0b",
+    "ao.png": "c537265b725c2521ad4123679603cd5f40f4c634e3bfaa70d1c7d55186469719",
+    "indirect.png": "4fa447cfc6b1a3d0661b1c411e773e418e3d6e6abc2a3d0390d851c8f4b63443"
+  }
+}
