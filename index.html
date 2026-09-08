@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Babylon.js graphical fidelity test scene using Sponza.">
+  <title>Sponza · Babylon.js Lab</title>
+</head>
+<body>
+  <canvas id="scene" tabindex="0" aria-label="Sponza 3D viewer. Drag to look and use WASD or arrow keys to move."></canvas>
+  <aside>
+    <header><span class="eyebrow">BABYLON.JS / GRAPHICS LAB</span><h1>Sponza</h1></header>
+    <p id="status" role="status">Loading model and textures…</p>
+    <fieldset id="controls" disabled>
+      <legend>Scene controls</legend>
+      <label>Camera view<select id="view"><option value="atrium">Atrium</option><option value="reverse">Reverse atrium</option><option value="upper">Upper overview</option></select></label>
+      <label>Shadows<select id="shadows"><option value="2048">High · 2048</option><option value="1024">Medium · 1024</option><option value="0">Off</option></select></label>
+      <label>Exposure <output id="exposure-value">1.0</output><input id="exposure" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
+      <label>Render scale<select id="scale"><option value="1">100% · native pixels</option><option value="0.75">75%</option><option value="0.5">50%</option></select></label>
+      <label class="toggle"><input id="fxaa" type="checkbox" checked>FXAA anti-aliasing</label>
+      <button id="inspector" type="button">Open inspector</button>
+    </fieldset>
+    <dl><div><dt>Frame rate</dt><dd id="fps">—</dd></div><div><dt>Frame time</dt><dd id="frame">—</dd></div><div><dt>Render size</dt><dd id="resolution">—</dd></div><div><dt>Renderer</dt><dd id="renderer">—</dd></div></dl>
+    <p class="hint">Drag to look · WASD / arrows to move<br>Choose a camera view to reset your position.</p>
+    <a href="%BASE_URL%models/sponza/SOURCE.md" target="_blank" rel="noreferrer">Model source and attribution ↗</a>
+  </aside>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

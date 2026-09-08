@@ -1,0 +1,10 @@
+{
+  "sponza": {
+    "repository": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/723ffc6706725b618b8c14ceb82e3e6904b08a76",
+    "revision": "723ffc6706725b618b8c14ceb82e3e6904b08a76"
+  },
+  "environment": {
+    "repository": "https://raw.githubusercontent.com/BabylonJS/Assets/8be9384c7f8728cb45d27975ac92a412f97a98dd",
+    "revision": "8be9384c7f8728cb45d27975ac92a412f97a98dd"
+  }
+}

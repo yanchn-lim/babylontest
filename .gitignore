@@ -1,0 +1,29 @@
+# Local agent instructions
+/agent.md
+
+# Dependencies
+node_modules/
+.tools/
+
+# Build output and caches
+dist/
+build/
+.vite/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Editor and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
