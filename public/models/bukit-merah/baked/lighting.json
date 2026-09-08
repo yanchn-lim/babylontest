@@ -1,0 +1,49 @@
+{
+  "blender": "4.5.3 LTS",
+  "device": "AMD Radeon RX 5700 XT",
+  "resolution": 4096,
+  "samples": 512,
+  "diffuseBounces": 4,
+  "aoDistance": 1.0,
+  "uvChannel": 1,
+  "includesSunBounce": false,
+  "sky": {
+    "model": "uniform world",
+    "colorLinear": [
+      0.8,
+      0.85,
+      1.0
+    ],
+    "strength": 1.4,
+    "passes": [
+      "DIRECT",
+      "INDIRECT",
+      "COLOR"
+    ]
+  },
+  "includesDiffuseSky": true,
+  "indirectEncoding": "gamma2.2 RGB8 with linear scale",
+  "lightmapScale": 1.0,
+  "sourceSha256": "6748998c4f3226b14c1e28261852d968fd24b2bd7644f4bc7839479afec28056",
+  "statistics": {
+    "uvAreaCoverage": 0.30584973096847534,
+    "nonzeroAoTexels": 4212109,
+    "aoMean": 0.7855701446533203,
+    "aoMinimum": 0.0017857142956927419,
+    "indirectPeak": 0.8817744255065918,
+    "indirectMean": 0.2667914032936096,
+    "sunIndirectMean": 0.0,
+    "skyMean": 0.2667914032936096
+  },
+  "ceilingIncluded": true,
+  "sha256": {
+    "Apartment.gltf": "4040fe6ae2a772728321082606f72a22504e89776d0746f04867d02155fd15b5",
+    "Apartment.bin": "412ffc43a2d44d87bfc74adc34b8f7a1e447aecae247f216648c1398b36215db",
+    "ao.png": "11d28454ff534dbd2244479cab02471b1bd69c4bfb34209dad52b50277b7b03c",
+    "indirect.png": "506b33c25d5611aa515beae81ee1aa504a2c257719cf5476503e13aefd50cb15",
+    "source-image-0.png": "60b8a772f76d0770e6e36e95ac6eec193a1dca91c7303f01b1eb3a7fba5a6267",
+    "source-image-1.png": "24420c25a4deb64093ae8a6576e2ef7f8db60220fda7be8d8c549846fb1360cf",
+    "source-image-2.png": "4aae886c87b41c48c69683428b7043ea2ddb30101bd3cd7cebe16ef774741ee0",
+    "source-image-3.png": "034f0c8cf6ea6d42cae74eaf0665f10c9331baa79cc9d305190ee90880c4849e"
+  }
+}

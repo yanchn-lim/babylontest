@@ -12,10 +12,22 @@ This instruction replaces earlier project rules that require `BANANA`.
 ## Apartment scene
 
 Select **Bukit Merah Ridge · 4-room** in Scene settings, or open
-`?scene=bukit-merah`. The supplied `flat-native.glb` is used directly, with its embedded
-textures and door positions. The overview hides the ceiling; the Living / dining and
-Hallway views restore it. Fly controls and live sun effects work in both scenes.
-The apartment uses environment lighting without Sponza's baked lightmaps.
+`?scene=bukit-merah`. The apartment uses a baked derivative of the supplied
+`flat-native.glb`, preserving its source materials, textures, and door positions.
+The ceiling stays visible in every view. Living / dining is the default view;
+Hallway and Exterior overview are also available. Fly controls and live sun
+effects work in both scenes.
+
+Apartment AO and skylight are baked at 4096 pixels with 512 samples and four
+diffuse bounces, with the ceiling included. Direct sunlight remains real time;
+sunlight bounce is not baked so the sun can move. Reproduce with:
+
+```powershell
+blender --background --factory-startup --python-exit-code 1 --python scripts/bake-lighting.py -- apartment
+```
+
+Review `.tools/apartment-baked`, then copy its assets to
+`public/models/bukit-merah/baked`. The original supplied GLB is retained.
 
 The older Blender export can be reproduced using `--background --disable-autoexec --python
 scripts/export-apartment.py -- <path-to-source.blend>`. The original file is not

@@ -1,6 +1,7 @@
-"""Bake Sponza AO and diffuse skylight for a movable sun with Blender 4.5.
+"""Bake scene AO and diffuse skylight for a movable sun with Blender 4.5.
 Run: blender --background --factory-startup --python scripts/bake-lighting.py
-Outputs are staged in .tools/baked-lighting for review before publication.
+Pass -- apartment to bake the supplied apartment with its ceiling.
+Outputs are staged under .tools for review before publication.
 """
 import copy
 import hashlib
@@ -8,14 +9,18 @@ import json
 import math
 from pathlib import Path
 import struct
+import sys
 import zlib
 
 import bpy
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public/models/sponza"
-OUTPUT = ROOT / ".tools/baked-lighting"
+APARTMENT = "--" in sys.argv and sys.argv[sys.argv.index("--") + 1:] == ["apartment"]
+SOURCE = ROOT / ("public/models/bukit-merah" if APARTMENT else "public/models/sponza")
+SOURCE_FILE = "Apartment.glb" if APARTMENT else "Sponza.gltf"
+MODEL_FILE = "Apartment.gltf" if APARTMENT else "Sponza.gltf"
+OUTPUT = ROOT / (".tools/apartment-baked" if APARTMENT else ".tools/baked-lighting")
 SIZE = 4096
 SAMPLES = 512
 AO_DISTANCE = 1.0
@@ -46,9 +51,31 @@ def read_pixels(image):
 
 OUTPUT.mkdir(parents=True, exist_ok=True)
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=str(SOURCE / "Sponza.gltf"))
+source_bytes = (SOURCE / SOURCE_FILE).read_bytes()
+if APARTMENT:
+    json_size = struct.unpack_from("<I", source_bytes, 12)[0]
+    source = json.loads(source_bytes[20:20 + json_size])
+    source_binary = source_bytes[28 + json_size:]
+    for index, image in enumerate(source.get("images", [])):
+        view = source["bufferViews"][image.pop("bufferView")]
+        offset = view.get("byteOffset", 0)
+        image["uri"] = f"source-image-{index}.png"
+        (OUTPUT / image["uri"]).write_bytes(source_binary[offset:offset + view["byteLength"]])
+        image.pop("mimeType", None)
+else:
+    source = json.loads(source_bytes)
+bpy.ops.import_scene.gltf(filepath=str(SOURCE / SOURCE_FILE))
 scene = bpy.context.scene
 objects = [obj for obj in scene.objects if obj.type == "MESH"]
+if APARTMENT:
+    if not any(obj.name.startswith("Ceiling |") for obj in objects):
+        raise RuntimeError("Apartment bake requires the ceiling")
+    bpy.ops.object.select_all(action="DESELECT")
+    for item in objects:
+        item.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.object.join()
+    objects = [bpy.context.view_layer.objects.active]
 if len(objects) != 1:
     raise RuntimeError("Expected the pinned Sponza source to contain one mesh")
 obj = objects[0]
@@ -83,25 +110,29 @@ mesh.uv_layers.active = original_uv
 # Export geometry with minimal materials, then restore the exact source materials.
 log("Exporting geometry and preserving the original PBR material definitions")
 bpy.ops.export_scene.gltf(
-    filepath=str(OUTPUT / "Sponza.gltf"), export_format="GLTF_SEPARATE",
+    filepath=str(OUTPUT / MODEL_FILE), export_format="GLTF_SEPARATE",
     use_selection=True, export_materials="VIEWPORT", export_texcoords=True,
     export_normals=True, export_tangents=True, export_animations=False,
 )
-source = json.loads((SOURCE / "Sponza.gltf").read_text())
-exported = json.loads((OUTPUT / "Sponza.gltf").read_text())
-material_indices = [int(material["name"].removeprefix("Material_")) for material in exported["materials"]]
+exported = json.loads((OUTPUT / MODEL_FILE).read_text())
+if APARTMENT:
+    material_names = {material["name"]: index for index, material in enumerate(source["materials"])}
+    material_indices = [material_names[material["name"]] for material in exported["materials"]]
+else:
+    material_indices = [int(material["name"].removeprefix("Material_")) for material in exported["materials"]]
 for exported_mesh in exported["meshes"]:
     for primitive in exported_mesh["primitives"]:
         if "TEXCOORD_1" not in primitive["attributes"]:
             raise RuntimeError("The exported mesh is missing its baked UV set")
         primitive["material"] = material_indices[primitive["material"]]
 for key in ("materials", "textures", "images", "samplers"):
-    exported[key] = copy.deepcopy(source[key])
+    exported[key] = copy.deepcopy(source.get(key, []))
 for image in exported["images"]:
-    image["uri"] = "../" + image["uri"]
+    if not APARTMENT:
+        image["uri"] = "../" + image["uri"]
 exported.pop("extensionsUsed", None)
 exported.pop("extensionsRequired", None)
-(OUTPUT / "Sponza.gltf").write_text(json.dumps(exported, separators=(",", ":")) + "\n")
+(OUTPUT / MODEL_FILE).write_text(json.dumps(exported, separators=(",", ":")) + "\n")
 
 scene.render.engine = "CYCLES"
 preferences = bpy.context.preferences.addons["cycles"].preferences
@@ -120,7 +151,7 @@ scene.cycles.transparent_max_bounces = 16
 scene.cycles.use_denoising = False
 scene.render.bake.margin = 1
 scene.render.bake.margin_type = "EXTEND"
-scene.world = bpy.data.worlds.new("Black world for sun-bounce bake")
+scene.world = bpy.data.worlds.new("Black world for AO bake")
 scene.world.use_nodes = True
 scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0
 scene.world.light_settings.distance = AO_DISTANCE
@@ -178,7 +209,7 @@ metadata = {
     "includesDiffuseSky": True,
     "indirectEncoding": "gamma2.2 RGB8 with linear scale",
     "lightmapScale": scale,
-    "sourceSha256": hashlib.sha256((SOURCE / "Sponza.gltf").read_bytes()).hexdigest(),
+    "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
     "statistics": {
         "uvAreaCoverage": uv_coverage,
         "nonzeroAoTexels": int(coverage.sum()),
@@ -190,6 +221,11 @@ metadata = {
         "skyMean": float(sky_radiance[coverage].mean()),
     },
 }
-metadata["sha256"] = {name: hashlib.sha256((OUTPUT / name).read_bytes()).hexdigest() for name in ("Sponza.gltf", "Sponza.bin", "ao.png", "indirect.png")}
+if APARTMENT:
+    metadata["ceilingIncluded"] = True
+asset_names = [MODEL_FILE, Path(MODEL_FILE).with_suffix(".bin").name, "ao.png", "indirect.png"]
+if APARTMENT:
+    asset_names.extend(image["uri"] for image in source.get("images", []))
+metadata["sha256"] = {name: hashlib.sha256((OUTPUT / name).read_bytes()).hexdigest() for name in asset_names}
 (OUTPUT / "lighting.json").write_text(json.dumps(metadata, indent=2) + "\n")
 log("Complete: " + json.dumps(metadata["statistics"]))
