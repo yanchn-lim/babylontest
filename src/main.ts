@@ -14,10 +14,12 @@ import { attachFlyControls } from "./fly-controls";
 import { ShadowCache, createRebuildQueue } from "./performance";
 import { attachGraphicsPreferences } from "./graphics-settings";
 import { attachBenchmark } from "./benchmark";
+import { BloomToneMappingTask } from "./bloom-tone-mapping";
 import { bindSurfaceShadow, trackShadowCasters } from "./shadow-binding";
 const preferences = attachGraphicsPreferences();
 
 const apartment = new URLSearchParams(location.search).get("scene") === "bukit-merah";
+const optimizedRenderer = new URLSearchParams(location.search).get("renderer") !== "baseline";
 const sceneSelect = document.querySelector<HTMLSelectElement>("#scene-select")!;
 sceneSelect.value = apartment ? "bukit-merah" : "sponza";
 sceneSelect.addEventListener("change", () => {
@@ -151,7 +153,10 @@ async function start() {
   );
   // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
   const aoUrl = new URL(apartment ? "../baked/ao.png" : "ao.png", new URL(bakedUrl, document.baseURI));
-  const ao = new Texture(aoUrl.href, activeScene, true, false);
+  const ao = new Texture(aoUrl.href, activeScene, {
+    noMipmap: true, invertY: false,
+    format: optimizedRenderer && activeEngine.webGLVersion > 1 ? Constants.TEXTUREFORMAT_RED : Constants.TEXTUREFORMAT_RGBA,
+  });
   const indirect = new Texture(bakedUrl + "indirect.png?v=" + lighting.sha256["indirect.png"], activeScene, true, false);
   for (const texture of [ao, indirect]) {
     texture.coordinatesIndex = 1;
@@ -167,6 +172,7 @@ async function start() {
     material.ambientTextureImpactOnAnalyticalLights = 0;
     material.lightmapTexture = indirect;
     material.useLightmapAsShadowmap = false;
+    material.needDepthPrePass = optimizedRenderer && !material.needAlphaBlending() && !material.needAlphaTesting();
   }
   const meshes = result.meshes.filter(mesh => mesh.getTotalVertices() > 0);
   if (!meshes.length) throw new Error(sceneName + " contains no renderable meshes.");
@@ -335,9 +341,12 @@ async function start() {
   bloom.sourceTexture = shafts.outputTexture;
   frameGraph.addTask(bloom);
 
-  const imageProcessing = new FrameGraphImageProcessingTask("tone-mapping", frameGraph);
+  const imageProcessing = optimizedRenderer
+    ? new BloomToneMappingTask("tone-mapping", frameGraph, bloom)
+    : new FrameGraphImageProcessingTask("tone-mapping", frameGraph);
   imageProcessing.postProcess.imageProcessingConfiguration = activeScene.imageProcessingConfiguration;
-  imageProcessing.sourceTexture = bloom.outputTexture;
+  imageProcessing.sourceTexture = optimizedRenderer ? shafts.outputTexture : bloom.outputTexture;
+  if (optimizedRenderer) imageProcessing.targetTexture = target("display-color", Constants.TEXTUREFORMAT_RGBA, Constants.TEXTURETYPE_UNSIGNED_BYTE);
   frameGraph.addTask(imageProcessing);
   const antialiasing = new FrameGraphFXAATask("fxaa", frameGraph);
   antialiasing.sourceTexture = imageProcessing.outputTexture;
@@ -509,7 +518,8 @@ async function start() {
   shadowCache.invalidate();
   const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, preferences.snapshot,
     () => frameGraph.pausedExecution || graphFailed,
-    () => ({ shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,
+    () => ({ rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
+      shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,
       surfaceMapSize: shadowTask.shadowGenerator!.mapSize,
       surfaceBindingCorrect: sun.getShadowGenerator(camera) === shadowTask.shadowGenerator }));
   activeScene.onDisposeObservable.add(disposeBenchmark);

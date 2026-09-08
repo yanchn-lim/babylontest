@@ -1,0 +1,226 @@
+{
+  "hardware": "AMD Radeon RX 5700 XT",
+  "driver": "32.0.21043.19003",
+  "browser": "Chrome 152 / WebGL 2",
+  "scene": "bukit-merah",
+  "settings": "PCF Low 1024; native pixels; all effects enabled; default sun/exposure",
+  "warmupSeconds": 15,
+  "measurementSeconds": 60,
+  "runs": [
+    {
+      "variant": "7052765 baseline",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.8532,
+      "gpuP95Ms": 1.86144,
+      "gpuSamples": 3570,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T20:46:18.052Z",
+      "note": "Vite revision string stale e1b28a4; working tree verified clean at 7052765 before run"
+    },
+    {
+      "variant": "RGBA8 only",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.839,
+      "gpuP95Ms": 1.84736,
+      "gpuSamples": 3596,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T20:48:07.809Z"
+    },
+    {
+      "variant": "RGBA8 + opaque depth prepass",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.38652,
+      "gpuP95Ms": 1.39692,
+      "gpuSamples": 3599,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.8,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T20:51:19.902Z"
+    },
+    {
+      "variant": "RGBA8 + depth prepass + R8 AO",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.38632,
+      "gpuP95Ms": 1.39624,
+      "gpuSamples": 3599,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T20:54:21.969Z"
+    },
+    {
+      "variant": "RGBA8 + depth prepass + R8 AO + bloom fusion",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.33196,
+      "gpuP95Ms": 1.3418,
+      "gpuSamples": 3596,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.8,
+      "frameSamples": 7198,
+      "startedAt": "2026-09-08T20:56:50.528Z"
+    },
+    {
+      "variant": "optimized (RGBA8, prepass, R8 AO, fusion)",
+      "view": "Hallway",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.23182,
+      "gpuP95Ms": 1.24032,
+      "gpuSamples": 3600,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T21:00:49.520Z"
+    },
+    {
+      "variant": "baseline-7052765",
+      "view": "Hallway",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 2.05546,
+      "gpuP95Ms": 2.0642,
+      "gpuSamples": 3596,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7199,
+      "startedAt": "2026-09-08T21:03:26.470Z"
+    },
+    {
+      "variant": "optimized + UASTC lightmap (rejected: no measured benefit)",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.33128,
+      "gpuP95Ms": 1.33888,
+      "gpuSamples": 3597,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.8,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T21:10:19.906Z",
+      "lightmapFormat": 36492,
+      "lightmapGammaSpace": true
+    },
+    {
+      "variant": "optimized, shafts OFF (diagnostic only)",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.17368,
+      "gpuP95Ms": 1.18096,
+      "gpuSamples": 3597,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.8,
+      "frameSamples": 7199,
+      "startedAt": "2026-09-08T21:13:08.014Z"
+    },
+    {
+      "variant": "optimized + cached sky (rejected: color mismatch, small gain)",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.29628,
+      "gpuP95Ms": 1.30492,
+      "gpuSamples": 3599,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.8,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T21:18:16.716Z",
+      "skyCacheRenders": 2
+    },
+    {
+      "variant": "optimized repeat 2",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.3314,
+      "gpuP95Ms": 1.34032,
+      "gpuSamples": 3599,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T21:20:35.808Z"
+    },
+    {
+      "variant": "optimized + dedicated depth task (rejected: no benefit)",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.33396,
+      "gpuP95Ms": 1.34336,
+      "gpuSamples": 3600,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T21:22:39.858Z"
+    },
+    {
+      "variant": "optimized, scoped GPU profile",
+      "gpuScope": "scene",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 0.744,
+      "gpuP95Ms": 0.7478,
+      "gpuSamples": 7200,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T21:25:53.658Z"
+    },
+    {
+      "variant": "optimized repeat 3 after extended use",
+      "view": "Living / dining",
+      "dimensions": [
+        2556,
+        849
+      ],
+      "gpuMedianMs": 1.33228,
+      "gpuP95Ms": 1.34044,
+      "gpuSamples": 3600,
+      "frameMedianMs": 8.3,
+      "frameP95Ms": 8.7,
+      "frameSamples": 7200,
+      "startedAt": "2026-09-08T21:34:16.577Z"
+    }
+  ]
+}

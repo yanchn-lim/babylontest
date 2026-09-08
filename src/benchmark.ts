@@ -1,6 +1,7 @@
 import { EngineInstrumentation } from "@babylonjs/core";
 import type { Engine, Scene, UniversalCamera } from "@babylonjs/core";
 import { BenchmarkRun, summarizeFrames } from "./performance";
+import { timeGpuTask } from "./gpu-task-timer";
 
 export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalCamera,
   settings: () => Record<string, unknown>, isPaused: () => boolean, diagnostics: () => Record<string, unknown>) {
@@ -17,6 +18,10 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   const abort = new AbortController();
   const options = { signal: abort.signal };
   let run: BenchmarkRun | undefined;
+  const taskName = import.meta.env.DEV ? new URLSearchParams(location.search).get("gpu-task") : null;
+  const task = scene.frameGraph?.tasks.find(task => task.name === taskName);
+  const taskTimer = task ? timeGpuTask(engine, task, () => !!run) : undefined;
+  const gpuCounter = taskTimer?.counter ?? instrumentation.gpuFrameTimeCounter;
   let metadata: Record<string, unknown> = {};
   let initialSettings = "";
   let initialSize = "";
@@ -44,6 +49,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
     const result = {
       ...metadata, complete, reason, finishedAt: new Date().toISOString(), diagnosticsEnd: diagnostics(),
       frameIntervals, gpuTiming: {
+        scope: task?.name ?? "frame",
         status: !gpuSupported ? "unsupported" : gpu ? "available" : "invalid-or-unavailable",
         samples: gpu?.samples ?? 0, medianMs: gpu?.medianMs ?? null, p95Ms: gpu?.p95Ms ?? null,
       },
@@ -85,8 +91,8 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
       browser: navigator.userAgent, renderer: "WebGL " + engine.webGLVersion,
       cameraStart: cameraState(), diagnosticsStart: diagnostics(), warmupSeconds: 15, measurementSeconds: 60,
     };
-    lastGpuCount = instrumentation.gpuFrameTimeCounter.count;
-    instrumentation.captureGPUFrameTime = gpuSupported;
+    lastGpuCount = gpuCounter.count;
+    instrumentation.captureGPUFrameTime = gpuSupported && !taskTimer;
     start.disabled = true;
     stop.disabled = false;
     mode.disabled = true;
@@ -131,7 +137,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
     if (now >= run.started + run.warmupMs) distance += camera.position.subtract(previousPosition).length();
     previousPosition.copyFrom(camera.position);
     previousRotation.copyFrom(camera.rotation);
-    const counter = instrumentation.gpuFrameTimeCounter;
+    const counter = gpuCounter;
     const gpuMs = counter.count > lastGpuCount && counter.current > 0 ? counter.current / 1e6 : undefined;
     lastGpuCount = counter.count;
     if (run.sample(now, gpuMs)) {
@@ -141,6 +147,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   return () => {
     abort.abort();
     engine.onEndFrameObservable.remove(observer);
+    taskTimer?.dispose();
     instrumentation.dispose();
   };
 }

@@ -221,5 +221,9 @@ with a 1024-square map. Run Living / dining, Hallway, and Manual walking with a 
 sun. Test Moving sun separately. Repeat each trial three times, then repeat after ten
 minutes of use. Keep the same walking route. The walking target is median at least
 59 fps, p95 frame interval at most 20 ms, and fewer than 1% of frames above 33.3 ms.
-Desktop results do not establish iPhone performance. Stages 2 and 3 remain deferred
-until these device measurements show whether further changes are needed.
+Desktop results do not establish iPhone performance. Desktop optimization is now
+being tested with the same settings and an original-renderer comparison path.
+See [the desktop optimization report](docs/desktop-optimization.md) for measured
+results, limitations, and rejected experiments. Use `?scene=bukit-merah` for the
+optimized renderer and add `&renderer=baseline` to compare the original rendering
+path. The 2x desktop target and the iPhone walking target are not yet verified.
