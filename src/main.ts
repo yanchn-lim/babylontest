@@ -1,7 +1,10 @@
 import {
-  Color4, CubeTexture, DefaultRenderingPipeline, DirectionalLight, Engine,
+  Color3, Color4, Constants, CubeTexture, DirectionalLight, Engine, FrameGraph,
+  FrameGraphClearTextureTask, FrameGraphObjectRendererTask, FrameGraphShadowGeneratorTask,
+  FrameGraphLightingVolumeTask, FrameGraphVolumetricLightingTask,
+  FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
   ImageProcessingConfiguration, PBRMaterial, Scene, SceneLoader,
-  ShadowGenerator, Texture, UniversalCamera, Vector3, VolumetricLightScatteringPostProcess,
+  ShadowGenerator, Texture, UniversalCamera, Vector3,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
@@ -62,21 +65,6 @@ async function start() {
   sun.position = new Vector3(12, 22, 8);
   sun.intensity = 3;
 
-  const pipeline = new DefaultRenderingPipeline("rendering", true, activeScene, [camera]);
-  pipeline.fxaaEnabled = true;
-  const rays = new VolumetricLightScatteringPostProcess(
-    "sun-rays", 0.5, camera, undefined, 32,
-  );
-  rays.exposure = 0.45;
-  rays.decay = 0.98;
-  rays.weight = 0.4;
-  rays.density = 0.8;
-  rays.mesh.scaling.setAll(4);
-  activeScene.onBeforeRenderObservable.add(() => {
-    rays.mesh.position.copyFrom(
-      camera.position.subtract(sun.direction.normalizeToNew().scale(100)),
-    );
-  });
   activeEngine.runRenderLoop(() => activeScene.render());
   const bakedUrl = import.meta.env.BASE_URL + "models/sponza/baked/";
   const response = await fetch(bakedUrl + "lighting.json");
@@ -141,29 +129,124 @@ async function start() {
     camera.position.copyFrom(positions[view.value]);
     camera.setTarget(new Vector3(center.x, eye + 0.5, center.z));
   }
-  let shadowMap: ShadowGenerator | undefined;
+  // Fit the native lighting volume to the model in the sun's coordinate system.
+  const lightView = Matrix.LookAtLH(sun.position, sun.position.add(sun.direction), Vector3.Up());
+  let lightMinimum = new Vector3(Infinity, Infinity, Infinity);
+  let lightMaximum = new Vector3(-Infinity, -Infinity, -Infinity);
+  for (const mesh of meshes) {
+    for (const corner of mesh.getBoundingInfo().boundingBox.vectorsWorld) {
+      const point = Vector3.TransformCoordinates(corner, lightView);
+      lightMinimum = Vector3.Minimize(lightMinimum, point);
+      lightMaximum = Vector3.Maximize(lightMaximum, point);
+    }
+  }
+  sun.autoUpdateExtends = false;
+  sun.shadowOrthoScale = 0;
+  sun.orthoLeft = lightMinimum.x - 1;
+  sun.orthoRight = lightMaximum.x + 1;
+  sun.orthoBottom = lightMinimum.y - 1;
+  sun.orthoTop = lightMaximum.y + 1;
+  sun.shadowMinZ = lightMinimum.z - 1;
+  sun.shadowMaxZ = lightMaximum.z + 1;
+
+  const frameGraph = new FrameGraph(activeScene);
+  frameGraph.pausedExecution = true;
+  activeScene.frameGraph = frameGraph;
+  activeScene.cameraToUseForPointers = camera;
+  function target(name: string, format: number, type: number, percentage = 100) {
+    return frameGraph.textureManager.createRenderTargetTexture(name, {
+      size: { width: percentage, height: percentage }, sizeIsPercentage: true,
+      options: { createMipMaps: false, types: [type], formats: [format], samples: 1 },
+    });
+  }
+  const color = target("scene-color", Constants.TEXTUREFORMAT_RGBA, Constants.TEXTURETYPE_HALF_FLOAT);
+  const depth = target("scene-depth", Constants.TEXTUREFORMAT_DEPTH32_FLOAT, Constants.TEXTURETYPE_UNSIGNED_BYTE);
+  const volumeColor = target("sun-volume-color", Constants.TEXTUREFORMAT_RGBA, Constants.TEXTURETYPE_HALF_FLOAT, 50);
+  const clear = new FrameGraphClearTextureTask("clear", frameGraph);
+  clear.targetTexture = color;
+  clear.depthTexture = depth;
+  clear.clearColor = clear.clearDepth = true;
+  clear.color = activeScene.clearColor;
+  clear.convertColorToLinearSpace = true;
+  frameGraph.addTask(clear);
+
+  const shadowTask = new FrameGraphShadowGeneratorTask("sun-shadows", frameGraph);
+  shadowTask.objectList = { meshes, particleSystems: [] };
+  shadowTask.light = sun;
+  shadowTask.camera = camera;
+  shadowTask.mapSize = Number(shadows.value);
+  shadowTask.filter = ShadowGenerator.FILTER_PCF;
+  shadowTask.bias = 0.0005;
+  shadowTask.normalBias = 0.02;
+  frameGraph.addTask(shadowTask);
+
+  const renderTask = new FrameGraphObjectRendererTask("scene", frameGraph, activeScene);
+  renderTask.targetTexture = clear.outputTexture;
+  renderTask.depthTexture = clear.outputDepthTexture;
+  renderTask.objectList = { meshes, particleSystems: [] };
+  renderTask.camera = camera;
+  renderTask.disableImageProcessing = true;
+  renderTask.isMainObjectRenderer = true;
+  renderTask.shadowGenerators = [shadowTask];
+  frameGraph.addTask(renderTask);
+
+  const volume = new FrameGraphLightingVolumeTask("sun-volume", frameGraph);
+  volume.shadowGenerator = shadowTask;
+  volume.lightingVolume.frequency = 4;
+  volume.lightingVolume.tesselation = 256;
+  frameGraph.addTask(volume);
+  const shafts = new FrameGraphVolumetricLightingTask("sun-shafts", frameGraph, false);
+  shafts.targetTexture = renderTask.outputTexture;
+  shafts.depthTexture = renderTask.outputDepthTexture;
+  shafts.camera = camera;
+  shafts.light = sun;
+  shafts.lightingVolumeMesh = volume.outputMeshLightingVolume;
+  shafts.lightingVolumeTexture = volumeColor;
+  shafts.lightPower = new Color3(0.4, 0.4, 0.2);
+  shafts.phaseG = 0.05;
+  frameGraph.addTask(shafts);
+
+  const imageProcessing = new FrameGraphImageProcessingTask("tone-mapping", frameGraph);
+  imageProcessing.postProcess.imageProcessingConfiguration = activeScene.imageProcessingConfiguration;
+  imageProcessing.sourceTexture = shafts.outputTexture;
+  frameGraph.addTask(imageProcessing);
+  const antialiasing = new FrameGraphFXAATask("fxaa", frameGraph);
+  antialiasing.sourceTexture = imageProcessing.outputTexture;
+  antialiasing.targetTexture = backbufferColorTextureHandle;
+  antialiasing.disabled = !fxaa.checked;
+  frameGraph.addTask(antialiasing);
+
+  let graphBuild = Promise.resolve();
+  function rebuildGraph() {
+    frameGraph.pausedExecution = true;
+    graphBuild = graphBuild.then(() => frameGraph.buildAsync()).then(() => {
+      frameGraph.pausedExecution = false;
+    });
+    return graphBuild;
+  }
   function updateShadows() {
-    shadowMap?.dispose();
-    shadowMap = undefined;
     const size = Number(shadows.value);
-    if (!size) return;
-    shadowMap = new ShadowGenerator(size, sun);
-    shadowMap.usePercentageCloserFiltering = true;
-    shadowMap.bias = 0.0005;
-    shadowMap.normalBias = 0.02;
-    for (const mesh of meshes) shadowMap.addShadowCaster(mesh, false);
+    shadowTask.mapSize = size || 1024;
+    shadowTask.disabled = volume.disabled = shafts.disabled = !size;
+    renderTask.shadowGenerators = size ? [shadowTask] : [];
+    activeScene.shadowsEnabled = size !== 0;
   }
   function resize() {
     activeEngine.setHardwareScalingLevel(1 / (window.devicePixelRatio * Number(scale.value)));
     activeEngine.resize();
+    void rebuildGraph().catch(fail);
   }
+  activeScene.onDisposeObservable.add(() => frameGraph.dispose());
   view.addEventListener("change", resetView);
-  shadows.addEventListener("change", updateShadows);
+  shadows.addEventListener("change", () => {
+    updateShadows();
+    void rebuildGraph().catch(fail);
+  });
   exposure.addEventListener("input", () => {
     activeScene.imageProcessingConfiguration.exposure = Number(exposure.value);
     document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
   });
-  fxaa.addEventListener("change", () => { pipeline.fxaaEnabled = fxaa.checked; });
+  fxaa.addEventListener("change", () => { antialiasing.disabled = !fxaa.checked; });
   scale.addEventListener("change", resize);
   window.addEventListener("resize", resize);
   activeScene.onDisposeObservable.add(() => window.removeEventListener("resize", resize));
@@ -182,6 +265,7 @@ async function start() {
   resetView();
   updateShadows();
   resize();
+  await graphBuild;
   await activeScene.whenReadyAsync();
   controls.disabled = false;
   document.querySelector<HTMLElement>("#flight-controls")!.hidden = false;
