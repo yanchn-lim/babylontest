@@ -1,7 +1,6 @@
 {
-  "sourceFile": "Bukit_Merah_Ridge_4Room.blend",
-  "sourceSha256": "600d0bd34e22cc6b89e8fc29c12a54a28550a8eeddbddc06ebeb4474e4affc4a",
-  "blender": "4.5.3 LTS",
-  "exportedObjects": 180,
-  "glbSha256": "09b23b1a701a09868b9f03b376e55d307f94abcb674f300e98397d300d22f8be"
+  "sourceFile": "flat-native.glb",
+  "sourceSha256": "6748998c4f3226b14c1e28261852d968fd24b2bd7644f4bc7839479afec28056",
+  "exportedObjects": 170,
+  "glbSha256": "6748998c4f3226b14c1e28261852d968fd24b2bd7644f4bc7839479afec28056"
 }

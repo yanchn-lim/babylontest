@@ -12,12 +12,12 @@ This instruction replaces earlier project rules that require `BANANA`.
 ## Apartment scene
 
 Select **Bukit Merah Ridge · 4-room** in Scene settings, or open
-`?scene=bukit-merah`. The supplied Blender model is exported to a self-contained
-GLB with its materials. The overview hides the ceiling; the Living / dining and
+`?scene=bukit-merah`. The supplied `flat-native.glb` is used directly, with its embedded
+textures and door positions. The overview hides the ceiling; the Living / dining and
 Hallway views restore it. Fly controls and live sun effects work in both scenes.
 The apartment uses environment lighting without Sponza's baked lightmaps.
 
-Re-export with Blender using `--background --disable-autoexec --python
+The older Blender export can be reproduced using `--background --disable-autoexec --python
 scripts/export-apartment.py -- <path-to-source.blend>`. The original file is not
 modified. The public asset manifest records the source and export hashes.
 
