@@ -33,6 +33,13 @@ The older Blender export can be reproduced using `--background --disable-autoexe
 scripts/export-apartment.py -- <path-to-source.blend>`. The original file is not
 modified. The public asset manifest records the source and export hashes.
 
+The apartment indirect-light texture is denoised per UV island with Open Image
+Denoise 2.3.3 RTLightmap. AO is unchanged. After a fresh bake, run
+`python scripts/denoise-apartment.py` with NumPy and Pillow installed and the
+official OIDN Windows package extracted under `.tools`. Review the staged
+texture and metadata in `.tools/apartment-denoised` before copying them into
+`public/models/bukit-merah/baked`.
+
 ## Windows setup
 
 Run in PowerShell:

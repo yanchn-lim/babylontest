@@ -40,10 +40,17 @@
     "Apartment.gltf": "4040fe6ae2a772728321082606f72a22504e89776d0746f04867d02155fd15b5",
     "Apartment.bin": "412ffc43a2d44d87bfc74adc34b8f7a1e447aecae247f216648c1398b36215db",
     "ao.png": "747e5153e22f20e698196ef81ce2361b6eae2a2ba12d7c18c526ddf9896c5d28",
-    "indirect.png": "0d32e3480c9f0059f748ea53136796e3e78945064037058547ce0cb22eb6296b",
+    "indirect.png": "09e3f646f689be263835b20629b28b6661d562fcf6475e55a9362824da9553b2",
     "source-image-0.png": "60b8a772f76d0770e6e36e95ac6eec193a1dca91c7303f01b1eb3a7fba5a6267",
     "source-image-1.png": "24420c25a4deb64093ae8a6576e2ef7f8db60220fda7be8d8c549846fb1360cf",
     "source-image-2.png": "4aae886c87b41c48c69683428b7043ea2ddb30101bd3cd7cebe16ef774741ee0",
     "source-image-3.png": "034f0c8cf6ea6d42cae74eaf0665f10c9331baa79cc9d305190ee90880c4849e"
+  },
+  "denoising": {
+    "filter": "Open Image Denoise RTLightmap",
+    "colorSpace": "linear",
+    "uvIslands": 973,
+    "paddingPixels": 32,
+    "inputSha256": "0d32e3480c9f0059f748ea53136796e3e78945064037058547ce0cb22eb6296b"
   }
 }
