@@ -1,7 +1,7 @@
 import {
   Color4, CubeTexture, DefaultRenderingPipeline, DirectionalLight, Engine,
   ImageProcessingConfiguration, PBRMaterial, Scene, SceneLoader,
-  ShadowGenerator, Texture, UniversalCamera, Vector3,
+  ShadowGenerator, Texture, UniversalCamera, Vector3, VolumetricLightScatteringPostProcess,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
@@ -64,6 +64,19 @@ async function start() {
 
   const pipeline = new DefaultRenderingPipeline("rendering", true, activeScene, [camera]);
   pipeline.fxaaEnabled = true;
+  const rays = new VolumetricLightScatteringPostProcess(
+    "sun-rays", 0.5, camera, undefined, 32,
+  );
+  rays.exposure = 0.15;
+  rays.decay = 0.96;
+  rays.weight = 0.4;
+  rays.density = 0.8;
+  rays.mesh.scaling.setAll(4);
+  activeScene.onBeforeRenderObservable.add(() => {
+    rays.mesh.position.copyFrom(
+      camera.position.subtract(sun.direction.normalizeToNew().scale(100)),
+    );
+  });
   activeEngine.runRenderLoop(() => activeScene.render());
   const bakedUrl = import.meta.env.BASE_URL + "models/sponza/baked/";
   const response = await fetch(bakedUrl + "lighting.json");
