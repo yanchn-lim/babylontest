@@ -168,9 +168,9 @@ uncompressed texture memory, which adds memory pressure on mobile devices.
 Bloom uses Babylon's native FrameGraphBloomTask at half resolution, weight 0.12,
 kernel 32, and threshold 1.0, before ACES tone mapping.
 
-## Apartment performance comparisons
+## Performance comparisons
 
-In the apartment scene, Sun shafts can be switched independently of Shadows.
+In both scenes, Sun shafts can be switched independently of Shadows.
 For the baseline, set Shadows to Off and uncheck Sun shafts. Compare surface
 shadows alone, shafts alone, and both together at 100% render scale.
 PCSS filtering controls sample quality independently of shadow-map resolution:

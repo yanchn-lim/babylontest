@@ -36,8 +36,6 @@ document.querySelector<HTMLElement>("#navigation-setting")!.hidden = !apartment;
 const shadows = document.querySelector<HTMLSelectElement>("#shadows")!;
 const shadowFilter = document.querySelector<HTMLSelectElement>("#shadow-filter")!;
 const shaftsEnabled = document.querySelector<HTMLInputElement>("#shafts")!;
-document.querySelector<HTMLElement>("#shadow-filter-setting")!.hidden = !apartment;
-document.querySelector<HTMLElement>("#shafts-setting")!.hidden = !apartment;
 const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
 const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!;
 const exposure = document.querySelector<HTMLInputElement>("#exposure")!;
@@ -337,7 +335,7 @@ async function start() {
   }
   function updateShadows() {
     const size = Number(shadows.value);
-    const enableShafts = apartment ? shaftsEnabled.checked : size !== 0;
+    const enableShafts = shaftsEnabled.checked;
     shadowTask.mapSize = size || 1024;
     shadowTask.filteringQuality = shadowFilter.value === "low"
       ? ShadowGenerator.QUALITY_LOW
