@@ -34,6 +34,10 @@ const navigation = document.querySelector<HTMLSelectElement>("#navigation")!;
 navigation.value = apartment ? "walk" : "fly";
 document.querySelector<HTMLElement>("#navigation-setting")!.hidden = !apartment;
 const shadows = document.querySelector<HTMLSelectElement>("#shadows")!;
+const shadowFilter = document.querySelector<HTMLSelectElement>("#shadow-filter")!;
+const shaftsEnabled = document.querySelector<HTMLInputElement>("#shafts")!;
+document.querySelector<HTMLElement>("#shadow-filter-setting")!.hidden = !apartment;
+document.querySelector<HTMLElement>("#shafts-setting")!.hidden = !apartment;
 const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
 const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!;
 const exposure = document.querySelector<HTMLInputElement>("#exposure")!;
@@ -333,10 +337,18 @@ async function start() {
   }
   function updateShadows() {
     const size = Number(shadows.value);
+    const enableShafts = apartment ? shaftsEnabled.checked : size !== 0;
     shadowTask.mapSize = size || 1024;
-    shadowTask.disabled = volume.disabled = shafts.disabled = !size;
+    shadowTask.filteringQuality = shadowFilter.value === "low"
+      ? ShadowGenerator.QUALITY_LOW
+      : shadowFilter.value === "medium"
+        ? ShadowGenerator.QUALITY_MEDIUM
+        : ShadowGenerator.QUALITY_HIGH;
+    shadowTask.disabled = !size;
+    volume.disabled = shafts.disabled = !enableShafts;
+    volumeShadowTask.disabled = !enableShafts;
     renderTask.shadowGenerators = size ? [shadowTask] : [];
-    activeScene.shadowsEnabled = size !== 0;
+    activeScene.shadowsEnabled = size !== 0 || enableShafts;
   }
   function resize() {
     activeEngine.setHardwareScalingLevel(1 / (window.devicePixelRatio * Number(scale.value)));
@@ -374,10 +386,12 @@ async function start() {
     if (navigation.value === "walk") view.value = "atrium";
     resetView();
   });
-  shadows.addEventListener("change", () => {
-    updateShadows();
-    void rebuildGraph().catch(fail);
-  });
+  for (const control of [shadows, shadowFilter, shaftsEnabled]) {
+    control.addEventListener("change", () => {
+      updateShadows();
+      void rebuildGraph().catch(fail);
+    });
+  }
   exposure.addEventListener("input", () => {
     activeScene.imageProcessingConfiguration.exposure = Number(exposure.value);
     document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
