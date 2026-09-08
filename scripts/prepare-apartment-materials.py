@@ -13,14 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public/models/bukit-merah/baked"
 OUTPUT = ROOT / "public/models/bukit-merah/pbr"
 PROFILES = {
-    0: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.35),
-    1: ("interior_tiles", 1.9, [1, 1, 1], 0.45),
-    2: ("interior_tiles", 1.9, [0.94, 0.97, 1], 0.45),
-    3: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.35),
-    4: ("white_plaster_02", 1.5, [1, 0.98, 0.95], 0.18),
-    8: ("wood_table_001", 2.0, [1, 1, 1], 0.3),
-    10: ("wood_table_001", 2.0, [0.75, 0.65, 0.55], 0.3),
-    11: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.35),
+    0: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.05),
+    1: ("interior_tiles", 1.9, [1, 1, 1], 0.15),
+    2: ("interior_tiles", 1.9, [1, 1, 1], 0.15),
+    3: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.05),
+    4: ("white_plaster_02", 1.5, [1, 1, 1], 0.03),
+    8: ("wood_table_001", 2.0, [1, 1, 1], 0.06),
+    10: ("wood_table_001", 2.0, [0.9, 0.85, 0.8], 0.06),
+    11: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.05),
 }
 OUTPUT.mkdir(parents=True, exist_ok=True)
 (OUTPUT / "textures").mkdir(exist_ok=True)
@@ -37,9 +37,36 @@ def download(url):
         ["curl.exe", "--fail", "--silent", "--show-error", "--location", url]
     )
 
+def clean_maps(asset):
+    """Generate seamless, unweathered material maps at the existing 1K size."""
+    y, x = np.mgrid[0:1024, 0:1024].astype(np.float32) / 1024
+    height = np.zeros_like(x)
+    if asset == "interior_tiles":
+        edge = np.minimum.reduce([x * 3 % 1, 1 - x * 3 % 1, y * 3 % 1, 1 - y * 3 % 1])
+        grout = np.clip((0.006 - edge) / 0.003, 0, 1)
+        color = np.array([238, 237, 232]) - grout[..., None] * 28
+        roughness = 0.32 + grout * 0.3
+        height = -grout * 0.08
+    elif asset == "wood_table_001":
+        grain = np.sin(2 * np.pi * (x * 40 + 0.18 * np.sin(y * 2 * np.pi)))
+        grain += 0.35 * np.sin(2 * np.pi * (x * 93 + 0.1 * np.sin(y * 4 * np.pi)))
+        color = np.array([203, 177, 139]) + grain[..., None] * np.array([4, 4, 3])
+        roughness = np.full_like(x, 0.38)
+        height = grain * 0.003
+    else:
+        color = np.broadcast_to([244, 243, 239] if asset == "white_plaster_02" else [224, 224, 220], (1024, 1024, 3))
+        roughness = np.full_like(x, 0.72 if asset == "white_plaster_02" else 0.5)
+    normal = np.stack((np.roll(height, 1, 1) - np.roll(height, -1, 1),
+                       np.roll(height, 1, 0) - np.roll(height, -1, 0), np.ones_like(x)), axis=-1)
+    normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
+    arm = np.stack((np.ones_like(x), roughness, np.zeros_like(x)), axis=-1)
+    return {"color": color, "normal": (normal * 0.5 + 0.5) * 255, "arm": arm * 255}
+
+generated = {}
 for asset in sorted({profile[0] for profile in PROFILES.values()}):
     files = json.loads(download("https://api.polyhaven.com/files/" + asset))
     assets[asset] = {}
+    clean = clean_maps(asset)
     for channel, key in [("color", "Diffuse"), ("normal", "nor_gl"), ("arm", "arm")]:
         info = files[key]["1k"]["jpg"]
         name = f"textures/{asset}-{channel}.jpg"
@@ -48,6 +75,9 @@ for asset in sorted({profile[0] for profile in PROFILES.values()}):
         assert hashlib.md5(data).hexdigest() == info["md5"], "Texture download checksum mismatch"
         path.write_bytes(data)
         downloads[name] = {"url": info["url"], "sha256": hashlib.sha256(data).hexdigest()}
+        name = f"textures/clean-{asset}-{channel}.jpg"
+        Image.fromarray(np.rint(np.clip(clean[channel], 0, 255)).astype(np.uint8)).save(OUTPUT / name, quality=95, subsampling=0)
+        generated[name] = hashlib.sha256((OUTPUT / name).read_bytes()).hexdigest()
         model["images"].append({"uri": name})
         model["textures"].append({"source": len(model["images"]) - 1, "sampler": 0})
         assets[asset][channel] = len(model["textures"]) - 1
@@ -141,7 +171,7 @@ for mesh in model["meshes"]:
                 continue
             weights = np.column_stack((1 - u[mask] - v[mask], u[mask], v[mask]))
             old_color = sample(SOURCE / old_image, weights @ old_uv[triangle]) * old_factor
-            new_color = sample(OUTPUT / f"textures/{asset}-color.jpg", weights @ uv[triangle]) * tint
+            new_color = sample(OUTPUT / f"textures/clean-{asset}-color.jpg", weights @ uv[triangle]) * tint
             radiance[y0:y1, x0:x1][mask] *= new_color / np.maximum(old_color, 0.04)
 
 padded_mask = np.pad(covered, 1)
@@ -167,10 +197,13 @@ lighting["sha256"] = {
     for name in ["Apartment.gltf", "materials.bin", "indirect.png", "../baked/ao.png"]
 }
 lighting["sha256"].update({name: info["sha256"] for name, info in downloads.items()})
+lighting["sha256"].update(generated)
 (OUTPUT / "lighting.json").write_text(json.dumps(lighting, indent=2) + "\n")
 (OUTPUT / "sources.json").write_text(json.dumps({
     "license": "CC0-1.0", "provider": "Poly Haven",
     "assets": {asset: "https://polyhaven.com/a/" + asset for asset in assets},
     "downloads": downloads,
+    "activeFinish": "Procedural clean paint, porcelain tile, light wood, and smooth neutral surfaces; original Poly Haven maps retained as source assets only",
+    "generated": generated,
 }, indent=2) + "\n")
 print("PBR variant complete. Lightmap scale:", scale, flush=True)

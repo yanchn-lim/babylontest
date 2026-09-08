@@ -23,7 +23,7 @@
   },
   "includesDiffuseSky": true,
   "indirectEncoding": "gamma2.2 RGB8 with linear scale",
-  "lightmapScale": 1.0,
+  "lightmapScale": 2.0,
   "sourceSha256": "6748998c4f3226b14c1e28261852d968fd24b2bd7644f4bc7839479afec28056",
   "statistics": {
     "uvAreaCoverage": 0.30584973096847534,
@@ -37,9 +37,9 @@
   },
   "ceilingIncluded": true,
   "sha256": {
-    "Apartment.gltf": "1bac02c352ea01a7d2f1ef2f59069bcfc2bb71a597b9f10f228ecbfdefd1d56d",
+    "Apartment.gltf": "49b5051046fb1854cab2fcd506be0fde629e463d0706c598b1d5655ac7064879",
     "materials.bin": "b3f08a57c7f0d5ead5d6d2ade39eb6a9270db6a43e94611975317dcc2fead441",
-    "indirect.png": "2a3f70d3b446aec66978e3adf87066d4561e2ec426c8ba2d1207d8b5f7cd6795",
+    "indirect.png": "88b6ec4a9c4b1e8cf1d8e13aadb51e7ec7e3305ddc8d54824cad3e6bb5d0274a",
     "../baked/ao.png": "747e5153e22f20e698196ef81ce2361b6eae2a2ba12d7c18c526ddf9896c5d28",
     "textures/interior_tiles-color.jpg": "f267c4357e629f5ca2ab86f30da4fb0ae8c655a566cec6d81278df8d78dcca4a",
     "textures/interior_tiles-normal.jpg": "fdfb9fe192d438176508290fe873e181d88c5e6444a43bbab2ec156c9a78aa33",
@@ -52,7 +52,19 @@
     "textures/white_plaster_02-arm.jpg": "2bb1115821715dfd8bbd1c5a294a5bb43b97d5c46b1aa8aa8f744bcaf5eeeb10",
     "textures/wood_table_001-color.jpg": "460dd08d240f4a1f02982415048c3c5c200f385db212da18dc7e2df68bf4d0be",
     "textures/wood_table_001-normal.jpg": "9bf7ddf5721e225c20290f1772ae37f9bdfd49658f6d458259eb794e2149d3cf",
-    "textures/wood_table_001-arm.jpg": "29d3f34a7c2c213e21b320365495fad673d3c8a3ce885b879fc0a77a187dd828"
+    "textures/wood_table_001-arm.jpg": "29d3f34a7c2c213e21b320365495fad673d3c8a3ce885b879fc0a77a187dd828",
+    "textures/clean-interior_tiles-color.jpg": "7115a07380f3a19882afa93496eb1869b73eaf47645855695c707dedff5b901c",
+    "textures/clean-interior_tiles-normal.jpg": "ac7cec2d6fabf3580a7dc594764bf45f57f896db1e4ed617f2e2545c5fa4eeef",
+    "textures/clean-interior_tiles-arm.jpg": "b5366921587b783463b7b7e58d44fcbd3f1f842b8949fd518071abb1bda9062c",
+    "textures/clean-smooth_concrete_floor-color.jpg": "83fc3caf2c4923b7dc2bacea60086beb256d02c09194d82884b77e0c7c1dbe9f",
+    "textures/clean-smooth_concrete_floor-normal.jpg": "b60b01b16dc15f51b5a976388a4e0ec2833dad9c4920238573cf42c1fe61d32c",
+    "textures/clean-smooth_concrete_floor-arm.jpg": "5a4dd7078b387419c372f797ce5c7781af95e0c68c04fa08d7d06b63e60c06ae",
+    "textures/clean-white_plaster_02-color.jpg": "5730006f805ba64a2d2ba17d5de87f34c87c90e27cf427cb040dd77b34d5afbc",
+    "textures/clean-white_plaster_02-normal.jpg": "b60b01b16dc15f51b5a976388a4e0ec2833dad9c4920238573cf42c1fe61d32c",
+    "textures/clean-white_plaster_02-arm.jpg": "f4093426fed41a251b404d741f65675a25572e53107e5b0be5952042e206fad8",
+    "textures/clean-wood_table_001-color.jpg": "2cad5d45ae24bf4c81fe84c55014a1ce056958743ff18054b2cf45afe85f3225",
+    "textures/clean-wood_table_001-normal.jpg": "720df0f0b816356c3fff963f460106b4e87578e48388d1902c5dea2ea6672f17",
+    "textures/clean-wood_table_001-arm.jpg": "45d413d4ac32396dbd48508b2f96da2160ccc200bd618e31393b81cba6b33992"
   },
   "denoising": {
     "filter": "Open Image Denoise RTLightmap",

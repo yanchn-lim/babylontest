@@ -14,7 +14,7 @@ This instruction replaces earlier project rules that require `BANANA`.
 Select **Bukit Merah Ridge · 4-room** in Scene settings, or open
 `?scene=bukit-merah`. The apartment uses a baked derivative of the supplied
 `flat-native.glb`, preserving its geometry and door positions. The active PBR
-variant uses Poly Haven plaster, tiles, wood, and concrete textures.
+variant uses clean procedural paint, porcelain tile, light wood, and neutral surfaces.
 The ceiling stays visible in every view. Living / dining is the default view;
 Hallway and Exterior overview are also available. Walk mode is the apartment
 default: WASD or the mobile stick moves at a fixed 1.65 m eye height, with
@@ -46,8 +46,10 @@ texture and metadata in `.tools/apartment-denoised` before copying them into
 `public/models/bukit-merah/baked`.
 
 The active apartment assets are in `public/models/bukit-merah/pbr`. Four CC0
-Poly Haven materials supply 1K base-color, normal, and roughness/metalness maps;
-source URLs and hashes are in `pbr/sources.json`. Glass and metal are retained.
+material families use 1K procedural base-color, normal, and roughness/metalness
+maps with no weathering. Original Poly Haven downloads are retained as source
+assets; active generated-map hashes are in `pbr/sources.json`. Glass and metal
+are retained.
 The denoised lightmap is adjusted by the new-to-old base-color ratio. Original
 bounced-light colors remain, so this is an approximation rather than a new bake.
 After updating the original denoised bake, regenerate this variant with

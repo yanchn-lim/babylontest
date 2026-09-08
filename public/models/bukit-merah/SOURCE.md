@@ -11,7 +11,8 @@ Baked settings and hashes are recorded in `baked/lighting.json`.
 Sunlight, soft shadows, light shafts, and bloom remain real time.
 
 The viewer loads `pbr/Apartment.gltf`, which replaces plaster, tile, wood, and
-concrete surfaces with 1K Poly Haven CC0 PBR textures. Glass, metal, geometry,
+concrete surfaces with clean 1K procedural PBR textures. Original Poly Haven
+CC0 downloads remain as source assets. Glass, metal, geometry,
 and baked UVs are retained. `pbr/sources.json` records source URLs and hashes.
 The denoised lightmap is retinted for the new base colors; bounced-light colors
 remain approximate. `pbr/lighting.json` records this conversion and its hashes.
