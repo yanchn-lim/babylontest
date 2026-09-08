@@ -72,7 +72,17 @@ async function start() {
   if (!Number.isFinite(lighting.lightmapScale) || lighting.lightmapScale <= 0) {
     throw new Error("Invalid baked lightmap scale.");
   }
-  const result = await SceneLoader.ImportMeshAsync("", bakedUrl, "Sponza.gltf", activeScene);
+  const modelUrl = new URL(bakedUrl + "Sponza.gltf", document.baseURI);
+  const modelResponse = await fetch(modelUrl);
+  if (!modelResponse.ok) throw new Error("Could not load baked model.");
+  const model = await modelResponse.json();
+  for (const asset of [...model.images, ...model.buffers]) {
+    if (asset.uri) asset.uri = new URL(asset.uri, modelUrl).href;
+  }
+  const result = await SceneLoader.ImportMeshAsync(
+    "", "", "data:" + JSON.stringify(model),
+    activeScene, undefined, ".gltf",
+  );
   // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
   const ao = new Texture(bakedUrl + "ao.png", activeScene, true, false);
   const indirect = new Texture(bakedUrl + "indirect.png", activeScene, true, false);
