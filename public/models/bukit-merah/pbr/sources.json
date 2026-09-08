@@ -1,0 +1,60 @@
+{
+  "license": "CC0-1.0",
+  "provider": "Poly Haven",
+  "assets": {
+    "interior_tiles": "https://polyhaven.com/a/interior_tiles",
+    "smooth_concrete_floor": "https://polyhaven.com/a/smooth_concrete_floor",
+    "white_plaster_02": "https://polyhaven.com/a/white_plaster_02",
+    "wood_table_001": "https://polyhaven.com/a/wood_table_001"
+  },
+  "downloads": {
+    "textures/interior_tiles-color.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/interior_tiles/interior_tiles_diff_1k.jpg",
+      "sha256": "f267c4357e629f5ca2ab86f30da4fb0ae8c655a566cec6d81278df8d78dcca4a"
+    },
+    "textures/interior_tiles-normal.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/interior_tiles/interior_tiles_nor_gl_1k.jpg",
+      "sha256": "fdfb9fe192d438176508290fe873e181d88c5e6444a43bbab2ec156c9a78aa33"
+    },
+    "textures/interior_tiles-arm.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/interior_tiles/interior_tiles_arm_1k.jpg",
+      "sha256": "e21a6758bb84ffce7baf0dd5937f77fa9e40c94d4d6b779097b1c5dd6189d81b"
+    },
+    "textures/smooth_concrete_floor-color.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/smooth_concrete_floor/smooth_concrete_floor_diff_1k.jpg",
+      "sha256": "079587ae48fb3e2bfb0d0f9209eb75dc26ee30e213403d96377a30f6f6955092"
+    },
+    "textures/smooth_concrete_floor-normal.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/smooth_concrete_floor/smooth_concrete_floor_nor_gl_1k.jpg",
+      "sha256": "588bdbcc16b8dfa2869a2c154c076a419abb8ed83284691c2dffdddfcf20cc0c"
+    },
+    "textures/smooth_concrete_floor-arm.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/smooth_concrete_floor/smooth_concrete_floor_arm_1k.jpg",
+      "sha256": "236d1bb6b8a1fb799adad69369f3133d1e9ce564a59c934d54852a4bde80b691"
+    },
+    "textures/white_plaster_02-color.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_diff_1k.jpg",
+      "sha256": "a1ebbe091bd1ae93d2abd5de8d69f9003a8d0ee6532bcf9a87c2492c97051f23"
+    },
+    "textures/white_plaster_02-normal.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_nor_gl_1k.jpg",
+      "sha256": "eb572ca3630d5bfde72e2601b1f02412da23ca005cd19384dced8690be4cb783"
+    },
+    "textures/white_plaster_02-arm.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/white_plaster_02/white_plaster_02_arm_1k.jpg",
+      "sha256": "2bb1115821715dfd8bbd1c5a294a5bb43b97d5c46b1aa8aa8f744bcaf5eeeb10"
+    },
+    "textures/wood_table_001-color.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_diff_1k.jpg",
+      "sha256": "460dd08d240f4a1f02982415048c3c5c200f385db212da18dc7e2df68bf4d0be"
+    },
+    "textures/wood_table_001-normal.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_nor_gl_1k.jpg",
+      "sha256": "9bf7ddf5721e225c20290f1772ae37f9bdfd49658f6d458259eb794e2149d3cf"
+    },
+    "textures/wood_table_001-arm.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_arm_1k.jpg",
+      "sha256": "29d3f34a7c2c213e21b320365495fad673d3c8a3ce885b879fc0a77a187dd828"
+    }
+  }
+}

@@ -13,10 +13,15 @@ This instruction replaces earlier project rules that require `BANANA`.
 
 Select **Bukit Merah Ridge · 4-room** in Scene settings, or open
 `?scene=bukit-merah`. The apartment uses a baked derivative of the supplied
-`flat-native.glb`, preserving its source materials, textures, and door positions.
+`flat-native.glb`, preserving its geometry and door positions. The active PBR
+variant uses Poly Haven plaster, tiles, wood, and concrete textures.
 The ceiling stays visible in every view. Living / dining is the default view;
-Hallway and Exterior overview are also available. Fly controls and live sun
-effects work in both scenes.
+Hallway and Exterior overview are also available. Walk mode is the apartment
+default: WASD or the mobile stick moves at a fixed 1.65 m eye height, with
+Babylon camera collisions against walls and doors. Drag to look; Shift walks
+faster. Walk mode assumes a level floor and does not simulate stairs or gravity.
+Select Fly for vertical movement. Exterior overview automatically selects Fly.
+Live sun effects work in both scenes.
 
 Apartment AO and skylight are baked at 4096 pixels with 1024 samples and four
 diffuse bounces, with the ceiling included. Direct sunlight remains real time;
@@ -39,6 +44,14 @@ Denoise 2.3.3 RTLightmap. AO is unchanged. After a fresh bake, run
 official OIDN Windows package extracted under `.tools`. Review the staged
 texture and metadata in `.tools/apartment-denoised` before copying them into
 `public/models/bukit-merah/baked`.
+
+The active apartment assets are in `public/models/bukit-merah/pbr`. Four CC0
+Poly Haven materials supply 1K base-color, normal, and roughness/metalness maps;
+source URLs and hashes are in `pbr/sources.json`. Glass and metal are retained.
+The denoised lightmap is adjusted by the new-to-old base-color ratio. Original
+bounced-light colors remain, so this is an approximation rather than a new bake.
+After updating the original denoised bake, regenerate this variant with
+`python scripts/prepare-apartment-materials.py` (NumPy, Pillow, and curl.exe).
 
 ## Windows setup
 
@@ -95,7 +108,8 @@ Lighting uses one directional sun, baked ambient occlusion (AO), baked diffuse
 skylight, and a prefiltered environment map with ACES tone mapping.
 AO reduces ambient light in crevices. The lightmap supplies fixed skylight; direct sunlight and shadows remain real time.
 Sunlight bounce is not simulated in real time.
-Camera movement has no collision detection. WebGPU is not enabled.
+Fly mode has no collision detection. Apartment Walk mode uses Babylon collisions.
+WebGPU is not enabled.
 
 For comparisons, hold the camera view, browser, GPU, viewport, render scale,
 and exposure constant. Frame time is the interval between rendered frames,

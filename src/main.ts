@@ -30,6 +30,9 @@ const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const controls = document.querySelector<HTMLFieldSetElement>("#controls")!;
 const view = document.querySelector<HTMLSelectElement>("#view")!;
+const navigation = document.querySelector<HTMLSelectElement>("#navigation")!;
+navigation.value = apartment ? "walk" : "fly";
+document.querySelector<HTMLElement>("#navigation-setting")!.hidden = !apartment;
 const shadows = document.querySelector<HTMLSelectElement>("#shadows")!;
 const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
 const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!;
@@ -89,6 +92,8 @@ async function start() {
   camera.maxZ = 250;
   camera.inputs.clear();
   camera.inertia = 0;
+  camera.ellipsoid.set(0.2, 0.75, 0.2);
+  camera.ellipsoidOffset.set(0, -0.14, 0);
 
   const sun = new DirectionalLight("sun", new Vector3(-0.5, -1, -0.35), activeScene);
   sun.position = new Vector3(12, 22, 8);
@@ -104,7 +109,7 @@ async function start() {
   sky.material = skyMaterial;
 
   activeEngine.runRenderLoop(() => activeScene.render());
-  const bakedUrl = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/baked/" : "models/sponza/baked/");
+  const bakedUrl = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/pbr/" : "models/sponza/baked/");
   const response = await fetch(bakedUrl + "lighting.json");
   if (!response.ok) throw new Error("Could not load baked lighting metadata.");
   const lighting = await response.json();
@@ -123,7 +128,8 @@ async function start() {
     activeScene, undefined, ".gltf",
   );
   // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
-  const ao = new Texture(bakedUrl + "ao.png", activeScene, true, false);
+  const aoUrl = new URL(apartment ? "../baked/ao.png" : "ao.png", new URL(bakedUrl, document.baseURI));
+  const ao = new Texture(aoUrl.href, activeScene, true, false);
   const indirect = new Texture(bakedUrl + "indirect.png", activeScene, true, false);
   for (const texture of [ao, indirect]) {
     texture.coordinatesIndex = 1;
@@ -147,6 +153,7 @@ async function start() {
   for (const mesh of meshes) {
     mesh.computeWorldMatrix(true);
     mesh.receiveShadows = true;
+    mesh.checkCollisions = apartment;
     const bounds = mesh.getBoundingInfo().boundingBox;
     minimum = Vector3.Minimize(minimum, bounds.minimumWorld);
     maximum = Vector3.Maximize(maximum, bounds.maximumWorld);
@@ -154,7 +161,23 @@ async function start() {
   const center = minimum.add(maximum).scale(0.5);
   const width = maximum.x - minimum.x;
   const eye = minimum.y + 1.7;
-  const resetFlight = attachFlyControls(camera, canvas);
+  const resetFlight = attachFlyControls(camera, canvas, () => apartment && navigation.value === "walk");
+  function updateNavigation() {
+    const walking = apartment && navigation.value === "walk";
+    camera.checkCollisions = walking;
+    document.querySelector<HTMLElement>(".height-controls")!.hidden = walking;
+    document.querySelector<HTMLElement>(".desktop-hint")!.innerHTML = walking
+      ? "WASD / arrows: walk<br>Shift: faster · Drag: look · Esc: release mouse"
+      : "WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse";
+    document.querySelector<HTMLElement>(".mobile-hint")!.innerHTML = walking
+      ? "Left stick: walk · Drag scene: look"
+      : "Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.";
+    canvas.setAttribute("aria-label", walking
+      ? "Apartment walking camera. Drag to look; use keyboard or touch controls to walk."
+      : "Fly camera. Drag to look; use keyboard or touch controls to move.");
+    document.querySelector<HTMLElement>("#move-stick")!.setAttribute("aria-label",
+      walking ? "Drag to walk forward, backward, or sideways" : "Drag to fly forward, backward, or sideways");
+  }
   if (apartment) {
     view.options[0].textContent = "Living / dining";
     view.options[1].textContent = "Hallway";
@@ -163,6 +186,8 @@ async function start() {
     canvas.setAttribute("aria-label", "Apartment fly camera. Drag to look; use keyboard or touch controls to move.");
   }
   function resetView() {
+    if (apartment && view.value === "upper") navigation.value = "fly";
+    updateNavigation();
     resetFlight();
     camera.cameraDirection.setAll(0);
     camera.cameraRotation.setAll(0);
@@ -345,6 +370,10 @@ async function start() {
   sunElevation.addEventListener("input", moveSun);
   activeScene.onDisposeObservable.add(() => activeScene.onBeforeRenderObservable.remove(sunUpdates));
   view.addEventListener("change", resetView);
+  navigation.addEventListener("change", () => {
+    if (navigation.value === "walk") view.value = "atrium";
+    resetView();
+  });
   shadows.addEventListener("change", () => {
     updateShadows();
     void rebuildGraph().catch(fail);

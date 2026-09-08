@@ -1,7 +1,7 @@
 import { Vector3 } from "@babylonjs/core";
 import type { UniversalCamera } from "@babylonjs/core";
 
-export function attachFlyControls(camera: UniversalCamera, canvas: HTMLCanvasElement) {
+export function attachFlyControls(camera: UniversalCamera, canvas: HTMLCanvasElement, isWalking = () => false) {
   const scene = camera.getScene();
   const abort = new AbortController();
   const options = { signal: abort.signal };
@@ -141,13 +141,23 @@ export function attachFlyControls(camera: UniversalCamera, canvas: HTMLCanvasEle
     const x = stickX + pressed("KeyD", "ArrowRight") - pressed("KeyA", "ArrowLeft");
     const z = stickY + pressed("KeyW", "ArrowUp") - pressed("KeyS", "ArrowDown");
     const y = pressed("KeyE") - pressed("KeyQ") + Number([...vertical.values()].includes(1)) - Number([...vertical.values()].includes(-1));
-    const direction = camera.getDirection(Vector3.Forward()).scale(z)
-      .add(camera.getDirection(Vector3.Right()).scale(x)).add(new Vector3(0, y, 0));
+    const walking = isWalking();
+    const forward = camera.getDirection(Vector3.Forward());
+    const right = camera.getDirection(Vector3.Right());
+    if (walking) {
+      forward.y = right.y = 0;
+      forward.normalize();
+      right.normalize();
+      camera.position.y = 1.65;
+    }
+    const direction = forward.scale(z).add(right.scale(x)).add(new Vector3(0, walking ? 0 : y, 0));
     const length = direction.length();
     if (length > 1) direction.scaleInPlace(1 / length);
-    const speed = pressed("ShiftLeft", "ShiftRight") ? 9 : 3;
+    const speed = walking ? (pressed("ShiftLeft", "ShiftRight") ? 3.2 : 1.8)
+      : (pressed("ShiftLeft", "ShiftRight") ? 9 : 3);
     const seconds = Math.min(scene.getEngine().getDeltaTime(), 50) / 1000;
-    camera.position.addInPlace(direction.scale(speed * seconds));
+    if (walking) camera.cameraDirection.copyFrom(direction.scale(speed * seconds));
+    else camera.position.addInPlace(direction.scale(speed * seconds));
   });
   scene.onDisposeObservable.add(() => {
     abort.abort();

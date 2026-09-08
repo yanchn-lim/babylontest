@@ -1,2 +1,3 @@
 public/models/sponza/baked/* -text whitespace=trailing-space,space-before-tab,cr-at-eol
 public/models/bukit-merah/baked/* -text whitespace=trailing-space,space-before-tab,cr-at-eol
+public/models/bukit-merah/pbr/* -text whitespace=trailing-space,space-before-tab,cr-at-eol

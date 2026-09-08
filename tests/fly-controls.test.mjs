@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { NullEngine, Scene, UniversalCamera, Vector3 } from "@babylonjs/core";
+import { MeshBuilder, NullEngine, Scene, UniversalCamera, Vector3 } from "@babylonjs/core";
 import { attachFlyControls } from "../src/fly-controls.ts";
 
-function fixture() {
+function fixture(walking = false) {
   const engine = new NullEngine();
   const scene = new Scene(engine);
   const camera = new UniversalCamera("test", Vector3.Zero(), scene);
   camera.inputs.clear();
+  camera.inertia = 0;
+  camera.ellipsoid.set(0.2, 0.75, 0.2);
+  camera.ellipsoidOffset.set(0, -0.14, 0);
+  camera.checkCollisions = walking;
   let delta = 1000 / 60;
   engine.getDeltaTime = () => delta;
   const oldDocument = globalThis.document;
@@ -32,7 +36,7 @@ function fixture() {
   document.pointerLockElement = null;
   globalThis.document = document;
   globalThis.window = new EventTarget();
-  const reset = attachFlyControls(camera, canvas);
+  const reset = attachFlyControls(camera, canvas, () => walking);
   canvas.focus();
   function send(target, type, data = {}) {
     const event = new Event(type, { cancelable: true });
@@ -40,8 +44,13 @@ function fixture() {
     target.dispatchEvent(event);
   }
   return {
-    camera, canvas, nodes, reset, send, document,
-    frame(ms = 1000 / 60) { delta = ms; scene.onBeforeRenderObservable.notifyObservers(scene); },
+    camera, canvas, nodes, reset, send, document, scene,
+    setWalking(value) { reset(); walking = value; camera.checkCollisions = value; },
+    frame(ms = 1000 / 60) {
+      delta = ms;
+      scene.onBeforeRenderObservable.notifyObservers(scene);
+      if (walking) camera.update();
+    },
     close() {
       scene.dispose();
       engine.dispose();
@@ -129,5 +138,74 @@ test("look is pitch-clamped and long frames cannot teleport the camera", () => {
     f.send(f.canvas, "keydown", { code: "KeyW" });
     f.frame(10000);
     assert.ok(f.camera.position.length() <= 0.150001);
+  } finally { f.close(); }
+});
+
+
+test("walking stays at eye height, ignores pitch and ascent, and is frame-rate independent", () => {
+  const f = fixture(true);
+  try {
+    f.camera.position.set(0, 1.65, 0);
+    f.camera.rotation.x = 0.8;
+    f.send(f.canvas, "keydown", { code: "KeyW" });
+    f.send(f.canvas, "keydown", { code: "KeyE" });
+    for (let i = 0; i < 60; i++) f.frame();
+    assert.ok(Math.abs(f.camera.position.z - 1.8) < 1e-5);
+    assert.ok(Math.abs(f.camera.position.y - 1.65) < 1e-5);
+    f.camera.position.set(0, 1.65, 0);
+    for (let i = 0; i < 30; i++) f.frame(1000 / 30);
+    assert.ok(Math.abs(f.camera.position.z - 1.8) < 1e-5);
+    f.setWalking(false);
+    f.send(f.canvas, "keydown", { code: "KeyE" });
+    f.frame();
+    assert.ok(f.camera.position.y > 1.65);
+  } finally { f.close(); }
+});
+
+test("Babylon walking collisions stop at walls, slide sideways, and allow doorways", () => {
+  const f = fixture(true);
+  try {
+    const wall = MeshBuilder.CreateBox("wall", { width: 4, height: 3, depth: 0.1 }, f.scene);
+    wall.position.set(0, 1.5, 1.5);
+    wall.checkCollisions = true;
+    wall.computeWorldMatrix(true);
+    f.camera.position.set(0, 1.65, 0);
+    f.send(f.canvas, "keydown", { code: "KeyW" });
+    for (let i = 0; i < 120; i++) f.frame();
+    assert.ok(f.camera.position.z > 1.15 && f.camera.position.z < 1.3);
+    f.send(f.canvas, "keydown", { code: "KeyD" });
+    for (let i = 0; i < 20; i++) f.frame();
+    assert.ok(f.camera.position.x > 0.3);
+    assert.ok(f.camera.position.z < 1.3);
+    wall.dispose();
+    for (const x of [-0.9, 0.9]) {
+      const jamb = MeshBuilder.CreateBox("jamb", { width: 1, height: 3, depth: 0.1 }, f.scene);
+      jamb.position.set(x, 1.5, 1.5);
+      jamb.checkCollisions = true;
+      jamb.computeWorldMatrix(true);
+    }
+    f.reset();
+    f.camera.position.set(0, 1.65, 0);
+    f.send(f.canvas, "keydown", { code: "KeyW" });
+    for (let i = 0; i < 120; i++) f.frame();
+    assert.ok(f.camera.position.z > 3);
+  } finally { f.close(); }
+});
+
+test("mobile walking supports simultaneous movement and look without vertical flight", () => {
+  const f = fixture(true);
+  try {
+    f.send(f.nodes["move-stick"], "pointerdown", { pointerId: 1, clientX: 62, clientY: 0 });
+    f.send(f.canvas, "pointerdown", { pointerId: 2, clientX: 200, clientY: 100 });
+    f.send(f.canvas, "pointermove", { pointerId: 2, clientX: 220, clientY: 70 });
+    f.send(f.nodes["fly-up"], "pointerdown", { pointerId: 3 });
+    f.frame();
+    assert.ok(f.camera.position.z > 0);
+    assert.ok(Math.abs(f.camera.position.y - 1.65) < 1e-5);
+    assert.ok(f.camera.rotation.y > 0);
+    f.reset();
+    const position = f.camera.position.clone();
+    f.frame();
+    assert.ok(f.camera.position.equals(position));
   } finally { f.close(); }
 });
