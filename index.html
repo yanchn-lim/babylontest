@@ -15,6 +15,7 @@
     <summary>Scene settings</summary>
     <fieldset id="controls" disabled>
       <legend>Scene controls</legend>
+      <label>Scene<select id="scene-select"><option value="sponza">Sponza</option><option value="bukit-merah">Bukit Merah Ridge · 4-room</option></select></label>
       <label>Camera view<select id="view"><option value="atrium">Atrium</option><option value="reverse">Reverse atrium</option><option value="upper">Upper overview</option></select></label>
       <label>Shadows<select id="shadows"><option value="4096">Ultra · 4096</option><option value="2048">High · 2048</option><option value="1024">Medium · 1024</option><option value="0">Off</option></select></label>
       <label>Sun azimuth <output id="sun-azimuth-value">35</output><input id="sun-azimuth" type="range" min="0" max="360" step="1" value="35"></label>
@@ -29,7 +30,7 @@
     <button id="capture-mouse" type="button" disabled>Capture mouse</button>
     <p class="hint desktop-hint">WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse</p>
     <p class="hint mobile-hint">Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.</p>
-    <a href="%BASE_URL%models/sponza/SOURCE.md" target="_blank" rel="noreferrer">Model source and attribution ↗</a>
+    <a id="model-source" href="%BASE_URL%models/sponza/SOURCE.md" target="_blank" rel="noreferrer">Model source and attribution ↗</a>
   </aside>
   <div id="flight-controls" hidden>
     <div id="move-stick" role="group" aria-label="Drag to fly forward, backward, or sideways"><span id="stick-thumb"></span><span class="stick-label">MOVE</span></div>

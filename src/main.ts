@@ -11,6 +11,20 @@ import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
 import { attachFlyControls } from "./fly-controls";
 
+const apartment = new URLSearchParams(location.search).get("scene") === "bukit-merah";
+const sceneSelect = document.querySelector<HTMLSelectElement>("#scene-select")!;
+sceneSelect.value = apartment ? "bukit-merah" : "sponza";
+sceneSelect.addEventListener("change", () => {
+  const url = new URL(location.href);
+  url.searchParams.set("scene", sceneSelect.value);
+  location.assign(url.href);
+});
+const sceneName = apartment ? "Bukit Merah Ridge · 4-room" : "Sponza";
+document.querySelector("h1")!.textContent = sceneName;
+document.title = sceneName + " · Babylon.js Lab";
+const sourceLink = document.querySelector<HTMLAnchorElement>("#model-source")!;
+sourceLink.href = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/SOURCE.md" : "models/sponza/SOURCE.md");
+
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const controls = document.querySelector<HTMLFieldSetElement>("#controls")!;
@@ -56,12 +70,12 @@ async function start() {
   const environment = CubeTexture.CreateFromPrefilteredData(
     import.meta.env.BASE_URL + "environments/environmentSpecular.dds", activeScene,
   );
-  // Add a reduced diffuse environment fill to the baked skylight.
+  // Sponza has baked skylight; the apartment uses environment diffuse lighting.
   environment.onLoadObservable.addOnce(() => {
     const polynomial = environment.sphericalPolynomial;
     if (!polynomial) return;
     const harmonics = SphericalHarmonics.FromPolynomial(polynomial);
-    harmonics.scaleInPlace(0.35);
+    harmonics.scaleInPlace(apartment ? 1 : 0.35);
     environment.sphericalPolynomial = SphericalPolynomial.FromHarmonics(harmonics);
   });
   activeScene.environmentTexture = environment;
@@ -80,44 +94,49 @@ async function start() {
   sun.intensity = 3;
 
   activeEngine.runRenderLoop(() => activeScene.render());
-  const bakedUrl = import.meta.env.BASE_URL + "models/sponza/baked/";
-  const response = await fetch(bakedUrl + "lighting.json");
-  if (!response.ok) throw new Error("Could not load baked lighting metadata.");
-  const lighting = await response.json();
-  if (!Number.isFinite(lighting.lightmapScale) || lighting.lightmapScale <= 0) {
-    throw new Error("Invalid baked lightmap scale.");
-  }
-  const modelUrl = new URL(bakedUrl + "Sponza.gltf", document.baseURI);
-  const modelResponse = await fetch(modelUrl);
-  if (!modelResponse.ok) throw new Error("Could not load baked model.");
-  const model = await modelResponse.json();
-  for (const asset of [...model.images, ...model.buffers]) {
-    if (asset.uri) asset.uri = new URL(asset.uri, modelUrl).href;
-  }
-  const result = await SceneLoader.ImportMeshAsync(
-    "", "", "data:" + JSON.stringify(model),
-    activeScene, undefined, ".gltf",
-  );
-  // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
-  const ao = new Texture(bakedUrl + "ao.png", activeScene, true, false);
-  const indirect = new Texture(bakedUrl + "indirect.png", activeScene, true, false);
-  for (const texture of [ao, indirect]) {
-    texture.coordinatesIndex = 1;
-    texture.wrapU = texture.wrapV = Texture.CLAMP_ADDRESSMODE;
-  }
-  ao.gammaSpace = false;
-  indirect.gammaSpace = true;
-  indirect.level = lighting.lightmapScale;
-  for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
-    if (!(material instanceof PBRMaterial)) continue;
-    material.ambientTexture = ao;
-    material.useAmbientInGrayScale = true;
-    material.ambientTextureImpactOnAnalyticalLights = 0;
-    material.lightmapTexture = indirect;
-    material.useLightmapAsShadowmap = false;
+  let result;
+  if (apartment) {
+    result = await SceneLoader.ImportMeshAsync("", import.meta.env.BASE_URL + "models/bukit-merah/", "Apartment.glb", activeScene);
+  } else {
+    const bakedUrl = import.meta.env.BASE_URL + "models/sponza/baked/";
+    const response = await fetch(bakedUrl + "lighting.json");
+    if (!response.ok) throw new Error("Could not load baked lighting metadata.");
+    const lighting = await response.json();
+    if (!Number.isFinite(lighting.lightmapScale) || lighting.lightmapScale <= 0) {
+      throw new Error("Invalid baked lightmap scale.");
+    }
+    const modelUrl = new URL(bakedUrl + "Sponza.gltf", document.baseURI);
+    const modelResponse = await fetch(modelUrl);
+    if (!modelResponse.ok) throw new Error("Could not load baked model.");
+    const model = await modelResponse.json();
+    for (const asset of [...model.images, ...model.buffers]) {
+      if (asset.uri) asset.uri = new URL(asset.uri, modelUrl).href;
+    }
+    result = await SceneLoader.ImportMeshAsync(
+      "", "", "data:" + JSON.stringify(model),
+      activeScene, undefined, ".gltf",
+    );
+    // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
+    const ao = new Texture(bakedUrl + "ao.png", activeScene, true, false);
+    const indirect = new Texture(bakedUrl + "indirect.png", activeScene, true, false);
+    for (const texture of [ao, indirect]) {
+      texture.coordinatesIndex = 1;
+      texture.wrapU = texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+    }
+    ao.gammaSpace = false;
+    indirect.gammaSpace = true;
+    indirect.level = lighting.lightmapScale;
+    for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
+      if (!(material instanceof PBRMaterial)) continue;
+      material.ambientTexture = ao;
+      material.useAmbientInGrayScale = true;
+      material.ambientTextureImpactOnAnalyticalLights = 0;
+      material.lightmapTexture = indirect;
+      material.useLightmapAsShadowmap = false;
+    }
   }
   const meshes = result.meshes.filter(mesh => mesh.getTotalVertices() > 0);
-  if (!meshes.length) throw new Error("Sponza contains no renderable meshes.");
+  if (!meshes.length) throw new Error(sceneName + " contains no renderable meshes.");
   let minimum = new Vector3(Infinity, Infinity, Infinity);
   let maximum = new Vector3(-Infinity, -Infinity, -Infinity);
   for (const mesh of meshes) {
@@ -131,6 +150,13 @@ async function start() {
   const width = maximum.x - minimum.x;
   const eye = minimum.y + 1.7;
   const resetFlight = attachFlyControls(camera, canvas);
+  if (apartment) {
+    view.options[0].textContent = "Living / dining";
+    view.options[1].textContent = "Hallway";
+    view.options[2].textContent = "Open-roof overview";
+    view.value = "upper";
+    canvas.setAttribute("aria-label", "Apartment fly camera. Drag to look; use keyboard or touch controls to move.");
+  }
   function resetView() {
     resetFlight();
     camera.cameraDirection.setAll(0);
@@ -140,8 +166,19 @@ async function start() {
       reverse: new Vector3(maximum.x - width * 0.16, eye, center.z),
       upper: new Vector3(minimum.x + width * 0.23, minimum.y + (maximum.y - minimum.y) * 0.65, center.z),
     };
+    if (apartment) {
+      positions.atrium = new Vector3(-10.5, 1.65, -5.8);
+      positions.reverse = new Vector3(-7.3, 1.65, -4.0);
+      positions.upper = new Vector3(-18, 18, 13);
+      for (const mesh of meshes) {
+        if (mesh.name.startsWith("Ceiling |")) mesh.setEnabled(view.value !== "upper");
+      }
+    }
     camera.position.copyFrom(positions[view.value]);
-    camera.setTarget(new Vector3(center.x, eye + 0.5, center.z));
+    const target = apartment
+      ? (view.value === "upper" ? center : view.value === "atrium" ? new Vector3(-10.5, 1.65, -8.4) : new Vector3(-3, 1.65, -4.0))
+      : new Vector3(center.x, eye + 0.5, center.z);
+    camera.setTarget(target);
   }
   function updateSunDirection() {
     const azimuth = Number(sunAzimuth.value) * Math.PI / 180;
@@ -304,7 +341,10 @@ async function start() {
   sunAzimuth.addEventListener("input", moveSun);
   sunElevation.addEventListener("input", moveSun);
   activeScene.onDisposeObservable.add(() => activeScene.onBeforeRenderObservable.remove(sunUpdates));
-  view.addEventListener("change", resetView);
+  view.addEventListener("change", () => {
+    resetView();
+    if (apartment) volumeDirty = true;
+  });
   shadows.addEventListener("change", () => {
     updateShadows();
     void rebuildGraph().catch(fail);
