@@ -187,7 +187,7 @@ async function start() {
   shadowTask.light = sun;
   shadowTask.camera = camera;
   shadowTask.mapSize = Number(shadows.value);
-  shadowTask.filter = ShadowGenerator.FILTER_PCF;
+  shadowTask.filter = ShadowGenerator.FILTER_PCSS;
   shadowTask.bias = 0.0005;
   shadowTask.normalBias = 0.02;
   frameGraph.addTask(shadowTask);
