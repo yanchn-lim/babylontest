@@ -67,8 +67,8 @@ async function start() {
   const rays = new VolumetricLightScatteringPostProcess(
     "sun-rays", 0.5, camera, undefined, 32,
   );
-  rays.exposure = 0.15;
-  rays.decay = 0.96;
+  rays.exposure = 0.45;
+  rays.decay = 0.98;
   rays.weight = 0.4;
   rays.density = 0.8;
   rays.mesh.scaling.setAll(4);
