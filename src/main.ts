@@ -6,6 +6,7 @@ import {
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
+import { attachFlyControls } from "./fly-controls";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
@@ -40,14 +41,8 @@ async function start() {
   const camera = new UniversalCamera("camera", new Vector3(0, 2, 0), activeScene);
   camera.minZ = 0.05;
   camera.maxZ = 250;
-  camera.speed = 0.15;
-  camera.inertia = 0.65;
-  camera.keysUp = [87, 38];
-  camera.keysDown = [83, 40];
-  camera.keysLeft = [65, 37];
-  camera.keysRight = [68, 39];
-  camera.attachControl(canvas, true);
-  canvas.addEventListener("pointerdown", () => canvas.focus());
+  camera.inputs.clear();
+  camera.inertia = 0;
 
   const sun = new DirectionalLight("sun", new Vector3(-0.5, -1, -0.35), activeScene);
   sun.position = new Vector3(12, 22, 8);
@@ -73,7 +68,9 @@ async function start() {
   const center = minimum.add(maximum).scale(0.5);
   const width = maximum.x - minimum.x;
   const eye = minimum.y + 1.7;
+  const resetFlight = attachFlyControls(camera, canvas);
   function resetView() {
+    resetFlight();
     camera.cameraDirection.setAll(0);
     camera.cameraRotation.setAll(0);
     const positions: Record<string, Vector3> = {
@@ -127,6 +124,8 @@ async function start() {
   resize();
   await activeScene.whenReadyAsync();
   controls.disabled = false;
+  document.querySelector<HTMLElement>("#flight-controls")!.hidden = false;
+  document.querySelector<HTMLButtonElement>("#capture-mouse")!.disabled = false;
   status.textContent = "Ready · " + meshes.length + " meshes";
   document.querySelector("#renderer")!.textContent = "WebGL " + activeEngine.webGLVersion;
   statistics = setInterval(() => {

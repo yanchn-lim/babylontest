@@ -29,11 +29,20 @@ With your own supported Node installation (22.12+), use `npm ci`,
 ```
 
 The build runs TypeScript checking and produces `dist`.
+Run `npm test` with Node 24 to check flight speed, simultaneous touch input,
+release/cancel handling, and stopping on focus changes. CI runs these tests before building.
 The asset download verifies the geometry buffer length against the glTF manifest.
 
 ## Viewer
 
-Drag on the canvas to look. Use WASD or arrow keys to move.
+On keyboard and mouse, click the scene and use WASD or arrow keys to fly.
+E rises, Q descends, and Shift increases speed. Drag to look, or use Capture mouse
+for continuous mouse look; Esc releases the pointer.
+On mobile, use the left stick to fly, drag the scene to look, and hold Up or Down
+to change height. Movement, looking, and height controls support simultaneous touches.
+Forward flight follows the camera view. Up and down follow the world vertical axis.
+Movement stops when controls are released, focus changes, or the page is hidden.
+Scene settings can be expanded or collapsed to leave space for the viewer.
 Select Atrium, Reverse atrium, or Upper overview to reset the camera.
 Controls expose shadow resolution, exposure, render scale, FXAA, and the Babylon inspector.
 

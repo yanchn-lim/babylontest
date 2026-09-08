@@ -7,10 +7,12 @@
   <title>Sponza · Babylon.js Lab</title>
 </head>
 <body>
-  <canvas id="scene" tabindex="0" aria-label="Sponza 3D viewer. Drag to look and use WASD or arrow keys to move."></canvas>
+  <canvas id="scene" tabindex="0" aria-label="Sponza fly camera. Drag to look, WASD or arrows to move, E to rise, Q to descend, Shift for faster flight."></canvas>
   <aside>
     <header><span class="eyebrow">BABYLON.JS / GRAPHICS LAB</span><h1>Sponza</h1></header>
     <p id="status" role="status">Loading model and textures…</p>
+    <details>
+    <summary>Scene settings</summary>
     <fieldset id="controls" disabled>
       <legend>Scene controls</legend>
       <label>Camera view<select id="view"><option value="atrium">Atrium</option><option value="reverse">Reverse atrium</option><option value="upper">Upper overview</option></select></label>
@@ -20,10 +22,17 @@
       <label class="toggle"><input id="fxaa" type="checkbox" checked>FXAA anti-aliasing</label>
       <button id="inspector" type="button">Open inspector</button>
     </fieldset>
+    </details>
     <dl><div><dt>Frame rate</dt><dd id="fps">—</dd></div><div><dt>Frame time</dt><dd id="frame">—</dd></div><div><dt>Render size</dt><dd id="resolution">—</dd></div><div><dt>Renderer</dt><dd id="renderer">—</dd></div></dl>
-    <p class="hint">Drag to look · WASD / arrows to move<br>Choose a camera view to reset your position.</p>
+    <button id="capture-mouse" type="button" disabled>Capture mouse</button>
+    <p class="hint desktop-hint">WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse</p>
+    <p class="hint mobile-hint">Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.</p>
     <a href="%BASE_URL%models/sponza/SOURCE.md" target="_blank" rel="noreferrer">Model source and attribution ↗</a>
   </aside>
+  <div id="flight-controls" hidden>
+    <div id="move-stick" role="group" aria-label="Drag to fly forward, backward, or sideways"><span id="stick-thumb"></span><span class="stick-label">MOVE</span></div>
+    <div class="height-controls"><button id="fly-up" type="button" aria-label="Fly up">↑ Up</button><button id="fly-down" type="button" aria-label="Fly down">↓ Down</button></div>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

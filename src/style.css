@@ -24,4 +24,18 @@ dt, .hint { color: #afbdca; }
 dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
 a { color: #8ed9ed; font-size: .875rem; }
 :focus-visible { outline: 2px solid #8ed9ed; outline-offset: 3px; }
-@media (max-width: 600px) { aside { top: 10px; left: 10px; width: 230px; padding: 14px; max-height: 55dvh; } }
+summary { cursor: pointer; font-size: .875rem; padding: 8px 0; color: #8ed9ed; }
+.mobile-hint, #flight-controls { display: none; }
+@media (any-pointer: coarse), (max-width: 600px) {
+  aside { top: max(10px, env(safe-area-inset-top)); left: 10px; width: 230px; padding: 14px; max-height: calc(100dvh - 185px); }
+  h1 { margin-bottom: 8px; font-size: 1.5rem; }
+  .desktop-hint, #capture-mouse { display: none; }
+  .mobile-hint { display: block; }
+  #flight-controls:not([hidden]) { display: block; }
+  #move-stick { position: fixed; bottom: max(24px, env(safe-area-inset-bottom)); left: max(24px, env(safe-area-inset-left)); width: 124px; height: 124px; border: 1px solid #8ed9ed80; border-radius: 50%; background: #101720a8; touch-action: none; user-select: none; }
+  #stick-thumb { position: absolute; top: 41px; left: 41px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid #8ed9ed; background: #8ed9ed70; pointer-events: none; }
+  .stick-label { position: absolute; bottom: 10px; width: 100%; text-align: center; font-size: .75rem; pointer-events: none; }
+  .height-controls { position: fixed; right: max(24px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); display: grid; gap: 10px; }
+  .height-controls button { width: 78px; min-height: 52px; margin: 0; background: #101720d9; touch-action: none; user-select: none; }
+  .height-controls button.held { background: #36627a; }
+}
