@@ -1,6 +1,7 @@
 # Desktop renderer optimization
 
-This pass remains under investigation. The 2x target has not been demonstrated.
+This desktop optimization pass reached a repeatable 1.75x GPU throughput gain
+on the tested walking route. The 2x aspiration was not reached.
 Desktop results do not establish iPhone performance.
 
 ## Retained changes
@@ -50,7 +51,7 @@ The optimized Living / dining repeats measured 1.33140 and 1.33228 ms.
 The latter followed more than ten minutes of browser use and renderer checks.
 These are fixed camera tests, not a walking-route comparison. In particular,
 the Hallway preset faces a nearby wall; its result does not describe the full
-apartment. More baseline repeats and matched walking tests remain necessary.
+apartment. Later matched walking results and repeats are reported below.
 
 Run summaries are in [desktop-benchmarks.json](desktop-benchmarks.json).
 Earlier development-server revision labels were stale; the run notes identify
@@ -75,7 +76,7 @@ The result's `gpuTiming.scope` identifies the scope. Never compare a task-only
 number with a whole-frame number as a speedup. Unsupported GPU timing remains
 explicit. The main scene task measured 0.744 ms in the Living / dining view.
 
-The 29 automated tests and production build pass. Browser smoke checks exercised
+At the original checkpoint, 29 automated tests and the production build passed. Browser smoke checks exercised
 PCF, PCSS, and hard-shadow modes with every bloom/FXAA/shaft on/off combination
 in both scenes, with no reported console errors. The apartment also rendered
 after sun changes, shadow-map changes, shadows off/on, viewport resizing, and
@@ -83,8 +84,8 @@ scene navigation. Phone-width portrait controls scroll and close correctly;
 landscape controls and return to camera navigation were checked on desktop.
 
 These checks do not establish pixel-identical output or iPhone performance.
-Matched walking benchmarks, moving-sun timing, additional baseline repeats,
-and device testing remain outstanding. An extra depth pass can behave
+Later walking repeats and a discrete sun-adjustment check are reported below.
+Continuous sun-drag timing and device testing remain outstanding. An extra depth pass can behave
 differently on a mobile GPU. Compare both URLs on the phone before drawing a
 conclusion about its benefit.
 
@@ -110,3 +111,45 @@ Static imported meshes now freeze their world matrices after initial bounds
 calculation in the optimized path. Camera, sky, sun, and materials stay mutable.
 This change followed the first walking pair and has no claimed measured speedup.
 If geometry becomes movable later, unfreeze its matrix before changing transforms.
+
+## Additional walking profiles
+
+At 2556 x 849 with the same route and settings, the sun-shafts task alone
+measured 0.16440 ms median / 0.18924 ms p95 (7,195 GPU samples;
+2026-09-08 21:54:45 UTC start). This includes volume rendering and blending;
+it is not whole-frame timing or the cost of blending alone.
+
+A development-only R11G11B10F scene target measured 1.14436 ms median /
+1.73328 ms p95 whole-frame GPU time (3,599 samples; 21:56:56 UTC start).
+Both runs completed 60 seconds after 15 seconds warm-up, with unchanged
+shadow/build counters and the same route endpoint. The packed target was
+removed: the single-run difference of about 2.3% does not establish a repeatable
+benefit sufficient to justify lower HDR precision. RGBA16F remains in use.
+
+## Repeated walking result and rollout
+
+Three trials per renderer produced median whole-frame GPU times of
+2.04590, 2.04660, 2.04860 ms for baseline and
+1.17128, 1.17146, 1.17168 ms for optimized rendering.
+The ratio of trial medians is 1.747x (42.8% less GPU time).
+Repeats followed more than ten minutes of browser use. The first optimized
+trial preceded matrix freezing; its GPU time agrees with subsequent trials.
+See [repeat results](desktop-walking-repeats.json).
+
+The 2x aspiration was not reached. At this workload, it would require about
+1.0233 ms, another 0.1482 ms below the retained renderer. Do not infer an
+iPhone speedup from this desktop result. The route covers a limited part of
+the apartment and is not a substitute for walking through every room.
+
+A separate 60-second check applied 12 discrete sun changes. Surface shadow
+renders increased from 2 to 14, graph builds stayed at 1, and the surface
+binding remained correct. The final sun direction returned to 35 / 58.6.
+No console errors were reported. Median GPU time was 1.33104 ms, p95 1.34064 ms;
+frame p95 was 8.7 ms. Most frames had a static sun, so these values do not
+measure continuous sun dragging. Continuous-drag timing remains unmeasured.
+
+The retained pass is ready for phone comparison after deployment. It preserves
+the existing quality controls, ceiling, geometry, textures, movable sun, bloom,
+shafts, and reflections. The baseline URL remains available. No further
+quality reduction is enabled. Tests and desktop visual checks cannot establish
+pixel-identical output or sustained 60 fps on the iPhone.

@@ -1,0 +1,62 @@
+{
+  "worktreeRevision": "054f0ea",
+  "note": "Repeats of desktop-walking-benchmarks.json at identical settings and route. Vite revision metadata remained stale at 7052765. Whole-frame GPU queries; desktop FPS capped near 120.",
+  "dimensions": [
+    2556,
+    849
+  ],
+  "warmupSeconds": 15,
+  "measurementSeconds": 60,
+  "runs": [
+    {
+      "profile": "optimized",
+      "startedAt": "2026-09-08T21:59:16.098Z",
+      "gpuMedianMs": 1.17146,
+      "gpuP95Ms": 1.758,
+      "gpuSamples": 3598,
+      "frameSamples": 7197,
+      "frameP95Ms": 8.7,
+      "over33Percent": 0.013894678338196471,
+      "distance": 24.877141617038685
+    },
+    {
+      "profile": "baseline-7052765",
+      "startedAt": "2026-09-08T22:00:44.199Z",
+      "gpuMedianMs": 2.0466,
+      "gpuP95Ms": 2.488,
+      "gpuSamples": 3599,
+      "frameSamples": 7200,
+      "frameP95Ms": 8.7,
+      "over33Percent": 0,
+      "distance": 24.898599140223034
+    },
+    {
+      "profile": "optimized",
+      "startedAt": "2026-09-08T22:02:13.116Z",
+      "gpuMedianMs": 1.17168,
+      "gpuP95Ms": 1.75868,
+      "gpuSamples": 3599,
+      "frameSamples": 7200,
+      "frameP95Ms": 8.8,
+      "over33Percent": 0,
+      "distance": 24.88691912170604
+    },
+    {
+      "profile": "baseline-7052765",
+      "startedAt": "2026-09-08T22:03:41.932Z",
+      "gpuMedianMs": 2.0486,
+      "gpuP95Ms": 2.4916,
+      "gpuSamples": 3598,
+      "frameSamples": 7200,
+      "frameP95Ms": 8.7,
+      "over33Percent": 0,
+      "distance": 24.891353734461802
+    }
+  ],
+  "medianOfTrialMedians": {
+    "baselineMs": 2.0466,
+    "optimizedMs": 1.17146,
+    "ratio": 1.747050688883957
+  },
+  "scope": "The first optimized trial preceded freezing world matrices; subsequent optimized trials include it. No quality settings changed."
+}
