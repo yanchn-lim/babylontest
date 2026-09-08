@@ -203,6 +203,17 @@ async function start() {
   shadowTask.normalBias = 0.02;
   frameGraph.addTask(shadowTask);
 
+  // Light shafts need a much smaller depth map than visible surface shadows.
+  const volumeShadowTask = new FrameGraphShadowGeneratorTask("sun-volume-depth", frameGraph);
+  volumeShadowTask.objectList = { meshes, particleSystems: [] };
+  volumeShadowTask.light = sun;
+  volumeShadowTask.camera = camera;
+  volumeShadowTask.mapSize = 512;
+  volumeShadowTask.filter = ShadowGenerator.FILTER_PCF;
+  volumeShadowTask.bias = shadowTask.bias;
+  volumeShadowTask.normalBias = shadowTask.normalBias;
+  frameGraph.addTask(volumeShadowTask);
+
   const renderTask = new FrameGraphObjectRendererTask("scene", frameGraph, activeScene);
   renderTask.targetTexture = clear.outputTexture;
   renderTask.depthTexture = clear.outputDepthTexture;
@@ -214,10 +225,10 @@ async function start() {
   frameGraph.addTask(renderTask);
 
   const volume = new FrameGraphLightingVolumeTask("sun-volume", frameGraph);
-  volume.shadowGenerator = shadowTask;
+  volume.shadowGenerator = volumeShadowTask;
   // Reuse the lighting volume while the sun and model remain static.
   volume.lightingVolume.frequency = 0;
-  volume.lightingVolume.tesselation = 256;
+  volume.lightingVolume.tesselation = 128;
   frameGraph.addTask(volume);
   const shafts = new FrameGraphVolumetricLightingTask("sun-shafts", frameGraph, false);
   shafts.targetTexture = renderTask.outputTexture;
@@ -267,16 +278,31 @@ async function start() {
     void rebuildGraph().catch(fail);
   }
   activeScene.onDisposeObservable.add(() => frameGraph.dispose());
-  let sunSettleTimer: ReturnType<typeof setTimeout>;
+  let sunPending = false;
+  let volumeDirty = false;
+  let lastVolumeRefresh = -Infinity;
   function moveSun() {
-    updateSunDirection();
-    volume.lightingVolume.frequency = 1;
-    clearTimeout(sunSettleTimer);
-    sunSettleTimer = setTimeout(() => { void rebuildGraph().catch(fail); }, 300);
+    sunPending = true;
   }
+  const sunUpdates = activeScene.onBeforeRenderObservable.add(() => {
+    if (frameGraph.pausedExecution) return;
+    if (sunPending) {
+      updateSunDirection();
+      sunPending = false;
+      volumeDirty = true;
+    }
+    const now = performance.now();
+    // Wait for an in-flight readback and retain the newest requested direction.
+    if (!volume.disabled && volumeDirty && !volume.lightingVolume.firstUpdate && now - lastVolumeRefresh >= 100) {
+      volume.lightingVolume.frequency = 0;
+      volumeDirty = false;
+      lastVolumeRefresh = now;
+    }
+    volumeShadowTask.disabled = volume.disabled || !volume.lightingVolume.firstUpdate;
+  });
   sunAzimuth.addEventListener("input", moveSun);
   sunElevation.addEventListener("input", moveSun);
-  activeScene.onDisposeObservable.add(() => clearTimeout(sunSettleTimer));
+  activeScene.onDisposeObservable.add(() => activeScene.onBeforeRenderObservable.remove(sunUpdates));
   view.addEventListener("change", resetView);
   shadows.addEventListener("change", () => {
     updateShadows();

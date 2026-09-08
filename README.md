@@ -52,9 +52,12 @@ Movement stops when controls are released, focus changes, or the page is hidden.
 Scene settings can be expanded or collapsed to leave space for the viewer.
 Select Atrium, Reverse atrium, or Upper overview to reset the camera.
 Controls expose sun azimuth/elevation, shadow resolution, exposure, render scale, FXAA, and the Babylon inspector.
-Sun changes update direct lighting, PCSS shadows, and light shafts. The volume is
-refreshed while adjusting the sun and cached again after the controls settle.
-Moving the sun can temporarily reduce frame rate, especially on mobile.
+Sun changes update direct lighting and PCSS shadows once per frame. Light shafts
+use a separate 512-pixel depth map and 128-step volume mesh, refreshed at most
+10 times per second while the sun moves and cached when idle. The selected
+surface shadow resolution is preserved. Sun movement does not rebuild the frame
+graph. Shafts can briefly trail the sun during adjustment; mobile frame rate
+depends on the device and render resolution.
 
 The initial renderer uses WebGL, preferring WebGL 2 where available.
 Lighting uses one directional sun, baked ambient occlusion (AO), baked diffuse
