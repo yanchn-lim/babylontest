@@ -1,4 +1,4 @@
-"""Bake Sponza AO and sun-induced diffuse indirect radiance with Blender 4.5.
+"""Bake Sponza AO, diffuse sunlight bounce, and diffuse skylight with Blender 4.5.
 Run: blender --background --factory-startup --python scripts/bake-lighting.py
 Outputs are staged in .tools/baked-lighting for review before publication.
 """
@@ -18,10 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public/models/sponza"
 OUTPUT = ROOT / ".tools/baked-lighting"
 SIZE = 4096
-SAMPLES = 128
+SAMPLES = 512
 AO_DISTANCE = 1.0
 SUN_DIRECTION = [-0.5, -1.0, -0.35]
 SUN_INTENSITY = 3.0
+SKY_COLOR = [0.8, 0.85, 1.0]
+SKY_STRENGTH = 1.4
 
 def log(message):
     print("BAKE: " + message, flush=True)
@@ -163,7 +165,18 @@ png(OUTPUT / "ao.png", np.rint(ao_rgb * 255))
 log("Baking diffuse INDIRECT + COLOR; direct sunlight is excluded")
 bpy.ops.object.bake(type="DIFFUSE", pass_filter={"INDIRECT", "COLOR"}, uv_layer=bake_uv.name, use_clear=True)
 indirect = read_pixels(target)
-radiance = np.maximum(indirect[:, :, :3], 0)
+sun_radiance = np.maximum(indirect[:, :, :3], 0)
+log("Baking diffuse skylight DIRECT + INDIRECT + COLOR with the sun disabled")
+sun_data.energy = 0
+background = scene.world.node_tree.nodes["Background"]
+background.inputs["Color"].default_value = (*SKY_COLOR, 1)
+background.inputs["Strength"].default_value = SKY_STRENGTH
+bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT", "COLOR"}, uv_layer=bake_uv.name, use_clear=True)
+sky = read_pixels(target)
+sky_radiance = np.maximum(sky[:, :, :3], 0)
+if not sky_radiance.max() > 0:
+    raise RuntimeError("Skylight bake contains no light")
+radiance = sun_radiance + sky_radiance
 peak = float(radiance.max())
 if peak <= 0:
     raise RuntimeError("Indirect bake contains no light")
@@ -177,6 +190,9 @@ metadata = {
     "aoDistance": AO_DISTANCE, "uvChannel": 1,
     "sun": {"direction": SUN_DIRECTION, "intensity": SUN_INTENSITY},
     "indirectPasses": ["INDIRECT", "COLOR"],
+    "sky": {"model": "uniform world", "colorLinear": SKY_COLOR, "strength": SKY_STRENGTH,
+            "passes": ["DIRECT", "INDIRECT", "COLOR"]},
+    "includesDiffuseSky": True,
     "indirectEncoding": "gamma2.2 RGB8 with linear scale",
     "lightmapScale": scale,
     "sourceSha256": hashlib.sha256((SOURCE / "Sponza.gltf").read_bytes()).hexdigest(),
@@ -187,6 +203,8 @@ metadata = {
         "aoMinimum": float(ao_rgb[coverage].min()),
         "indirectPeak": peak,
         "indirectMean": float(radiance[coverage].mean()),
+        "sunIndirectMean": float(sun_radiance[coverage].mean()),
+        "skyMean": float(sky_radiance[coverage].mean()),
     },
 }
 metadata["sha256"] = {name: hashlib.sha256((OUTPUT / name).read_bytes()).hexdigest() for name in ("Sponza.gltf", "Sponza.bin", "ao.png", "indirect.png")}

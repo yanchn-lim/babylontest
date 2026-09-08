@@ -2,9 +2,9 @@ import {
   Color3, Color4, Constants, CubeTexture, DirectionalLight, Engine, FrameGraph,
   FrameGraphClearTextureTask, FrameGraphObjectRendererTask, FrameGraphShadowGeneratorTask,
   FrameGraphLightingVolumeTask, FrameGraphVolumetricLightingTask,
-  FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
+  FrameGraphBloomTask, FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
   ImageProcessingConfiguration, PBRMaterial, Scene, SceneLoader,
-  ShadowGenerator, Texture, UniversalCamera, Vector3,
+  ShadowGenerator, SphericalPolynomial, Texture, UniversalCamera, Vector3,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
@@ -51,10 +51,19 @@ async function start() {
   const activeEngine = engine;
   const activeScene = scene;
   activeScene.clearColor = new Color4(0.16, 0.20, 0.26, 1);
-  activeScene.environmentTexture = CubeTexture.CreateFromPrefilteredData(import.meta.env.BASE_URL + "environments/environmentSpecular.dds", activeScene);
+  const environment = CubeTexture.CreateFromPrefilteredData(
+    import.meta.env.BASE_URL + "environments/environmentSpecular.dds", activeScene, undefined, false,
+  );
+  // Diffuse sky is baked; keep the environment's specular reflections only.
+  environment.sphericalPolynomial = new SphericalPolynomial();
+  environment.onLoadObservable.addOnce(() => {
+    environment.sphericalPolynomial = new SphericalPolynomial();
+  });
+  activeScene.environmentTexture = environment;
   activeScene.environmentIntensity = 0.65;
   activeScene.imageProcessingConfiguration.toneMappingEnabled = true;
   activeScene.imageProcessingConfiguration.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
+  activeScene.imageProcessingConfiguration.exposure = Number(exposure.value);
   const camera = new UniversalCamera("camera", new Vector3(0, 2, 0), activeScene);
   camera.minZ = 0.05;
   camera.maxZ = 250;
@@ -206,9 +215,13 @@ async function start() {
   shafts.phaseG = 0.05;
   frameGraph.addTask(shafts);
 
+  const bloom = new FrameGraphBloomTask("bloom", frameGraph, 0.12, 32, 1.0, true, 0.5);
+  bloom.sourceTexture = shafts.outputTexture;
+  frameGraph.addTask(bloom);
+
   const imageProcessing = new FrameGraphImageProcessingTask("tone-mapping", frameGraph);
   imageProcessing.postProcess.imageProcessingConfiguration = activeScene.imageProcessingConfiguration;
-  imageProcessing.sourceTexture = shafts.outputTexture;
+  imageProcessing.sourceTexture = bloom.outputTexture;
   frameGraph.addTask(imageProcessing);
   const antialiasing = new FrameGraphFXAATask("fxaa", frameGraph);
   antialiasing.sourceTexture = imageProcessing.outputTexture;
@@ -270,12 +283,12 @@ async function start() {
   controls.disabled = false;
   document.querySelector<HTMLElement>("#flight-controls")!.hidden = false;
   document.querySelector<HTMLButtonElement>("#capture-mouse")!.disabled = false;
-  status.textContent = "Ready · " + meshes.length + " meshes";
+  status.textContent = "Ready \u00b7 " + meshes.length + " meshes";
   document.querySelector("#renderer")!.textContent = "WebGL " + activeEngine.webGLVersion;
   statistics = setInterval(() => {
     document.querySelector("#fps")!.textContent = activeEngine.getFps().toFixed(0) + " fps";
     document.querySelector("#frame")!.textContent = activeEngine.getDeltaTime().toFixed(1) + " ms";
-    document.querySelector("#resolution")!.textContent = activeEngine.getRenderWidth() + " × " + activeEngine.getRenderHeight();
+    document.querySelector("#resolution")!.textContent = activeEngine.getRenderWidth() + " \u00d7 " + activeEngine.getRenderHeight();
   }, 500);
 }
 

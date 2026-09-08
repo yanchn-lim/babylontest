@@ -56,7 +56,7 @@ Camera movement has no collision detection. WebGPU is not enabled.
 For comparisons, hold the camera view, browser, GPU, viewport, render scale,
 and exposure constant. Frame time is the interval between rendered frames,
 not a GPU timing measurement. Keep the inspector closed when comparing performance.
-The environment supplies approximate ambient lighting and reflections.
+The environment supplies approximate reflections; diffuse skylight is baked.
 
 ## Assets
 
@@ -83,10 +83,12 @@ The model and textures are committed in `public`; CI does not download them agai
 ## Baked lighting
 
 The viewer loads `public/models/sponza/baked/Sponza.gltf` with a separate UV set
-for two 4096×4096 maps. Blender Cycles bakes 128 samples with four diffuse bounces.
+for two 4096×4096 maps. Blender Cycles bakes 512 samples with four diffuse bounces.
 The original materials and textures are preserved. AO uses a one-unit distance.
-The indirect map includes material color and excludes direct light and the sky;
-the existing environment map supplies approximate sky lighting and reflections.
+The lightmap combines sunlight bounce with direct and bounced diffuse skylight.
+The sky is a uniform world with linear color (0.8, 0.85, 1.0) and strength 1.4.
+Direct sunlight stays real time. The environment map supplies specular reflections;
+its diffuse contribution is disabled to avoid counting skylight twice.
 The artificial hemispheric fill is removed.
 
 To reproduce with Blender 4.5 and an AMD HIP device:
@@ -102,3 +104,6 @@ Changes to geometry, materials, or the sun require a new bake. Disabling real-ti
 shadows does not remove baked shading. Maps use no mipmaps to avoid mixing their
 small UV gutters; distant surfaces can alias. Two RGB maps use about 96 MiB of
 uncompressed texture memory, which adds memory pressure on mobile devices.
+
+Bloom uses Babylon's native FrameGraphBloomTask at half resolution, weight 0.12,
+kernel 32, and threshold 1.0, before ACES tone mapping.
