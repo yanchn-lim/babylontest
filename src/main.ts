@@ -204,7 +204,8 @@ async function start() {
 
   const volume = new FrameGraphLightingVolumeTask("sun-volume", frameGraph);
   volume.shadowGenerator = shadowTask;
-  volume.lightingVolume.frequency = 4;
+  // Reuse the lighting volume while the sun and model remain static.
+  volume.lightingVolume.frequency = 0;
   volume.lightingVolume.tesselation = 256;
   frameGraph.addTask(volume);
   const shafts = new FrameGraphVolumetricLightingTask("sun-shafts", frameGraph, false);
@@ -236,6 +237,7 @@ async function start() {
   function rebuildGraph() {
     frameGraph.pausedExecution = true;
     graphBuild = graphBuild.then(() => frameGraph.buildAsync()).then(() => {
+      volume.lightingVolume.frequency = 0;
       frameGraph.pausedExecution = false;
     });
     return graphBuild;
