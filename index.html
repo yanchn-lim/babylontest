@@ -12,6 +12,8 @@
     <div class="hud-heading"><h1>Sponza</h1><button id="open-settings" type="button" aria-haspopup="dialog">Settings</button></div>
     <p id="status" role="status">Loading model and textures…</p>
     <dl class="stats"><div><dt>FPS</dt><dd id="fps">—</dd></div><div><dt>Frame</dt><dd id="frame">—</dd></div><div><dt>Pixels</dt><dd id="resolution">—</dd></div></dl>
+    <p id="benchmark-hud" class="help"></p>
+    <button id="retry-graphics" type="button" hidden>Retry graphics</button>
     <button id="capture-mouse" type="button" disabled>Capture mouse</button>
   </aside>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
@@ -61,6 +63,19 @@
             <button id="inspector" type="button">Open inspector</button>
           </div>
         </details>
+        <details class="settings-group">
+          <summary>Benchmark</summary>
+          <div class="group-body">
+            <label>Test mode<select id="benchmark-mode"><option value="static">Stationary camera · static sun</option><option value="walking">Manual walking · static sun</option><option value="moving-sun">Moving sun</option></select></label>
+            <p class="help">Start includes 15 seconds of warm-up and 60 seconds of measurement. For stationary tests, choose Living / dining or Hallway first. Repeat three times, then again after ten minutes of use.</p>
+            <button id="benchmark-start" type="button">Warm up &amp; start</button>
+            <button id="benchmark-stop" type="button" disabled>Stop benchmark</button>
+            <p id="benchmark-status" role="status">Ready to benchmark. GPU timing is reported only when supported and valid.</p>
+            <button id="benchmark-copy" type="button" disabled>Copy results</button>
+            <textarea id="benchmark-results" aria-label="Benchmark results" readonly hidden></textarea>
+          </div>
+        </details>
+        <button id="reset-graphics" type="button">Reset graphics to defaults</button>
       </fieldset>
       <p class="hint desktop-hint">WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse</p>
       <p class="hint mobile-hint">Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.</p>

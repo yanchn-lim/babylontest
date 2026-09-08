@@ -37,7 +37,7 @@
   },
   "ceilingIncluded": true,
   "sha256": {
-    "Apartment.gltf": "49b5051046fb1854cab2fcd506be0fde629e463d0706c598b1d5655ac7064879",
+    "Apartment.gltf": "41790e4471d2c4febacc13e878a40af35db08e5a5c8026b2bc88607d65d41aed",
     "materials.bin": "b3f08a57c7f0d5ead5d6d2ade39eb6a9270db6a43e94611975317dcc2fead441",
     "indirect.png": "88b6ec4a9c4b1e8cf1d8e13aadb51e7ec7e3305ddc8d54824cad3e6bb5d0274a",
     "../baked/ao.png": "747e5153e22f20e698196ef81ce2361b6eae2a2ba12d7c18c526ddf9896c5d28",

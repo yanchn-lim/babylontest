@@ -176,7 +176,7 @@ shadows alone, shafts alone, and both together at 100% render scale.
 PCSS filtering controls sample quality independently of shadow-map resolution:
 High uses 32 blocker-search and 64 filter samples; Medium uses 16 and 32;
 Low uses 16 and 16. Lower quality can reveal noise in soft shadow edges.
-Defaults remain High filtering with both effects enabled. The sun stays movable.
+Defaults are PCF Low with a 1024-square shadow map and both effects enabled. The sun stays movable.
 Warm up each setting before measuring, use the same camera path, and repeat
 after sustained use on the phone. The displayed frame time is the frame interval,
 not GPU timing. A capped 60 fps does not establish available GPU headroom.
@@ -188,6 +188,38 @@ the panel opens from the bottom with a fixed close button and scrollable section
 The compact HUD keeps FPS, frame interval, and pixel dimensions visible while walking.
 Both scenes support PCSS, PCF, or hard shadows, independent map resolution and filter
 quality, and PCSS-only softness. Sun and environment brightness, shaft strength,
-and bloom enable/strength are adjustable. Defaults preserve the previous appearance.
+and bloom enable/strength are adjustable. Graphics preferences persist across scenes.
 PCF uses filtered edges without PCSS distance-dependent softness. Hard shadows use
 no soft filtering. Compare at the same resolution and camera path on the actual device.
+
+## Stage 1 optimization and benchmarks
+
+Graphics preferences are shared across scenes and reloads. Camera view and navigation
+mode are not shared. Reset graphics to defaults restores PCF Low, a 1024-square map,
+native resolution, and all default effects.
+
+Surface shadows reuse their map while the sun and casters stay unchanged. Walking
+does not refresh the whole-model map. Sun movement, caster changes, and resource
+rebuilds invalidate it. The separate shaft depth map does not replace the surface map.
+Brightness, PCSS softness, filtering quality, bloom, FXAA, and shaft toggles apply
+without rebuilding the graph. Map size, shadow method, and resize require a rebuild;
+pending requests coalesce and failed builds can be retried.
+
+Apartment paint and concrete use constant PBR values in place of constant textures.
+Flat normal maps and constant wood roughness maps are removed from material bindings.
+Tile and wood detail, geometry, baked UVs, lightmap scale, and the baked lightmap are
+unchanged. Run the existing material preparation script to reproduce the assets.
+
+In Settings > Benchmark, choose a test mode and select Warm up & start. Each run
+warms up for 15 seconds, then measures frame intervals for 60 seconds. Copy results
+exports settings, camera state, render dimensions, revision, browser, frame statistics,
+GPU timings when valid and supported, and shadow/rebuild diagnostics. GPU timings
+are separate from frame intervals. Interrupted runs are marked incomplete.
+
+For the iPhone 14 Pro comparison, use the apartment at native resolution and PCF Low
+with a 1024-square map. Run Living / dining, Hallway, and Manual walking with a static
+sun. Test Moving sun separately. Repeat each trial three times, then repeat after ten
+minutes of use. Keep the same walking route. The walking target is median at least
+59 fps, p95 frame interval at most 20 ms, and fewer than 1% of frames above 33.3 ms.
+Desktop results do not establish iPhone performance. Stages 2 and 3 remain deferred
+until these device measurements show whether further changes are needed.

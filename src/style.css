@@ -57,3 +57,7 @@ a { color: #8ed9ed; font-size: .875rem; }
   .height-controls button.held { background: #36627a; }
 }
 [hidden] { display: none !important; }
+
+#benchmark-results { width: 100%; min-height: 160px; font: 12px monospace; padding: 10px; resize: vertical; }
+#reset-graphics { width: 100%; margin-top: 16px; }
+#benchmark-hud:empty { display: none; }

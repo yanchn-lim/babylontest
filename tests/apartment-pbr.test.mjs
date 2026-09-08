@@ -34,13 +34,13 @@ test("PBR surface maps use UV0, valid normals, and metallic-roughness maps", () 
     const material = model.materials[index];
     const pbr = material.pbrMetallicRoughness;
     for (const info of [pbr.baseColorTexture, pbr.metallicRoughnessTexture, material.normalTexture]) {
-      assert.ok(info);
+      if (!info) continue;
       assert.equal(info.texCoord ?? 0, 0);
       const image = model.images[model.textures[info.index].source];
       assert.ok(read("pbr/" + image.uri).length > 1000);
     }
     assert.equal(pbr.metallicFactor, 0);
-    assert.ok(material.normalTexture.scale > 0 && material.normalTexture.scale <= 1);
+    if (material.normalTexture) assert.ok(material.normalTexture.scale > 0 && material.normalTexture.scale <= 1);
   }
   for (const primitive of model.meshes[0].primitives) {
     if (!changed.includes(primitive.material)) continue;
@@ -70,3 +70,25 @@ test("PBR files match their hashes and retain the denoised bake provenance", () 
   assert.equal(Object.keys(sources.downloads).length, 12);
 });
 
+
+test("constant finishes use equivalent linear color and roughness without normal maps", () => {
+  const linear = byte => { const value = byte / 255; return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4; };
+  for (const index of [0, 3, 4, 11]) {
+    const material = model.materials[index], pbr = material.pbrMetallicRoughness;
+    assert.equal(pbr.baseColorTexture, undefined);
+    assert.equal(pbr.metallicRoughnessTexture, undefined);
+    assert.equal(material.normalTexture, undefined);
+    const expected = index === 4 ? [244, 243, 239] : [224, 225, 220];
+    expected.forEach((byte, channel) => assert.ok(Math.abs(pbr.baseColorFactor[channel] - linear(byte)) < 1e-6));
+    assert.ok(Math.abs(pbr.roughnessFactor - (index === 4 ? 184 : 127) / 255) < 1e-6);
+  }
+  for (const index of [1, 2, 8, 10]) {
+    assert.ok(model.materials[index].pbrMetallicRoughness.baseColorTexture);
+    assert.ok(model.materials[index].normalTexture);
+  }
+  for (const index of [8, 10]) {
+    assert.equal(model.materials[index].pbrMetallicRoughness.metallicRoughnessTexture, undefined);
+    assert.ok(Math.abs(model.materials[index].pbrMetallicRoughness.roughnessFactor - 97 / 255) < 1e-6);
+  }
+  assert.equal(hash(read("pbr/indirect.png")), "88b6ec4a9c4b1e8cf1d8e13aadb51e7ec7e3305ddc8d54824cad3e6bb5d0274a");
+});

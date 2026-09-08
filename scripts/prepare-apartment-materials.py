@@ -184,6 +184,33 @@ assert np.isfinite(radiance).all() and radiance.max() > 0
 scale = float(2 ** max(0, math.ceil(math.log2(float(radiance.max())))))
 encoded = np.rint(np.clip(radiance / scale, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)
 Image.fromarray(encoded).save(OUTPUT / "indirect.png")
+# Replace constant maps with equivalent linear PBR values.
+for material in model["materials"]:
+    pbr = material.get("pbrMetallicRoughness", {})
+    for field, channel in [("baseColorTexture", None), ("metallicRoughnessTexture", 1)]:
+        info = pbr.get(field)
+        if not info:
+            continue
+        uri = model["images"][model["textures"][info["index"]]["source"]]["uri"]
+        if not uri.startswith("textures/clean-"):
+            continue
+        image = np.asarray(Image.open(OUTPUT / uri).convert("RGB"), dtype=np.float32)
+        if not np.all(image == image[0, 0]):
+            continue
+        if channel is None:
+            factor = pbr.get("baseColorFactor", [1, 1, 1, 1])
+            pbr["baseColorFactor"] = [*(srgb(image[0, 0] / 255) * factor[:3]).tolist(), factor[3]]
+        else:
+            pbr["roughnessFactor"] *= float(image[0, 0, channel] / 255)
+        del pbr[field]
+    info = material.get("normalTexture")
+    if info:
+        uri = model["images"][model["textures"][info["index"]]["source"]]["uri"]
+        if uri.startswith("textures/clean-"):
+            image = np.asarray(Image.open(OUTPUT / uri).convert("RGB"))
+            if np.all(image == image[0, 0]):
+                del material["normalTexture"]
+
 model["buffers"].append({"uri": "materials.bin", "byteLength": len(uv_buffer)})
 (OUTPUT / "materials.bin").write_bytes(uv_buffer)
 (OUTPUT / "Apartment.gltf").write_text(json.dumps(model, separators=(",", ":")) + "\n")

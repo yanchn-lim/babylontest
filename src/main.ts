@@ -11,6 +11,11 @@ import "@babylonjs/loaders/glTF";
 import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
 import { attachFlyControls } from "./fly-controls";
+import { ShadowCache, createRebuildQueue } from "./performance";
+import { attachGraphicsPreferences } from "./graphics-settings";
+import { attachBenchmark } from "./benchmark";
+import { bindSurfaceShadow, trackShadowCasters } from "./shadow-binding";
+const preferences = attachGraphicsPreferences();
 
 const apartment = new URLSearchParams(location.search).get("scene") === "bukit-merah";
 const sceneSelect = document.querySelector<HTMLSelectElement>("#scene-select")!;
@@ -94,7 +99,7 @@ async function start() {
     environment.sphericalPolynomial = SphericalPolynomial.FromHarmonics(harmonics);
   });
   activeScene.environmentTexture = environment;
-  activeScene.environmentIntensity = 0.65;
+  activeScene.environmentIntensity = Number(document.querySelector<HTMLInputElement>("#environment-intensity")!.value);
   activeScene.imageProcessingConfiguration.toneMappingEnabled = true;
   activeScene.imageProcessingConfiguration.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
   activeScene.imageProcessingConfiguration.exposure = Number(exposure.value);
@@ -108,7 +113,7 @@ async function start() {
 
   const sun = new DirectionalLight("sun", new Vector3(-0.5, -1, -0.35), activeScene);
   sun.position = new Vector3(12, 22, 8);
-  sun.intensity = 3;
+  sun.intensity = Number(document.querySelector<HTMLInputElement>("#sun-intensity")!.value);
   const sky = MeshBuilder.CreateBox("sky", { size: 200 }, activeScene);
   sky.infiniteDistance = true;
   sky.isPickable = false;
@@ -121,18 +126,24 @@ async function start() {
 
   activeEngine.runRenderLoop(() => activeScene.render());
   const bakedUrl = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/pbr/" : "models/sponza/baked/");
-  const response = await fetch(bakedUrl + "lighting.json");
+  const response = await fetch(bakedUrl + "lighting.json", { cache: "no-cache" });
   if (!response.ok) throw new Error("Could not load baked lighting metadata.");
   const lighting = await response.json();
   if (!Number.isFinite(lighting.lightmapScale) || lighting.lightmapScale <= 0) {
     throw new Error("Invalid baked lightmap scale.");
   }
   const modelUrl = new URL(bakedUrl + (apartment ? "Apartment.gltf" : "Sponza.gltf"), document.baseURI);
+  modelUrl.searchParams.set("v", lighting.sha256[apartment ? "Apartment.gltf" : "Sponza.gltf"]);
   const modelResponse = await fetch(modelUrl);
   if (!modelResponse.ok) throw new Error("Could not load baked model.");
   const model = await modelResponse.json();
   for (const asset of [...model.images, ...model.buffers]) {
-    if (asset.uri) asset.uri = new URL(asset.uri, modelUrl).href;
+    if (asset.uri) {
+      const uri = asset.uri;
+      const url = new URL(uri, modelUrl);
+      if (lighting.sha256[uri]) url.searchParams.set("v", lighting.sha256[uri]);
+      asset.uri = url.href;
+    }
   }
   const result = await SceneLoader.ImportMeshAsync(
     "", "", "data:" + JSON.stringify(model),
@@ -141,7 +152,7 @@ async function start() {
   // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
   const aoUrl = new URL(apartment ? "../baked/ao.png" : "ao.png", new URL(bakedUrl, document.baseURI));
   const ao = new Texture(aoUrl.href, activeScene, true, false);
-  const indirect = new Texture(bakedUrl + "indirect.png", activeScene, true, false);
+  const indirect = new Texture(bakedUrl + "indirect.png?v=" + lighting.sha256["indirect.png"], activeScene, true, false);
   for (const texture of [ao, indirect]) {
     texture.coordinatesIndex = 1;
     texture.wrapU = texture.wrapV = Texture.CLAMP_ADDRESSMODE;
@@ -273,7 +284,7 @@ async function start() {
   shadowTask.objectList = { meshes, particleSystems: [] };
   shadowTask.light = sun;
   shadowTask.camera = camera;
-  shadowTask.mapSize = Number(shadows.value);
+  shadowTask.mapSize = Number(shadows.value) || 1024;
   shadowTask.filter = ShadowGenerator.FILTER_PCSS;
   shadowTask.bias = 0.0005;
   shadowTask.normalBias = 0.02;
@@ -313,11 +324,14 @@ async function start() {
   shafts.light = sun;
   shafts.lightingVolumeMesh = volume.outputMeshLightingVolume;
   shafts.lightingVolumeTexture = volumeColor;
-  shafts.lightPower = new Color3(0.1, 0.1, 0.1);
+  const shaftStrength = Number(document.querySelector<HTMLInputElement>("#shaft-strength")!.value);
+  shafts.lightPower = new Color3(shaftStrength, shaftStrength, shaftStrength);
   shafts.phaseG = 0.05;
   frameGraph.addTask(shafts);
 
-  const bloom = new FrameGraphBloomTask("bloom", frameGraph, 0.12, 32, 1.0, true, 0.5);
+  const bloom = new FrameGraphBloomTask("bloom", frameGraph,
+    Number(document.querySelector<HTMLInputElement>("#bloom-strength")!.value), 32, 1.0, true, 0.5);
+  bloom.disabled = !bloomEnabled.checked;
   bloom.sourceTexture = shafts.outputTexture;
   frameGraph.addTask(bloom);
 
@@ -331,23 +345,58 @@ async function start() {
   antialiasing.disabled = !fxaa.checked;
   frameGraph.addTask(antialiasing);
 
+  const shadowCache = new ShadowCache();
+  let shadowRevision: number | null = null;
+  let shadowRenders = 0;
+  let graphBuildCount = 0;
+  let graphFailed = false;
+  const graphTasks = [...frameGraph.tasks];
+  let resolveFirstBuild!: () => void;
+  const firstBuildReady = new Promise<void>(resolve => { resolveFirstBuild = resolve; });
+  const retryGraphics = document.querySelector<HTMLButtonElement>("#retry-graphics")!;
+  const requestBuild = createRebuildQueue(async () => {
+    frameGraph.pausedExecution = true;
+    try {
+      // A failed Babylon build clears its task list; retain the tasks for retry.
+      if (!frameGraph.tasks.length) for (const task of graphTasks) frameGraph.addTask(task);
+      shadowTask.mapSize = Number(shadows.value) || 1024;
+      shadowTask.filter = shadowMethod.value === "pcf" ? ShadowGenerator.FILTER_PCF
+        : shadowMethod.value === "hard" ? ShadowGenerator.FILTER_NONE : ShadowGenerator.FILTER_PCSS;
+      await frameGraph.buildAsync();
+      graphBuildCount++;
+      bindSurfaceShadow(sun, camera, shadowTask.shadowGenerator!);
+      shadowTask.shadowGenerator!.contactHardeningLightSizeUVRatio = Number(shadowSoftness.value);
+      shadowCache.invalidate();
+      volume.lightingVolume.frequency = 0;
+      graphFailed = false;
+      resolveFirstBuild();
+      retryGraphics.hidden = true;
+      status.classList.remove("error");
+      status.textContent = "Ready · " + meshes.length + " meshes";
+      frameGraph.pausedExecution = false;
+    } catch (error) {
+      graphFailed = true;
+      retryGraphics.hidden = false;
+      frameGraph.pausedExecution = true;
+      throw error;
+    }
+  });
   let graphBuild = Promise.resolve();
   function rebuildGraph() {
     frameGraph.pausedExecution = true;
-    graphBuild = graphBuild.then(() => frameGraph.buildAsync()).then(() => {
-      sun.getShadowGenerators()!.set(camera, shadowTask.shadowGenerator!);
-      shadowTask.shadowGenerator!.contactHardeningLightSizeUVRatio = Number(shadowSoftness.value);
-      volume.lightingVolume.frequency = 0;
-      frameGraph.pausedExecution = false;
-    });
+    graphBuild = requestBuild();
     return graphBuild;
   }
+  retryGraphics.addEventListener("click", () => { void rebuildGraph().catch(fail); });
+  const contextRestored = activeEngine.onContextRestoredObservable.add(() => { void rebuildGraph().catch(fail); });
+  activeScene.onDisposeObservable.add(() => activeEngine.onContextRestoredObservable.remove(contextRestored));
+  shadowTask.onAfterTaskExecute.add(() => {
+    if (!shadowTask.disabled) { shadowCache.complete(shadowRevision); shadowRenders++; }
+  });
   function updateShadows() {
     const size = Number(shadows.value);
     const enableShafts = shaftsEnabled.checked;
-    shadowTask.mapSize = size || 1024;
-    shadowTask.filter = shadowMethod.value === "pcf" ? ShadowGenerator.FILTER_PCF
-      : shadowMethod.value === "hard" ? ShadowGenerator.FILTER_NONE : ShadowGenerator.FILTER_PCSS;
+
     shadowFilter.disabled = !size || shadowMethod.value === "hard";
     shadowSoftness.disabled = !size || shadowMethod.value !== "pcss";
     shadowTask.filteringQuality = shadowFilter.value === "low"
@@ -355,11 +404,12 @@ async function start() {
       : shadowFilter.value === "medium"
         ? ShadowGenerator.QUALITY_MEDIUM
         : ShadowGenerator.QUALITY_HIGH;
-    shadowTask.disabled = !size;
+    if (volume.disabled && enableShafts) volume.lightingVolume.frequency = 0;
     volume.disabled = shafts.disabled = !enableShafts;
     volumeShadowTask.disabled = !enableShafts;
-    renderTask.shadowGenerators = size ? [shadowTask] : [];
-    activeScene.shadowsEnabled = size !== 0 || enableShafts;
+    renderTask.disableShadows = !size;
+    activeScene.shadowsEnabled = true;
+    shadowCache.invalidate();
   }
   function resize() {
     activeEngine.setHardwareScalingLevel(1 / (window.devicePixelRatio * Number(scale.value)));
@@ -373,13 +423,18 @@ async function start() {
   function moveSun() {
     sunPending = true;
   }
+  const casterStates = new Map<typeof meshes[number], string>();
   const sunUpdates = activeScene.onBeforeRenderObservable.add(() => {
     if (frameGraph.pausedExecution) return;
-    if (sunPending) {
+    const castersChanged = trackShadowCasters(meshes, casterStates);
+    if (sunPending || castersChanged) {
       updateSunDirection();
+      shadowCache.invalidate();
       sunPending = false;
       volumeDirty = true;
     }
+    shadowRevision = shadowCache.begin(Number(shadows.value) !== 0);
+    shadowTask.disabled = shadowRevision === null;
     const now = performance.now();
     // Wait for an in-flight readback and retain the newest requested direction.
     if (!volume.disabled && volumeDirty && !volume.lightingVolume.firstUpdate && now - lastVolumeRefresh >= 100) {
@@ -400,7 +455,7 @@ async function start() {
   for (const control of [shadows, shadowMethod, shadowFilter, shaftsEnabled]) {
     control.addEventListener("change", () => {
       updateShadows();
-      void rebuildGraph().catch(fail);
+      if (control === shadows || control === shadowMethod || graphFailed) void rebuildGraph().catch(fail);
     });
   }
   shadowSoftness.addEventListener("input", () => {
@@ -410,6 +465,7 @@ async function start() {
   function bindSlider(id: string, digits: number, apply: (value: number) => void) {
     const input = document.querySelector<HTMLInputElement>("#" + id)!;
     const output = document.querySelector<HTMLOutputElement>("#" + id + "-value")!;
+    output.value = Number(input.value).toFixed(digits);
     input.addEventListener("input", () => {
       apply(Number(input.value));
       output.value = Number(input.value).toFixed(digits);
@@ -441,11 +497,22 @@ async function start() {
       status.textContent = "Inspector could not open. See the console for details.";
     } finally { inspector.disabled = false; }
   });
+  document.querySelector<HTMLButtonElement>("#reset-graphics")!.addEventListener("click", () => preferences.reset());
+  document.querySelector<HTMLOutputElement>("#shadow-softness-value")!.value = Number(shadowSoftness.value).toFixed(3);
+  document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
   resetView();
   updateShadows();
   resize();
-  await graphBuild;
+  await graphBuild.catch(fail);
+  await firstBuildReady;
   await activeScene.whenReadyAsync();
+  shadowCache.invalidate();
+  const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, preferences.snapshot,
+    () => frameGraph.pausedExecution || graphFailed,
+    () => ({ shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,
+      surfaceMapSize: shadowTask.shadowGenerator!.mapSize,
+      surfaceBindingCorrect: sun.getShadowGenerator(camera) === shadowTask.shadowGenerator }));
+  activeScene.onDisposeObservable.add(disposeBenchmark);
   controls.disabled = false;
   document.querySelector<HTMLElement>("#flight-controls")!.hidden = false;
   document.querySelector<HTMLButtonElement>("#capture-mouse")!.disabled = false;
@@ -461,6 +528,7 @@ async function start() {
 void start().catch(fail);
 if (import.meta.hot) import.meta.hot.dispose(() => {
   clearInterval(statistics);
+  preferences.dispose();
   scene?.dispose();
   engine?.dispose();
 });
