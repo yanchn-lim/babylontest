@@ -22,7 +22,7 @@ SOURCE_FILE = "Apartment.glb" if APARTMENT else "Sponza.gltf"
 MODEL_FILE = "Apartment.gltf" if APARTMENT else "Sponza.gltf"
 OUTPUT = ROOT / (".tools/apartment-baked" if APARTMENT else ".tools/baked-lighting")
 SIZE = 4096
-SAMPLES = 512
+SAMPLES = 1024 if APARTMENT else 512
 AO_DISTANCE = 1.0
 SKY_COLOR = [0.8, 0.85, 1.0]
 SKY_STRENGTH = 1.4
@@ -143,6 +143,8 @@ for device in preferences.devices:
     device.use = device.type == "HIP"
 scene.cycles.device = "GPU" if devices else "CPU"
 scene.cycles.samples = SAMPLES
+if APARTMENT:
+    scene.cycles.use_adaptive_sampling = False
 scene.cycles.seed = 23
 scene.cycles.max_bounces = 6
 scene.cycles.diffuse_bounces = 4

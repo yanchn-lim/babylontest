@@ -59,7 +59,7 @@ test("apartment bake outputs match their hashes and texture dimensions", () => {
 test("apartment bake includes the ceiling and excludes fixed sunlight", () => {
   assert.equal(lighting.ceilingIncluded, true);
   assert.ok(source.nodes.some(node => node.name?.startsWith("Ceiling |")));
-  assert.equal(lighting.samples, 512);
+  assert.equal(lighting.samples, 1024);
   assert.equal(lighting.includesDiffuseSky, true);
   assert.equal(lighting.includesSunBounce, false);
   assert.deepEqual(lighting.sky.passes, ["DIRECT", "INDIRECT", "COLOR"]);

@@ -18,7 +18,7 @@ The ceiling stays visible in every view. Living / dining is the default view;
 Hallway and Exterior overview are also available. Fly controls and live sun
 effects work in both scenes.
 
-Apartment AO and skylight are baked at 4096 pixels with 512 samples and four
+Apartment AO and skylight are baked at 4096 pixels with 1024 samples and four
 diffuse bounces, with the ceiling included. Direct sunlight remains real time;
 sunlight bounce is not baked so the sun can move. Reproduce with:
 
