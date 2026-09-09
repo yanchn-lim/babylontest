@@ -47,6 +47,11 @@ One run per path is insufficient to establish a general performance result.
 No matched Sponza or long-duration motion benchmark was performed.
 No quantitative shimmer-reduction measurement was performed.
 
+A final apartment run at 1280x720 failed the baked-image comparison
+(mean byte error 34.56). An immediate rerun passed (0.030), including GI
+resource disposal. The cause of this intermittent mismatch is not isolated.
+Do not treat restoration verification as consistently passing.
+
 This is full-scene TAA, not a GI-specific temporal denoiser. Softening,
 residual shimmer, and ghosting remain possible. Frequent sun updates reset
 history and limit accumulation during the day/night cycle. RSM light leaks
