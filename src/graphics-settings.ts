@@ -3,6 +3,7 @@ export const graphicsDefaults: Record<string, string | boolean> = {
   "sun-azimuth": "35", "sun-elevation": "58.6", "sun-intensity": "3",
   "environment-intensity": "0.65", shafts: true, "shaft-strength": "0.1",
   scale: "1", exposure: "2", "bloom-enabled": true, "bloom-strength": "0.12", fxaa: true,
+  contrast: "1", "bloom-threshold": "1", "bloom-radius": "32", "shaft-scattering": "0.05",
 };
 const storageKey = "babylon-graphics-v1";
 type Control = HTMLInputElement | HTMLSelectElement;

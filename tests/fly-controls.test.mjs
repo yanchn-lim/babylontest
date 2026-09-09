@@ -3,6 +3,22 @@ import { test } from "node:test";
 import { MeshBuilder, NullEngine, Scene, UniversalCamera, Vector3 } from "@babylonjs/core";
 import { attachFlyControls } from "../src/fly-controls.ts";
 
+test("touch walking continues when a settings field gains focus, and release stops it", () => {
+  const f = fixture(true);
+  try {
+    f.send(f.nodes["move-stick"], "pointerdown", { pointerId: 1, clientX: 62, clientY: 0 });
+    f.send(f.canvas, "keydown", { code: "KeyD" });
+    f.nodes["capture-mouse"].focus();
+    f.frame();
+    assert.ok(f.camera.position.z > 0);
+    assert.equal(f.camera.position.x, 0);
+    f.send(f.nodes["move-stick"], "pointerup", { pointerId: 1 });
+    const stopped = f.camera.position.clone();
+    f.frame();
+    assert.ok(f.camera.position.equals(stopped));
+  } finally { f.close(); }
+});
+
 function fixture(walking = false) {
   const engine = new NullEngine();
   const scene = new Scene(engine);

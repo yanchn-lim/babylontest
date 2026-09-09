@@ -45,7 +45,10 @@ export function attachFlyControls(camera: UniversalCamera, canvas: HTMLCanvasEle
   window.addEventListener("blur", reset, options);
   document.addEventListener("visibilitychange", reset, options);
   document.addEventListener("focusin", event => {
-    if (event.target !== canvas) reset();
+    if (event.target === canvas) return;
+    keys.clear();
+    camera.cameraDirection.setAll(0);
+    camera.cameraRotation.setAll(0);
   }, options);
   document.addEventListener("pointerlockchange", () => {
     reset();

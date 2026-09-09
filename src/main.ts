@@ -49,7 +49,7 @@ const bloomEnabled = document.querySelector<HTMLInputElement>("#bloom-enabled")!
 const settingsDialog = document.querySelector<HTMLDialogElement>("#settings-dialog")!;
 document.querySelector<HTMLButtonElement>("#open-settings")!.addEventListener("click", () => {
   if (document.pointerLockElement) document.exitPointerLock();
-  settingsDialog.showModal();
+  settingsDialog.show();
 });
 document.querySelector<HTMLButtonElement>("#close-settings")!.addEventListener("click", () => settingsDialog.close());
 const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
@@ -477,6 +477,7 @@ async function start() {
   function bindSlider(id: string, digits: number, apply: (value: number) => void) {
     const input = document.querySelector<HTMLInputElement>("#" + id)!;
     const output = document.querySelector<HTMLOutputElement>("#" + id + "-value")!;
+    apply(Number(input.value));
     output.value = Number(input.value).toFixed(digits);
     input.addEventListener("input", () => {
       apply(Number(input.value));
@@ -487,6 +488,10 @@ async function start() {
   bindSlider("environment-intensity", 2, value => { activeScene.environmentIntensity = value; });
   bindSlider("shaft-strength", 2, value => { shafts.lightPower = new Color3(value, value, value); });
   bindSlider("bloom-strength", 2, value => { bloom.bloom.weight = value; });
+  bindSlider("contrast", 2, value => { activeScene.imageProcessingConfiguration.contrast = value; });
+  bindSlider("bloom-threshold", 2, value => { bloom.bloom.threshold = value; });
+  bindSlider("bloom-radius", 0, value => { bloom.bloom.kernel = value; });
+  bindSlider("shaft-scattering", 2, value => { shafts.phaseG = value; });
   bloomEnabled.addEventListener("change", () => { bloom.disabled = !bloomEnabled.checked; });
   exposure.addEventListener("input", () => {
     activeScene.imageProcessingConfiguration.exposure = Number(exposure.value);
