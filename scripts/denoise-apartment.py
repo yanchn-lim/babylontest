@@ -3,19 +3,22 @@ import ctypes as ct
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public/models/bukit-merah/baked"
-OUTPUT = ROOT / ".tools/apartment-denoised"
+PBR_REBAKE = "--pbr-rebake" in sys.argv
+SOURCE = ROOT / ("public/models/bukit-merah/pbr" if PBR_REBAKE else "public/models/bukit-merah/baked")
+INPUT = ROOT / ".tools/apartment-pbr-rebaked" if PBR_REBAKE else SOURCE
+OUTPUT = ROOT / (".tools/apartment-pbr-denoised" if PBR_REBAKE else ".tools/apartment-denoised")
 model = json.loads((SOURCE / "Apartment.gltf").read_text())
-metadata = json.loads((SOURCE / "lighting.json").read_text())
+metadata = json.loads((INPUT / "lighting.json").read_text())
 assert "denoising" not in metadata, "Start from the original bake, not a denoised image."
 buffers = [(SOURCE / item["uri"]).read_bytes() for item in model["buffers"]]
-original = np.asarray(Image.open(SOURCE / "indirect.png").convert("RGB"))
+original = np.asarray(Image.open(INPUT / "indirect.png").convert("RGB"))
 height, width = original.shape[:2]
 linear = (original.astype(np.float32) / 255) ** 2.2 * metadata["lightmapScale"]
 

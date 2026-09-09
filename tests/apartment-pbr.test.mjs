@@ -62,7 +62,13 @@ test("PBR files match their hashes and retain the denoised bake provenance", () 
   const png = read("pbr/indirect.png");
   assert.equal(png.readUInt32BE(16), 4096);
   assert.equal(png.readUInt32BE(20), 4096);
-  assert.equal(lighting.materialRetint.sourceLightmapSha256, hash(read("baked/indirect.png")));
+  assert.equal(lighting.currentMaterialBake.preservedUVChannel, 1);
+  for (const [name, expected] of Object.entries(lighting.currentMaterialBake.inputs)) {
+    assert.equal(hash(read("pbr/" + name)), expected);
+  }
+  assert.equal(lighting.samples, 1024);
+  assert.equal(lighting.includesSunBounce, false);
+  assert.equal(lighting.denoising.filter, "Open Image Denoise RTLightmap");
   assert.ok(lighting.lightmapScale > 0);
   const sources = JSON.parse(read("pbr/sources.json"));
   assert.equal(sources.license, "CC0-1.0");
@@ -90,5 +96,4 @@ test("constant finishes use equivalent linear color and roughness without normal
     assert.equal(model.materials[index].pbrMetallicRoughness.metallicRoughnessTexture, undefined);
     assert.ok(Math.abs(model.materials[index].pbrMetallicRoughness.roughnessFactor - 97 / 255) < 1e-6);
   }
-  assert.equal(hash(read("pbr/indirect.png")), "88b6ec4a9c4b1e8cf1d8e13aadb51e7ec7e3305ddc8d54824cad3e6bb5d0274a");
 });

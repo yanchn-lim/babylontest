@@ -30,16 +30,16 @@
     "nonzeroAoTexels": 4519881,
     "aoMean": 0.7320865392684937,
     "aoMinimum": 0.00013950893480796367,
-    "indirectPeak": 0.8753160834312439,
-    "indirectMean": 0.2486301213502884,
+    "indirectPeak": 1.174647569656372,
+    "indirectMean": 0.4460808336734772,
     "sunIndirectMean": 0.0,
-    "skyMean": 0.2486301213502884
+    "skyMean": 0.4460808336734772
   },
   "ceilingIncluded": true,
   "sha256": {
     "Apartment.gltf": "41790e4471d2c4febacc13e878a40af35db08e5a5c8026b2bc88607d65d41aed",
     "materials.bin": "b3f08a57c7f0d5ead5d6d2ade39eb6a9270db6a43e94611975317dcc2fead441",
-    "indirect.png": "88b6ec4a9c4b1e8cf1d8e13aadb51e7ec7e3305ddc8d54824cad3e6bb5d0274a",
+    "indirect.png": "15db58c74c609eabefef133893e0640139f3972faf10ff0589cb7028b3053155",
     "../baked/ao.png": "747e5153e22f20e698196ef81ce2361b6eae2a2ba12d7c18c526ddf9896c5d28",
     "textures/interior_tiles-color.jpg": "f267c4357e629f5ca2ab86f30da4fb0ae8c655a566cec6d81278df8d78dcca4a",
     "textures/interior_tiles-normal.jpg": "fdfb9fe192d438176508290fe873e181d88c5e6444a43bbab2ec156c9a78aa33",
@@ -66,15 +66,36 @@
     "textures/clean-wood_table_001-normal.jpg": "720df0f0b816356c3fff963f460106b4e87578e48388d1902c5dea2ea6672f17",
     "textures/clean-wood_table_001-arm.jpg": "45d413d4ac32396dbd48508b2f96da2160ccc200bd618e31393b81cba6b33992"
   },
+  "currentMaterialBake": {
+    "inputs": {
+      "../baked/Apartment.bin": "412ffc43a2d44d87bfc74adc34b8f7a1e447aecae247f216648c1398b36215db",
+      "../baked/source-image-0.png": "60b8a772f76d0770e6e36e95ac6eec193a1dca91c7303f01b1eb3a7fba5a6267",
+      "../baked/source-image-1.png": "24420c25a4deb64093ae8a6576e2ef7f8db60220fda7be8d8c549846fb1360cf",
+      "../baked/source-image-2.png": "4aae886c87b41c48c69683428b7043ea2ddb30101bd3cd7cebe16ef774741ee0",
+      "../baked/source-image-3.png": "034f0c8cf6ea6d42cae74eaf0665f10c9331baa79cc9d305190ee90880c4849e",
+      "Apartment.gltf": "41790e4471d2c4febacc13e878a40af35db08e5a5c8026b2bc88607d65d41aed",
+      "materials.bin": "b3f08a57c7f0d5ead5d6d2ade39eb6a9270db6a43e94611975317dcc2fead441",
+      "textures/clean-interior_tiles-arm.jpg": "b5366921587b783463b7b7e58d44fcbd3f1f842b8949fd518071abb1bda9062c",
+      "textures/clean-interior_tiles-color.jpg": "7115a07380f3a19882afa93496eb1869b73eaf47645855695c707dedff5b901c",
+      "textures/clean-interior_tiles-normal.jpg": "ac7cec2d6fabf3580a7dc594764bf45f57f896db1e4ed617f2e2545c5fa4eeef",
+      "textures/clean-smooth_concrete_floor-arm.jpg": "5a4dd7078b387419c372f797ce5c7781af95e0c68c04fa08d7d06b63e60c06ae",
+      "textures/clean-smooth_concrete_floor-color.jpg": "83fc3caf2c4923b7dc2bacea60086beb256d02c09194d82884b77e0c7c1dbe9f",
+      "textures/clean-smooth_concrete_floor-normal.jpg": "b60b01b16dc15f51b5a976388a4e0ec2833dad9c4920238573cf42c1fe61d32c",
+      "textures/clean-white_plaster_02-arm.jpg": "f4093426fed41a251b404d741f65675a25572e53107e5b0be5952042e206fad8",
+      "textures/clean-white_plaster_02-color.jpg": "5730006f805ba64a2d2ba17d5de87f34c87c90e27cf427cb040dd77b34d5afbc",
+      "textures/clean-white_plaster_02-normal.jpg": "b60b01b16dc15f51b5a976388a4e0ec2833dad9c4920238573cf42c1fe61d32c",
+      "textures/clean-wood_table_001-arm.jpg": "45d413d4ac32396dbd48508b2f96da2160ccc200bd618e31393b81cba6b33992",
+      "textures/clean-wood_table_001-color.jpg": "2cad5d45ae24bf4c81fe84c55014a1ce056958743ff18054b2cf45afe85f3225",
+      "textures/clean-wood_table_001-normal.jpg": "720df0f0b816356c3fff963f460106b4e87578e48388d1902c5dea2ea6672f17"
+    },
+    "preservedUVChannel": 1,
+    "seed": 23
+  },
   "denoising": {
     "filter": "Open Image Denoise RTLightmap",
     "colorSpace": "linear",
     "uvIslands": 973,
     "paddingPixels": 32,
-    "inputSha256": "0d32e3480c9f0059f748ea53136796e3e78945064037058547ce0cb22eb6296b"
-  },
-  "materialRetint": {
-    "sourceLightmapSha256": "09e3f646f689be263835b20629b28b6661d562fcf6475e55a9362824da9553b2",
-    "method": "Linear new-albedo / old-albedo ratio; original bounced-light colors retained"
+    "inputSha256": "c8819dc43a02ebe9974ae905ffbcb24c3912ab65dcfaabeeef663b8d06783fad"
   }
 }

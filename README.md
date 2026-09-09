@@ -50,10 +50,16 @@ material families use 1K procedural base-color, normal, and roughness/metalness
 maps with no weathering. Original Poly Haven downloads are retained as source
 assets; active generated-map hashes are in `pbr/sources.json`. Glass and metal
 are retained.
-The denoised lightmap is adjusted by the new-to-old base-color ratio. Original
-bounced-light colors remain, so this is an approximation rather than a new bake.
-After updating the original denoised bake, regenerate this variant with
-`python scripts/prepare-apartment-materials.py` (NumPy, Pillow, and curl.exe).
+The active lightmap is baked directly from the current clean materials, with
+the existing UV1 atlas, ceiling, 4096 pixels, 1024 samples, and no sunlight.
+Reproduce with Blender's `--background --factory-startup --disable-autoexec
+--python-exit-code 1 --python scripts/rebake-apartment.py`, then run
+`python scripts/denoise-apartment.py --pbr-rebake`.
+Review `.tools/apartment-pbr-denoised`, then copy `indirect.png` and `lighting.json`
+to `public/models/bukit-merah/pbr`. Geometry, UVs, and AO are not regenerated.
+If materials are regenerated with `python scripts/prepare-apartment-materials.py`,
+rerun this bake and denoise workflow afterward; that generator produces only an
+approximate recolored lightmap.
 
 ## Windows setup
 
