@@ -61,3 +61,52 @@ a { color: #8ed9ed; font-size: .875rem; }
 #benchmark-results { width: 100%; min-height: 160px; font: 12px monospace; padding: 10px; resize: vertical; }
 #reset-graphics { width: 100%; margin-top: 16px; }
 #benchmark-hud:empty { display: none; }
+
+/* Look studio: persistent section navigation and a quiet, compact scene HUD. */
+:root { color: #e6edf5; background: #10151d; }
+.hud { width: 310px; background: #111923f2; border-color: #33414f; border-radius: 12px; box-shadow: 0 8px 32px #0003; }
+#capture-mouse { min-height: 34px; padding: 6px 10px; font-size: .75rem; background: transparent; }
+#open-settings { background: #bee9da; color: #142b26; border-color: #bee9da; min-height: 38px; font-weight: 650; font-size: .85rem; }
+#settings-dialog { inset: 12px 12px 12px auto; margin: 0; width: 420px; max-height: calc(100dvh - 24px); border-radius: 16px; background: #141c26; box-shadow: 0 20px 70px #0006; }
+.panel-header { padding: 20px; border-bottom: 0; }
+.eyebrow { color: #91b6aa; font-size: .65rem; font-weight: 650; letter-spacing: .15em; }
+h2 { font-weight: 550; font-size: 1.65rem; letter-spacing: -.04em; }
+#close-settings { min-height: 36px; font-size: .8rem; padding: 7px 12px; background: transparent; }
+.panel-nav { display: grid; grid-template-columns: repeat(5,1fr); flex-shrink: 0; padding: 0 12px 12px; gap: 3px; border-bottom: 1px solid #2c3846; }
+.panel-nav button { border: 0; min-height: 42px; padding: 8px 2px; font-size: .75rem; border-radius: 7px; background: transparent; color: #a5b4c5; }
+.panel-nav button[aria-pressed=true] { color: #c8f4e6; background: #29433f; }
+.panel-nav button:hover { background: #273642; }
+.panel-body { padding: 0 20px 22px; }
+.section-intro { padding: 22px 0 10px; }
+.section-intro h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+.section-intro p { margin: 7px 0 0; color: #96a7b9; font-size: .8rem; }
+.settings-group { border-color: #303c49; }
+summary { font-size: .85rem; color: #c7d4e2; padding: 17px 0; min-height: 50px; }
+.group-body { gap: 16px; padding-bottom: 20px; }
+label { color: #d1dce7; font-size: .8rem; }
+select { min-height: 42px; font-size: .85rem; background: #1c2935; border-color: #394959; }
+input[type=range] { height: 28px; accent-color: #a6deca; cursor: pointer; }
+input[type=checkbox] { accent-color: #a6deca; width: 20px; height: 20px; }
+output { color: #c8f4e6; font-family: ui-monospace, monospace; font-size: .75rem; background: #243b37; border-radius: 4px; padding: 2px 6px; }
+.toggle { min-height: 40px; padding: 8px 0; }
+.help { color: #98aabd; font-size: .75rem; line-height: 1.6; }
+.group-body button { font-size: .8rem; min-height: 40px; }
+#reset-graphics { font-size: .8rem; min-height: 40px; background: transparent; border-style: dashed; color: #b5c3d1; }
+.save-note { color: #87b7a5; font-size: .7rem; margin-bottom: 18px; }
+.hint { font-size: .72rem; }
+#model-source { font-size: .72rem; }
+@media (max-width: 700px), (any-pointer: coarse) {
+  .hud { width: min(310px, calc(100vw - 24px)); padding: 9px 12px; }
+  .hud h1 { font-size: .8rem; }
+  #settings-dialog { inset: auto 8px calc(158px + env(safe-area-inset-bottom)) 8px; width: auto; max-width: none; max-height: min(58dvh, calc(100dvh - 180px - env(safe-area-inset-bottom))); border-radius: 16px; }
+  .panel-header { padding: 14px 16px; }
+  .panel-body { padding: 0 16px 20px; }
+  .panel-nav { padding-bottom: 8px; }
+  input[type=range] { height: 40px; }
+  .section-intro { padding-top: 16px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #settings-dialog { inset: 8px 8px 8px auto; width: min(400px, 60vw); max-height: calc(100dvh - 16px); }
+  .panel-header { padding: 10px 16px; }
+  .hud { max-width: 32vw; }
+}

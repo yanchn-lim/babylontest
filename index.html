@@ -7,96 +7,289 @@
   <title>Sponza · Babylon.js Lab</title>
 </head>
 <body>
-  <canvas id="scene" tabindex="0" aria-label="Fly camera. Drag to look, WASD to move."></canvas>
+  <canvas id="scene" tabindex="0" aria-label="Fly camera. Drag to look, WASD to move.">
+</canvas>
   <aside class="hud">
-    <div class="hud-heading"><h1>Sponza</h1><button id="open-settings" type="button" aria-haspopup="dialog">Settings</button></div>
+    <div class="hud-heading">
+<h1>Sponza</h1>
+<button id="open-settings" type="button" aria-haspopup="dialog">Settings</button>
+</div>
     <p id="status" role="status">Loading model and textures…</p>
-    <dl class="stats"><div><dt>FPS</dt><dd id="fps">—</dd></div><div><dt>Frame</dt><dd id="frame">—</dd></div><div><dt>Pixels</dt><dd id="resolution">—</dd></div></dl>
-    <p id="benchmark-hud" class="help"></p>
+    <dl class="stats">
+<div>
+<dt>FPS</dt>
+<dd id="fps">—</dd>
+</div>
+<div>
+<dt>Frame</dt>
+<dd id="frame">—</dd>
+</div>
+<div>
+<dt>Pixels</dt>
+<dd id="resolution">—</dd>
+</div>
+</dl>
+    <p id="benchmark-hud" class="help">
+</p>
     <button id="retry-graphics" type="button" hidden>Retry graphics</button>
     <button id="capture-mouse" type="button" disabled>Capture mouse</button>
   </aside>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
-    <div class="panel-header"><div><span class="eyebrow">GRAPHICS LAB</span><h2 id="settings-title">Settings</h2></div><button id="close-settings" type="button" autofocus>Done</button></div>
+    <div class="panel-header">
+<div>
+<span class="eyebrow">BABYLON / SCENE LAB</span>
+<h2 id="settings-title">Look studio</h2>
+</div>
+<button id="close-settings" type="button" autofocus>Done</button>
+</div>
+    <nav class="panel-nav" aria-label="Settings sections">
+<button type="button" data-section="lighting" aria-pressed="true">Lighting</button>
+<button type="button" data-section="materials" aria-pressed="false">Materials</button>
+<button type="button" data-section="effects" aria-pressed="false">Effects</button>
+<button type="button" data-section="quality" aria-pressed="false">Quality</button>
+<button type="button" data-section="scene" aria-pressed="false">Scene</button>
+</nav>
     <div class="panel-body">
       <fieldset id="controls" disabled>
         <legend>Scene controls</legend>
-        <details class="settings-group">
-          <summary>Scene &amp; camera</summary>
-          <div class="group-body">
-            <label>Scene<select id="scene-select"><option value="sponza">Sponza</option><option value="bukit-merah">Bukit Merah Ridge · 4-room</option></select></label>
-            <label id="navigation-setting" hidden>Navigation<select id="navigation"><option value="walk">Walk</option><option value="fly">Fly</option></select></label>
-          </div>
-        </details>
-        <details class="settings-group" open>
+<section data-panel="lighting" aria-label="Shape the light">
+<div class="section-intro">
+<h3>Shape the light</h3>
+<p>Balance sunlight, baked illumination and surface shadows.</p>
+</div>
+<details class="settings-group" open>
+<summary>Sunlight</summary>
+<div class="group-body">
+<label>Sun azimuth <output id="sun-azimuth-value">35</output>
+<input aria-label="Sun azimuth" id="sun-azimuth" type="range" min="0" max="360" step="1" value="35">
+</label>
+<label>Sun elevation <output id="sun-elevation-value">58.6</output>
+<input aria-label="Sun elevation" id="sun-elevation" type="range" min="5" max="85" step="0.1" value="58.6">
+</label>
+<label>Sun brightness <output id="sun-intensity-value">3.0</output>
+<input aria-label="Sun brightness" id="sun-intensity" type="range" min="0" max="6" step="0.1" value="3">
+</label>
+<label>Sun warmth<output id="sun-warmth-value">0</output>
+<input aria-label="Sun warmth" id="sun-warmth" type="range" min="0" max="1" step="0.05" value="0">
+</label>
+<p class="help">Direction moves the sun and its shadows. Warmth shifts sunlight from neutral to warm.</p>
+</div>
+</details>
+<details class="settings-group" open>
+<summary>Interior fill</summary>
+<div class="group-body">
+<label>Environment brightness <output id="environment-intensity-value">0.65</output>
+<input aria-label="Environment brightness" id="environment-intensity" type="range" min="0" max="2" step="0.05" value="0.65">
+</label>
+<label>Diffuse environment fill <output id="environment-diffuse-value">0.65</output>
+<input aria-label="Diffuse environment fill" id="environment-diffuse" type="range" min="0" max="1" step="0.05" value="0.65">
+</label>
+<label class="toggle" id="directional-lightmaps-setting">
+<input id="directional-lightmaps" type="checkbox" checked>Directional baked lighting</label>
+<label>Baked light strength <output id="baked-intensity-value">1.00</output>
+<input aria-label="Baked light strength" id="baked-intensity" type="range" min="0" max="2" step="0.05" value="1">
+</label>
+<label>Ambient occlusion strength <output id="ao-strength-value">1.00</output>
+<input aria-label="Ambient occlusion strength" id="ao-strength" type="range" min="0" max="1" step="0.05" value="1">
+</label>
+<div id="directional-strength-setting">
+<label>Baked normal response<output id="directional-strength-value">1</output>
+<input aria-label="Baked normal response" id="directional-strength" type="range" min="0" max="1" step="0.05" value="1">
+</label>
+</div>
+<button id="balance-lighting" type="button">Apply balanced lighting</button>
+<p class="help">Baked light controls fixed skylight. Diffuse fill adds ambient light; environment brightness also affects reflections. Balanced lighting restores exposure and fill levels.</p>
+</div>
+</details>
+<details class="settings-group">
           <summary>Shadows</summary>
           <div class="group-body">
-            <label>Shadow map<select id="shadows"><option value="4096">4096 · Ultra</option><option value="2048">2048 · High</option><option value="1024">1024 · Medium</option><option value="512">512 · Low</option><option value="0">Off</option></select></label>
-            <label>Shadow method<select id="shadow-method"><option value="pcss">PCSS · variable softness</option><option value="pcf">PCF · filtered edges</option><option value="hard">Hard · unfiltered</option></select></label>
-            <label>Filter quality<select id="shadow-filter"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
-            <label>PCSS softness <output id="shadow-softness-value">0.005</output><input id="shadow-softness" type="range" min="0.001" max="0.02" step="0.001" value="0.005"></label>
+            <label>Shadow map<select id="shadows">
+<option value="4096">4096 · Ultra</option>
+<option value="2048">2048 · High</option>
+<option value="1024">1024 · Medium</option>
+<option value="512">512 · Low</option>
+<option value="0">Off</option>
+</select>
+</label>
+            <label>Shadow method<select id="shadow-method">
+<option value="pcss">PCSS · variable softness</option>
+<option value="pcf">PCF · filtered edges</option>
+<option value="hard">Hard · unfiltered</option>
+</select>
+</label>
+            <label>Filter quality<select id="shadow-filter">
+<option value="high">High</option>
+<option value="medium">Medium</option>
+<option value="low">Low</option>
+</select>
+</label>
+            <label>PCSS softness <output id="shadow-softness-value">0.005</output>
+<input aria-label="PCSS softness" id="shadow-softness" type="range" min="0.001" max="0.02" step="0.001" value="0.005">
+</label>
             <p class="help">Map size controls detail. Filter quality controls sampling cost. Softness applies to PCSS only.</p>
-          </div>
+          <label>Depth bias<output id="shadow-bias-value">0.0005</output>
+<input aria-label="Depth bias" id="shadow-bias" type="range" min="0" max="0.005" step="0.0001" value="0.0005">
+</label>
+<label>Normal bias<output id="shadow-normal-bias-value">0.02</output>
+<input aria-label="Normal bias" id="shadow-normal-bias" type="range" min="0" max="0.1" step="0.001" value="0.02">
+</label>
+<p class="help">Increase bias to reduce surface stripes. Too much can detach shadows.</p>
+</div>
         </details>
-        <details class="settings-group">
-          <summary>Sun &amp; lighting</summary>
+</section>
+<section data-panel="materials" aria-label="Refine each surface" hidden>
+<div class="section-intro">
+<h3>Refine each surface</h3>
+<p>Tune a material and see the result in the scene.</p>
+</div>
+<details class="settings-group" open>
+<summary>Surface finish</summary>
+<div class="group-body">
+<label>Material<select id="material-select">
+</select>
+</label>
+<p id="material-description" class="help">
+</p>
+<label>Roughness multiplier<output id="material-roughness-value">1</output>
+<input aria-label="Roughness multiplier" id="material-roughness" type="range" min="0" max="2" step="0.05" value="1">
+</label>
+<label>Normal detail multiplier<output id="material-normal-value">1</output>
+<input aria-label="Normal detail multiplier" id="material-normal" type="range" min="0" max="3" step="0.05" value="1">
+</label>
+<label>Reflection multiplier<output id="material-reflection-value">1</output>
+<input aria-label="Reflection multiplier" id="material-reflection" type="range" min="0" max="2" step="0.05" value="1">
+</label>
+<label>Metallic<output id="material-metallic-value">0</output>
+<input aria-label="Metallic" id="material-metallic" type="range" min="0" max="1" step="0.05" value="0">
+</label>
+<button id="reset-material" type="button">Reset this material</button>
+<p class="help">Changes apply to every surface using this material. Normal detail requires a normal map. Reflections use the existing environment. Baked lighting remains fixed while you tune materials.</p>
+</div>
+</details>
+</section>
+<section data-panel="effects" aria-label="Finish the image" hidden>
+<div class="section-intro">
+<h3>Finish the image</h3>
+<p>Adjust the camera response, glow and atmosphere.</p>
+</div>
+<details class="settings-group" open>
+          <summary>Image &amp; atmosphere</summary>
           <div class="group-body">
-            <label>Sun azimuth <output id="sun-azimuth-value">35</output><input id="sun-azimuth" type="range" min="0" max="360" step="1" value="35"></label>
-            <label>Sun elevation <output id="sun-elevation-value">58.6</output><input id="sun-elevation" type="range" min="5" max="85" step="0.1" value="58.6"></label>
-            <label>Sun brightness <output id="sun-intensity-value">3.0</output><input id="sun-intensity" type="range" min="0" max="6" step="0.1" value="3"></label>
-            <label>Environment brightness <output id="environment-intensity-value">0.65</output><input id="environment-intensity" type="range" min="0" max="2" step="0.05" value="0.65"></label>
-            <label>Diffuse environment fill <output id="environment-diffuse-value">0.65</output><input id="environment-diffuse" type="range" min="0" max="1" step="0.05" value="0.65"></label>
-            <label class="toggle" id="directional-lightmaps-setting"><input id="directional-lightmaps" type="checkbox" checked>Directional baked lighting</label>
-            <label>Baked light strength <output id="baked-intensity-value">1.00</output><input id="baked-intensity" type="range" min="0" max="2" step="0.05" value="1"></label>
-            <label>Ambient occlusion strength <output id="ao-strength-value">1.00</output><input id="ao-strength" type="range" min="0" max="1" step="0.05" value="1"></label>
-            <button id="balance-lighting" type="button">Apply balanced lighting</button>
-            <p class="help">Environment brightness affects reflections and diffuse fill. Diffuse fill adds light without changing reflections. Baked light: 1 is the original bake. Ambient occlusion controls baked crevice shading; it does not change sun shadows. Balanced lighting also sets exposure and contrast, while preserving sun direction and graphics quality.</p>
-            <label class="toggle"><input id="shafts" type="checkbox" checked>Sun shafts</label>
-            <label>Shaft strength <output id="shaft-strength-value">0.10</output><input id="shaft-strength" type="range" min="0" max="0.4" step="0.01" value="0.1"></label>
-            <label>Shaft scattering <output id="shaft-scattering-value">0.05</output><input id="shaft-scattering" type="range" min="-0.8" max="0.8" step="0.01" value="0.05"></label>
+
+            <label>Exposure <output id="exposure-value">1.9</output>
+<input aria-label="Exposure" id="exposure" type="range" min="0.2" max="2.5" step="0.1" value="1.9">
+</label>
+            <label>Contrast <output id="contrast-value">1.00</output>
+<input aria-label="Contrast" id="contrast" type="range" min="0.5" max="2" step="0.05" value="1">
+</label>
+            <label class="toggle">
+<input id="bloom-enabled" type="checkbox" checked>Bloom</label>
+            <label>Bloom strength <output id="bloom-strength-value">0.12</output>
+<input aria-label="Bloom strength" id="bloom-strength" type="range" min="0" max="0.5" step="0.01" value="0.12">
+</label>
+            <label>Bloom threshold <output id="bloom-threshold-value">1.00</output>
+<input aria-label="Bloom threshold" id="bloom-threshold" type="range" min="0" max="4" step="0.05" value="1">
+</label>
+            <label>Bloom radius <output id="bloom-radius-value">32</output>
+<input aria-label="Bloom radius" id="bloom-radius" type="range" min="8" max="128" step="8" value="32">
+</label>
+            <p class="help">Lower threshold makes more surfaces glow. Larger radius spreads the glow and can cost more GPU time.</p>
+
+
+
+                      <label class="toggle">
+<input id="shafts" type="checkbox" checked>Sun shafts</label>
+            <label>Shaft strength <output id="shaft-strength-value">0.10</output>
+<input aria-label="Shaft strength" id="shaft-strength" type="range" min="0" max="0.4" step="0.01" value="0.1">
+</label>
+            <label>Shaft scattering <output id="shaft-scattering-value">0.05</output>
+<input aria-label="Shaft scattering" id="shaft-scattering" type="range" min="-0.8" max="0.8" step="0.01" value="0.05">
+</label>
             <p class="help">Scattering changes how strongly shafts appear when looking toward the sun.</p>
             <p class="help">Shafts are independent of surface shadows. Environment brightness does not change baked skylight.</p>
-          </div>
+</div>
         </details>
-        <details class="settings-group">
-          <summary>Image &amp; performance</summary>
-          <div class="group-body">
-            <label>Render scale<select id="scale"><option value="1">100% · native pixels</option><option value="0.75">75%</option><option value="0.5">50%</option></select></label>
-            <label>Exposure <output id="exposure-value">1.9</output><input id="exposure" type="range" min="0.2" max="2.5" step="0.1" value="1.9"></label>
-            <label>Contrast <output id="contrast-value">1.00</output><input id="contrast" type="range" min="0.5" max="2" step="0.05" value="1"></label>
-            <label class="toggle"><input id="bloom-enabled" type="checkbox" checked>Bloom</label>
-            <label>Bloom strength <output id="bloom-strength-value">0.12</output><input id="bloom-strength" type="range" min="0" max="0.5" step="0.01" value="0.12"></label>
-            <label>Bloom threshold <output id="bloom-threshold-value">1.00</output><input id="bloom-threshold" type="range" min="0" max="4" step="0.05" value="1"></label>
-            <label>Bloom radius <output id="bloom-radius-value">32</output><input id="bloom-radius" type="range" min="8" max="128" step="8" value="32"></label>
-            <p class="help">Lower threshold makes more surfaces glow. Larger radius spreads the glow and can cost more GPU time.</p>
-            <label class="toggle"><input id="fxaa" type="checkbox" checked>FXAA anti-aliasing</label>
-            <p class="help">Frame time measures frame intervals, not GPU execution time. Renderer: <span id="renderer">—</span>.</p>
-            <button id="inspector" type="button">Open inspector</button>
-          </div>
-        </details>
-        <details class="settings-group">
+</section>
+<section data-panel="quality" aria-label="Set the rendering budget" hidden>
+<div class="section-intro">
+<h3>Set the rendering budget</h3>
+<p>Compare quality and performance at a consistent resolution.</p>
+</div>
+<details class="settings-group" open>
+<summary>Resolution &amp; edges</summary>
+<div class="group-body">
+<label>Render scale<select id="scale">
+<option value="1">100% · native pixels</option>
+<option value="0.75">75%</option>
+<option value="0.5">50%</option>
+</select>
+</label>
+<label class="toggle">
+<input id="fxaa" type="checkbox" checked>FXAA anti-aliasing</label>
+<p class="help">Frame time measures frame intervals, not GPU execution time. Renderer: <span id="renderer">—</span>.</p>
+<button id="inspector" type="button">Open inspector</button>
+</div>
+</details>
+<details class="settings-group">
           <summary>Benchmark</summary>
           <div class="group-body">
-            <label>Test mode<select id="benchmark-mode"><option value="static">Stationary camera · static sun</option><option value="walking">Manual walking · static sun</option><option value="moving-sun">Moving sun</option></select></label>
+            <label>Test mode<select id="benchmark-mode">
+<option value="static">Stationary camera · static sun</option>
+<option value="walking">Manual walking · static sun</option>
+<option value="moving-sun">Moving sun</option>
+</select>
+</label>
             <p class="help">Start includes 15 seconds of warm-up and 60 seconds of measurement. For stationary tests, position the camera before starting. Repeat three times, then again after ten minutes of use.</p>
             <button id="benchmark-start" type="button">Warm up &amp; start</button>
             <button id="benchmark-stop" type="button" disabled>Stop benchmark</button>
             <p id="benchmark-status" role="status">Ready to benchmark. GPU timing is reported only when supported and valid.</p>
             <button id="benchmark-copy" type="button" disabled>Copy results</button>
-            <textarea id="benchmark-results" aria-label="Benchmark results" readonly hidden></textarea>
+            <textarea id="benchmark-results" aria-label="Benchmark results" readonly hidden>
+</textarea>
           </div>
         </details>
-        <button id="reset-graphics" type="button">Reset graphics to defaults</button>
+</section>
+<section data-panel="scene" aria-label="Explore the space" hidden>
+<div class="section-intro">
+<h3>Explore the space</h3>
+<p>Choose your scene and how you move through it.</p>
+</div>
+<details class="settings-group" open>
+          <summary>Scene &amp; camera</summary>
+          <div class="group-body">
+            <label>Scene<select id="scene-select">
+<option value="sponza">Sponza</option>
+<option value="bukit-merah">Bukit Merah Ridge · 4-room</option>
+</select>
+</label>
+            <label id="navigation-setting" hidden>Navigation<select id="navigation">
+<option value="walk">Walk</option>
+<option value="fly">Fly</option>
+</select>
+</label>
+          </div>
+        </details>
+</section>        <button id="reset-graphics" type="button">Reset all graphics</button>
       </fieldset>
+      <p class="save-note">Changes save automatically on this device.</p>
       <p class="hint desktop-hint">WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse</p>
       <p class="hint mobile-hint">Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.</p>
       <a id="model-source" href="%BASE_URL%models/sponza/SOURCE.md" target="_blank" rel="noreferrer">Model source and attribution ↗</a>
     </div>
   </dialog>
   <div id="flight-controls" hidden>
-    <div id="move-stick" role="group" aria-label="Drag to fly forward, backward, or sideways"><span id="stick-thumb"></span><span class="stick-label">MOVE</span></div>
-    <div class="height-controls"><button id="fly-up" type="button" aria-label="Fly up">↑ Up</button><button id="fly-down" type="button" aria-label="Fly down">↓ Down</button></div>
+    <div id="move-stick" role="group" aria-label="Drag to fly forward, backward, or sideways">
+<span id="stick-thumb">
+</span>
+<span class="stick-label">MOVE</span>
+</div>
+    <div class="height-controls">
+<button id="fly-up" type="button" aria-label="Fly up">↑ Up</button>
+<button id="fly-down" type="button" aria-label="Fly down">↓ Down</button>
+</div>
   </div>
-  <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/main.ts">
+</script>
 </body>
 </html>

@@ -250,3 +250,24 @@ See [the desktop optimization report](docs/desktop-optimization.md) for measured
 results, limitations, and rejected experiments. Use `?scene=bukit-merah` for the
 optimized renderer and add `&renderer=baseline` to compare the original rendering
 path. The 2x desktop target and the iPhone walking target are not yet verified.
+
+
+## Look studio
+
+Open Settings to switch between Lighting, Materials, Effects, Quality, and Scene.
+The panel stays beside the scene on desktop and above the movement controls on phones.
+Done or Escape closes it and returns keyboard focus to the camera.
+
+Lighting includes sun warmth, directional baked-normal strength (apartment only),
+and surface-shadow depth/normal bias. Effects keeps bloom and shafts together;
+Quality contains resolution, anti-aliasing, the inspector, and benchmarks.
+Dependent sliders are disabled when their effect is off.
+
+Materials exposes roughness and reflection multipliers, normal-detail strength,
+and metallic level for each imported PBR material. A multiplier of 1 preserves the
+original value; normal detail is unavailable on materials without a normal map.
+Changes affect all surfaces sharing that material. Material adjustments save per
+scene, and graphics settings remain shared. Reset this material restores the selected
+material; Reset all graphics restores both graphics and the current scene's materials.
+Benchmark exports include material adjustments and stop if these change during a run.
+These controls use existing Babylon material/light properties and add no render passes.

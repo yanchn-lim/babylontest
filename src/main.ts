@@ -12,6 +12,7 @@ import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
 import { attachFlyControls } from "./fly-controls";
 import { ShadowCache, createRebuildQueue } from "./performance";
+import { attachMaterialControls } from "./material-controls";
 import { attachGraphicsPreferences } from "./graphics-settings";
 import { attachBenchmark } from "./benchmark";
 import { DirectionalLightmapPlugin } from "./directional-lightmap";
@@ -52,6 +53,17 @@ document.querySelector<HTMLButtonElement>("#open-settings")!.addEventListener("c
   settingsDialog.show();
 });
 document.querySelector<HTMLButtonElement>("#close-settings")!.addEventListener("click", () => settingsDialog.close());
+settingsDialog.addEventListener("keydown", event => {
+  if (event.key === "Escape") { event.preventDefault(); settingsDialog.close(); }
+});
+settingsDialog.addEventListener("close", () => canvas.focus());
+for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-section]"))) {
+  button.addEventListener("click", () => {
+    for (const panel of Array.from(document.querySelectorAll<HTMLElement>("[data-panel]"))) panel.hidden = panel.dataset.panel !== button.dataset.section;
+    for (const item of Array.from(document.querySelectorAll<HTMLElement>("[data-section]"))) item.setAttribute("aria-pressed", String(item === button));
+    document.querySelector(".panel-body")!.scrollTop = 0;
+  });
+}
 const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
 const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!;
 const exposure = document.querySelector<HTMLInputElement>("#exposure")!;
@@ -186,8 +198,9 @@ async function start() {
     direction.wrapU = direction.wrapV = Texture.CLAMP_ADDRESSMODE;
   }
   directionalControl.disabled = !direction;
+  document.querySelector<HTMLElement>("#directional-strength-setting")!.hidden = !direction;
   directionalControl.addEventListener("change", () => {
-    for (const plugin of directionalPlugins) plugin.strength = directionalControl.checked ? 1 : 0;
+    for (const plugin of directionalPlugins) plugin.strength = directionalControl.checked ? Number(document.querySelector<HTMLInputElement>("#directional-strength")!.value) : 0;
   });
   for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
     if (!(material instanceof PBRMaterial)) continue;
@@ -198,12 +211,23 @@ async function start() {
     material.useLightmapAsShadowmap = false;
     if (direction && material.bumpTexture) {
       const plugin = new DirectionalLightmapPlugin(material, direction);
-      plugin.strength = directionalControl.checked ? 1 : 0;
+      plugin.strength = directionalControl.checked ? Number(document.querySelector<HTMLInputElement>("#directional-strength")!.value) : 0;
       directionalPlugins.push(plugin);
     }
     material.needDepthPrePass = optimizedRenderer && !material.needAlphaBlending() && !material.needAlphaTesting();
   }
+  const effectControls = [
+    [bloomEnabled, ["bloom-strength", "bloom-threshold", "bloom-radius"]],
+    [shaftsEnabled, ["shaft-strength", "shaft-scattering"]],
+    [directionalControl, ["directional-strength"]],
+  ] as const;
+  for (const [toggle, ids] of effectControls) {
+    const sync = () => { for (const id of ids) document.querySelector<HTMLInputElement>("#" + id)!.disabled = !toggle.checked || toggle.disabled; };
+    toggle.addEventListener("change", sync);
+    sync();
+  }
   const meshes = result.meshes.filter(mesh => mesh.getTotalVertices() > 0);
+  const materialControls = attachMaterialControls(meshes, apartment ? "bukit-merah" : "sponza");
   if (!meshes.length) throw new Error(sceneName + " contains no renderable meshes.");
   let minimum = new Vector3(Infinity, Infinity, Infinity);
   let maximum = new Vector3(-Infinity, -Infinity, -Infinity);
@@ -493,6 +517,10 @@ async function start() {
       output.value = Number(input.value).toFixed(digits);
     });
   }
+  bindSlider("sun-warmth", 2, value => { sun.diffuse = new Color3(1, 1 - value * 0.12, 1 - value * 0.25); sun.specular.copyFrom(sun.diffuse); });
+  bindSlider("directional-strength", 2, value => { for (const plugin of directionalPlugins) plugin.strength = directionalControl.checked ? value : 0; });
+  bindSlider("shadow-bias", 4, value => { shadowTask.bias = value; shadowCache.invalidate(); });
+  bindSlider("shadow-normal-bias", 3, value => { shadowTask.normalBias = value; shadowCache.invalidate(); });
   bindSlider("sun-intensity", 1, value => { sun.intensity = value; });
   bindSlider("environment-intensity", 2, value => { activeScene.environmentIntensity = value; });
   bindSlider("environment-diffuse", 2, updateEnvironmentDiffuse);
@@ -530,7 +558,7 @@ async function start() {
       status.textContent = "Inspector could not open. See the console for details.";
     } finally { inspector.disabled = false; }
   });
-  document.querySelector<HTMLButtonElement>("#reset-graphics")!.addEventListener("click", () => preferences.reset());
+  document.querySelector<HTMLButtonElement>("#reset-graphics")!.addEventListener("click", () => { preferences.reset(); materialControls.reset(); });
   document.querySelector<HTMLButtonElement>("#balance-lighting")!.addEventListener("click", () => preferences.balanceLighting());
   document.querySelector<HTMLOutputElement>("#shadow-softness-value")!.value = Number(shadowSoftness.value).toFixed(3);
   document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
@@ -542,7 +570,7 @@ async function start() {
   await activeScene.whenReadyAsync();
   updateEnvironmentDiffuse(Number(document.querySelector<HTMLInputElement>("#environment-diffuse")!.value));
   shadowCache.invalidate();
-  const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, preferences.snapshot,
+  const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, () => ({ ...preferences.snapshot(), materials: materialControls.snapshot() }),
     () => frameGraph.pausedExecution || graphFailed,
     () => ({ rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
       shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,
