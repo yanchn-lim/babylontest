@@ -5,6 +5,7 @@ export const balancedLighting: Record<string, string> = {
 
 export const graphicsDefaults: Record<string, string | boolean> = {
   ...balancedLighting,
+  "gi-mode": "baked",
   "day-cycle": false, "day-time": "14", "day-length": "5",
   "directional-lightmaps": true, "directional-strength": "1", "sun-warmth": "0",
   "shadow-bias": "0.0005", "shadow-normal-bias": "0.02",

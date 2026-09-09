@@ -12,6 +12,7 @@ import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
 import { attachFlyControls } from "./fly-controls";
 import { ShadowCache, createRebuildQueue } from "./performance";
+import { attachRealtimeGI } from "./real-time-gi";
 import { attachDayNight } from "./day-night";
 import { attachMaterialControls } from "./material-controls";
 import { attachGraphicsPreferences } from "./graphics-settings";
@@ -190,6 +191,7 @@ async function start() {
   document.querySelector<HTMLElement>("#directional-lightmaps-setting")!.hidden = !apartment;
   let direction: Texture | undefined;
   const directionalPlugins: DirectionalLightmapPlugin[] = [];
+  let bakedLighting = true;
   if (apartment && lighting.directional) {
     if (lighting.directional.version !== 1 || lighting.directional.space !== "glTF model"
       || lighting.directional.file !== "direction.png" || !/^[a-f0-9]{64}$/.test(lighting.sha256["direction.png"] ?? "")
@@ -205,7 +207,7 @@ async function start() {
   directionalControl.disabled = !direction;
   document.querySelector<HTMLElement>("#directional-strength-setting")!.hidden = !direction;
   directionalControl.addEventListener("change", () => {
-    for (const plugin of directionalPlugins) plugin.strength = directionalControl.checked ? Number(document.querySelector<HTMLInputElement>("#directional-strength")!.value) : 0;
+    for (const plugin of directionalPlugins) plugin.strength = bakedLighting && directionalControl.checked ? Number(document.querySelector<HTMLInputElement>("#directional-strength")!.value) : 0;
   });
   for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
     if (!(material instanceof PBRMaterial)) continue;
@@ -216,7 +218,7 @@ async function start() {
     material.useLightmapAsShadowmap = false;
     if (direction && material.bumpTexture) {
       const plugin = new DirectionalLightmapPlugin(material, direction);
-      plugin.strength = directionalControl.checked ? Number(document.querySelector<HTMLInputElement>("#directional-strength")!.value) : 0;
+      plugin.strength = bakedLighting && directionalControl.checked ? Number(document.querySelector<HTMLInputElement>("#directional-strength")!.value) : 0;
       directionalPlugins.push(plugin);
     }
     material.needDepthPrePass = optimizedRenderer && !material.needAlphaBlending() && !material.needAlphaTesting();
@@ -547,7 +549,7 @@ async function start() {
     if (wantShafts !== !volume.disabled) updateShadows();
   }
   bindSlider("sun-warmth", 2, applyDaylight);
-  bindSlider("directional-strength", 2, value => { for (const plugin of directionalPlugins) plugin.strength = directionalControl.checked ? value : 0; });
+  bindSlider("directional-strength", 2, value => { for (const plugin of directionalPlugins) plugin.strength = bakedLighting && directionalControl.checked ? value : 0; });
   bindSlider("shadow-bias", 4, value => { shadowTask.bias = value; shadowCache.invalidate(); });
   bindSlider("shadow-normal-bias", 3, value => { shadowTask.normalBias = value; shadowCache.invalidate(); });
   bindSlider("sun-intensity", 1, applyDaylight);
@@ -591,6 +593,16 @@ async function start() {
   document.querySelector<HTMLButtonElement>("#balance-lighting")!.addEventListener("click", () => preferences.balanceLighting());
   document.querySelector<HTMLOutputElement>("#shadow-softness-value")!.value = Number(shadowSoftness.value).toFixed(3);
   document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
+  const realtimeGI = attachRealtimeGI(activeScene, activeEngine, sun, meshes, baked => {
+    bakedLighting = baked;
+    for (const material of new Set(meshes.map(mesh => mesh.material))) {
+      if (material instanceof PBRMaterial) material.lightmapTexture = baked ? indirect : null;
+    }
+    directionalControl.disabled = !baked || !direction;
+    document.querySelector<HTMLInputElement>("#baked-intensity")!.disabled = !baked;
+    directionalControl.dispatchEvent(new Event("change"));
+    applyDaylight();
+  });
   resetView();
   updateShadows();
   resize();
@@ -601,12 +613,15 @@ async function start() {
   shadowCache.invalidate();
   const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, () => ({ ...preferences.snapshot(), materials: materialControls.snapshot(), cyclePlaying: dayNight.playing }),
     () => frameGraph.pausedExecution || graphFailed,
-    () => ({ rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
+    () => ({ ...realtimeGI.diagnostics(), rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
       shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,
       surfaceMapSize: shadowTask.shadowGenerator!.mapSize,
       surfaceBindingCorrect: sun.getShadowGenerator(camera) === shadowTask.shadowGenerator }));
   activeScene.onDisposeObservable.add(disposeBenchmark);
   controls.disabled = false;
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has("gi-test")) {
+    void import("../tests/real-time-gi.browser").then(module => module.verifyRealtimeGI(activeScene, activeEngine));
+  }
   document.querySelector<HTMLElement>("#flight-controls")!.hidden = false;
   document.querySelector<HTMLButtonElement>("#capture-mouse")!.disabled = false;
   status.textContent = "Ready \u00b7 " + meshes.length + " meshes";

@@ -98,6 +98,13 @@
 <label>Diffuse environment fill <output id="environment-diffuse-value">0.65</output>
 <input aria-label="Diffuse environment fill" id="environment-diffuse" type="range" min="0" max="1" step="0.05" value="0.65">
 </label>
+<label>Indirect lighting
+<select id="gi-mode" aria-describedby="gi-status">
+<option value="baked" selected>Baked</option>
+<option value="realtime">Real-time GI (experimental)</option>
+</select>
+</label>
+<p class="help" id="gi-status" role="status">Baked indirect lighting. No real-time GI rendering cost.</p>
 <label class="toggle" id="directional-lightmaps-setting">
 <input id="directional-lightmaps" type="checkbox" checked>Directional baked lighting</label>
 <label>Baked light strength <output id="baked-intensity-value">1.00</output>
