@@ -1,8 +1,8 @@
 import {
   Constants, EventState, GIRSM, GIRSMManager, GIRSMRenderPluginMaterial,
-  PBRMaterial, ReflectiveShadowMap,
+  Matrix, PBRMaterial, ReflectiveShadowMap,
   type AbstractMesh, type DirectionalLight, type Engine, type Material,
-  type Observer, type RenderTargetTexture, type Scene,
+  type Observer, type RenderTargetTexture, type Scene, type Vector2,
 } from "@babylonjs/core";
 
 // Babylon 9.25 runs custom targets with FrameGraph, but skips the legacy
@@ -27,6 +27,7 @@ class FrameGraphGIManager extends GIRSMManager {
 export function attachRealtimeGI(
   scene: Scene, engine: Engine, sun: DirectionalLight, meshes: AbstractMesh[],
   setBaked: (baked: boolean) => void,
+  jitter?: Vector2,
 ) {
   const mode = document.querySelector<HTMLSelectElement>("#gi-mode")!;
   const message = document.querySelector<HTMLElement>("#gi-status")!;
@@ -48,6 +49,7 @@ export function attachRealtimeGI(
   let requested = false;
   let failed = false;
   let frames = 0;
+  const jitteredTargets = new WeakSet<RenderTargetTexture>();
 
   function detachGeometry() {
     if (!geometry) return;
@@ -94,6 +96,9 @@ export function attachRealtimeGI(
     // Lightmap and GI plugins must not feed the light's flux capture.
     for (const material of clones) {
       if (material instanceof PBRMaterial) material.lightmapTexture = null;
+      // Camera jitter must never move the light's RSM capture.
+      const taa = material.pluginManager?.getPlugin("TAAJitter");
+      if (taa && "manager" in taa) taa.manager = null;
     }
     manager = new FrameGraphGIManager(scene, { width: 1, height: 1 },
       { width: 1, height: 1 }, 128, Constants.TEXTURETYPE_HALF_FLOAT);
@@ -167,6 +172,21 @@ export function attachRealtimeGI(
         detachGeometry();
         geometry = target;
         geometry.renderList = meshes;
+        if (jitter && !jitteredTargets.has(geometry)) {
+          jitteredTargets.add(geometry);
+          const offset = Matrix.Identity(), projection = Matrix.Identity();
+          geometry.onBeforeRenderObservable.add(() => {
+            const camera = scene.frameGraph?.findMainCamera();
+            if (!camera) return;
+            Matrix.TranslationToRef(jitter.x, jitter.y, 0, offset);
+            camera.getProjectionMatrix().multiplyToRef(offset, projection);
+            scene.setTransformMatrix(camera.getViewMatrix(), projection);
+          });
+          geometry.onAfterRenderObservable.add(() => {
+            const camera = scene.frameGraph?.findMainCamera();
+            if (camera) scene.setTransformMatrix(camera.getViewMatrix(), camera.getProjectionMatrix());
+          });
+        }
         scene.customRenderTargets.push(geometry);
       }
       rsm.updateLightParameters();

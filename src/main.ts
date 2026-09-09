@@ -1,6 +1,6 @@
 import {
   Color3, Color4, Constants, VertexBuffer, CubeTexture, DirectionalLight, Engine, FrameGraph,
-  FrameGraphClearTextureTask, FrameGraphObjectRendererTask, FrameGraphShadowGeneratorTask,
+  FrameGraphClearTextureTask, FrameGraphObjectRendererTask, FrameGraphGeometryRendererTask, FrameGraphShadowGeneratorTask,
   FrameGraphLightingVolumeTask, FrameGraphVolumetricLightingTask,
   FrameGraphBloomTask, FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
   ImageProcessingConfiguration, MeshBuilder, PBRMaterial, Scene, SceneLoader,
@@ -13,6 +13,7 @@ import "./style.css";
 import { attachFlyControls } from "./fly-controls";
 import { ShadowCache, createRebuildQueue } from "./performance";
 import { attachRealtimeGI } from "./real-time-gi";
+import { createTemporalAA } from "./temporal-aa";
 import { attachDayNight } from "./day-night";
 import { attachMaterialControls } from "./material-controls";
 import { attachGraphicsPreferences } from "./graphics-settings";
@@ -71,6 +72,14 @@ const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!
 const exposure = document.querySelector<HTMLInputElement>("#exposure")!;
 const scale = document.querySelector<HTMLSelectElement>("#scale")!;
 const fxaa = document.querySelector<HTMLInputElement>("#fxaa")!;
+const taaControl = document.querySelector<HTMLInputElement>("#taa")!;
+taaControl.checked = new URLSearchParams(location.search).get("taa") === "1";
+taaControl.addEventListener("change", () => {
+  const url = new URL(location.href);
+  if (taaControl.checked) url.searchParams.set("taa", "1");
+  else url.searchParams.delete("taa");
+  location.assign(url.href);
+});
 const inspector = document.querySelector<HTMLButtonElement>("#inspector")!;
 
 let engine: Engine | undefined;
@@ -102,6 +111,15 @@ async function start() {
   scene = new Scene(engine);
   const activeEngine = engine;
   const activeScene = scene;
+  const caps = activeEngine.getCaps();
+  const useTAA = taaControl.checked && activeEngine.webGLVersion === 2
+    && caps.drawBuffersExtension && (caps.maxDrawBuffers ?? 0) >= 2
+    && caps.textureHalfFloatRender && caps.textureHalfFloatLinearFiltering;
+  fxaa.disabled = useTAA;
+  document.querySelector("#taa-status")!.textContent = useTAA
+    ? "TAA experiment active: 8 samples, reprojection and history clamping. FXAA is bypassed."
+    : taaControl.checked ? "TAA unavailable on this device. FXAA remains available."
+      : "Temporal filtering is off. Enable it to compare shimmer and motion clarity.";
   const dayNight = attachDayNight();
   activeScene.onDisposeObservable.add(() => dayNight.dispose());
   activeScene.clearColor = new Color4(0.16, 0.20, 0.26, 1);
@@ -353,7 +371,16 @@ async function start() {
   volumeShadowTask.normalBias = shadowTask.normalBias;
   frameGraph.addTask(volumeShadowTask);
 
-  const renderTask = new FrameGraphObjectRendererTask("scene", frameGraph, activeScene);
+  const renderTask = useTAA
+    ? new FrameGraphGeometryRendererTask("scene", frameGraph, activeScene)
+    : new FrameGraphObjectRendererTask("scene", frameGraph, activeScene);
+  if (renderTask instanceof FrameGraphGeometryRendererTask) {
+    renderTask.textureDescriptions = [{
+      type: Constants.PREPASS_VELOCITY_LINEAR_TEXTURE_TYPE,
+      textureType: Constants.TEXTURETYPE_HALF_FLOAT,
+      textureFormat: Constants.TEXTUREFORMAT_RGBA,
+    }];
+  }
   renderTask.targetTexture = clear.outputTexture;
   renderTask.depthTexture = clear.outputDepthTexture;
   renderTask.objectList = { meshes: [sky, ...meshes], particleSystems: [] };
@@ -396,10 +423,13 @@ async function start() {
   imageProcessing.sourceTexture = optimizedRenderer ? shafts.outputTexture : bloom.outputTexture;
   if (optimizedRenderer) imageProcessing.targetTexture = target("display-color", Constants.TEXTUREFORMAT_RGBA, Constants.TEXTURETYPE_UNSIGNED_BYTE);
   frameGraph.addTask(imageProcessing);
+  const temporal = renderTask instanceof FrameGraphGeometryRendererTask
+    ? createTemporalAA(frameGraph, renderTask, imageProcessing.outputTexture, sun, controls)
+    : undefined;
   const antialiasing = new FrameGraphFXAATask("fxaa", frameGraph);
-  antialiasing.sourceTexture = imageProcessing.outputTexture;
+  antialiasing.sourceTexture = temporal?.task.outputTexture ?? imageProcessing.outputTexture;
   antialiasing.targetTexture = backbufferColorTextureHandle;
-  antialiasing.disabled = !fxaa.checked;
+  antialiasing.disabled = useTAA || !fxaa.checked;
   frameGraph.addTask(antialiasing);
 
   const shadowCache = new ShadowCache();
@@ -420,6 +450,7 @@ async function start() {
       shadowTask.filter = shadowMethod.value === "pcf" ? ShadowGenerator.FILTER_PCF
         : shadowMethod.value === "hard" ? ShadowGenerator.FILTER_NONE : ShadowGenerator.FILTER_PCSS;
       await frameGraph.buildAsync();
+      temporal?.reset();
       graphBuildCount++;
       bindSurfaceShadow(sun, camera, shadowTask.shadowGenerator!);
       shadowTask.shadowGenerator!.contactHardeningLightSizeUVRatio = Number(shadowSoftness.value);
@@ -572,7 +603,7 @@ async function start() {
     activeScene.imageProcessingConfiguration.exposure = Number(exposure.value);
     document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
   });
-  fxaa.addEventListener("change", () => { antialiasing.disabled = !fxaa.checked; });
+  fxaa.addEventListener("change", () => { antialiasing.disabled = useTAA || !fxaa.checked; });
   scale.addEventListener("change", resize);
   window.addEventListener("resize", resize);
   activeScene.onDisposeObservable.add(() => window.removeEventListener("resize", resize));
@@ -594,6 +625,7 @@ async function start() {
   document.querySelector<HTMLOutputElement>("#shadow-softness-value")!.value = Number(shadowSoftness.value).toFixed(3);
   document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
   const realtimeGI = attachRealtimeGI(activeScene, activeEngine, sun, meshes, baked => {
+    temporal?.reset();
     bakedLighting = baked;
     for (const material of new Set(meshes.map(mesh => mesh.material))) {
       if (material instanceof PBRMaterial) material.lightmapTexture = baked ? indirect : null;
@@ -602,7 +634,7 @@ async function start() {
     document.querySelector<HTMLInputElement>("#baked-intensity")!.disabled = !baked;
     directionalControl.dispatchEvent(new Event("change"));
     applyDaylight();
-  });
+  }, temporal?.jitter);
   resetView();
   updateShadows();
   resize();
@@ -613,7 +645,7 @@ async function start() {
   shadowCache.invalidate();
   const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, () => ({ ...preferences.snapshot(), materials: materialControls.snapshot(), cyclePlaying: dayNight.playing }),
     () => frameGraph.pausedExecution || graphFailed,
-    () => ({ ...realtimeGI.diagnostics(), rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
+    () => ({ ...realtimeGI.diagnostics(), temporalAA: useTAA, rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
       shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,
       surfaceMapSize: shadowTask.shadowGenerator!.mapSize,
       surfaceBindingCorrect: sun.getShadowGenerator(camera) === shadowTask.shadowGenerator }));
