@@ -25,7 +25,6 @@
           <summary>Scene &amp; camera</summary>
           <div class="group-body">
             <label>Scene<select id="scene-select"><option value="sponza">Sponza</option><option value="bukit-merah">Bukit Merah Ridge · 4-room</option></select></label>
-            <label>Camera view<select id="view"><option value="atrium">Atrium</option><option value="reverse">Reverse atrium</option><option value="upper">Upper overview</option></select></label>
             <label id="navigation-setting" hidden>Navigation<select id="navigation"><option value="walk">Walk</option><option value="fly">Fly</option></select></label>
           </div>
         </details>
@@ -78,7 +77,7 @@
           <summary>Benchmark</summary>
           <div class="group-body">
             <label>Test mode<select id="benchmark-mode"><option value="static">Stationary camera · static sun</option><option value="walking">Manual walking · static sun</option><option value="moving-sun">Moving sun</option></select></label>
-            <p class="help">Start includes 15 seconds of warm-up and 60 seconds of measurement. For stationary tests, choose Living / dining or Hallway first. Repeat three times, then again after ten minutes of use.</p>
+            <p class="help">Start includes 15 seconds of warm-up and 60 seconds of measurement. For stationary tests, position the camera before starting. Repeat three times, then again after ten minutes of use.</p>
             <button id="benchmark-start" type="button">Warm up &amp; start</button>
             <button id="benchmark-stop" type="button" disabled>Stop benchmark</button>
             <p id="benchmark-status" role="status">Ready to benchmark. GPU timing is reported only when supported and valid.</p>

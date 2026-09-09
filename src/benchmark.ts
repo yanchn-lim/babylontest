@@ -35,7 +35,6 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   let sunTrace: { elapsedMs: number; azimuth: string; elevation: string }[] = [];
   const dimensions = () => [engine.getRenderWidth(), engine.getRenderHeight()];
   const cameraState = () => ({ position: camera.position.asArray(), rotation: camera.rotation.asArray() });
-  const view = document.querySelector<HTMLSelectElement>("#view")!;
   const navigation = document.querySelector<HTMLSelectElement>("#navigation")!;
   const automatedWalk = import.meta.env.DEV && new URLSearchParams(location.search).get("walk-route") === "turning";
   const advanceRoute = createWalkingRoute(camera);
@@ -102,7 +101,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
       version: 1, revision: __APP_REVISION__, startedAt: new Date().toISOString(),
       mode: mode.value, scene: new URLSearchParams(location.search).get("scene") || "sponza",
       walkingRoute: automatedWalk ? WALK_ROUTE : undefined,
-      view: view.selectedOptions[0].textContent, navigation: navigation.value,
+      navigation: navigation.value,
       settings: snapshot, dimensions: dimensions(), devicePixelRatio: window.devicePixelRatio,
       browser: navigator.userAgent, renderer: "WebGL " + engine.webGLVersion,
       cameraStart: cameraState(), diagnosticsStart: diagnostics(), warmupSeconds: 15, measurementSeconds: 60,
@@ -135,8 +134,8 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
       initialSettings = JSON.stringify(snapshot);
       return;
     }
-    if (JSON.stringify(settings()) !== initialSettings || id === "view" || id === "navigation") {
-      finish("Settings or camera view changed; start a new run.");
+    if (JSON.stringify(settings()) !== initialSettings || id === "navigation") {
+      finish("Settings or navigation mode changed; start a new run.");
     }
   };
   document.querySelector("#controls")!.addEventListener("input", changed, options);

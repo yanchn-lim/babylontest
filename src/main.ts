@@ -36,7 +36,6 @@ sourceLink.href = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/SO
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const controls = document.querySelector<HTMLFieldSetElement>("#controls")!;
-const view = document.querySelector<HTMLSelectElement>("#view")!;
 const navigation = document.querySelector<HTMLSelectElement>("#navigation")!;
 navigation.value = apartment ? "walk" : "fly";
 document.querySelector<HTMLElement>("#navigation-setting")!.hidden = !apartment;
@@ -211,32 +210,16 @@ async function start() {
     document.querySelector<HTMLElement>("#move-stick")!.setAttribute("aria-label",
       walking ? "Drag to walk forward, backward, or sideways" : "Drag to fly forward, backward, or sideways");
   }
-  if (apartment) {
-    view.options[0].textContent = "Living / dining";
-    view.options[1].textContent = "Hallway";
-    view.options[2].textContent = "Exterior overview";
-    view.value = "atrium";
-    canvas.setAttribute("aria-label", "Apartment fly camera. Drag to look; use keyboard or touch controls to move.");
-  }
   function resetView() {
-    if (apartment && view.value === "upper") navigation.value = "fly";
     updateNavigation();
     resetFlight();
     camera.cameraDirection.setAll(0);
     camera.cameraRotation.setAll(0);
-    const positions: Record<string, Vector3> = {
-      atrium: new Vector3(minimum.x + width * 0.16, eye, center.z),
-      reverse: new Vector3(maximum.x - width * 0.16, eye, center.z),
-      upper: new Vector3(minimum.x + width * 0.23, minimum.y + (maximum.y - minimum.y) * 0.65, center.z),
-    };
-    if (apartment) {
-      positions.atrium = new Vector3(-10.5, 1.65, -5.8);
-      positions.reverse = new Vector3(-7.3, 1.65, -4.0);
-      positions.upper = new Vector3(-18, 18, 13);
-    }
-    camera.position.copyFrom(positions[view.value]);
+    camera.position.copyFrom(apartment
+      ? new Vector3(-10.5, 1.65, -5.8)
+      : new Vector3(minimum.x + width * 0.16, eye, center.z));
     const target = apartment
-      ? (view.value === "upper" ? center : view.value === "atrium" ? new Vector3(-10.5, 1.65, -8.4) : new Vector3(-3, 1.65, -4.0))
+      ? new Vector3(-10.5, 1.65, -8.4)
       : new Vector3(center.x, eye + 0.5, center.z);
     camera.setTarget(target);
   }
@@ -463,11 +446,7 @@ async function start() {
   sunAzimuth.addEventListener("input", moveSun);
   sunElevation.addEventListener("input", moveSun);
   activeScene.onDisposeObservable.add(() => activeScene.onBeforeRenderObservable.remove(sunUpdates));
-  view.addEventListener("change", resetView);
-  navigation.addEventListener("change", () => {
-    if (navigation.value === "walk") view.value = "atrium";
-    resetView();
-  });
+  navigation.addEventListener("change", resetView);
   for (const control of [shadows, shadowMethod, shadowFilter, shaftsEnabled]) {
     control.addEventListener("change", () => {
       updateShadows();

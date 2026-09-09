@@ -15,12 +15,12 @@ Select **Bukit Merah Ridge · 4-room** in Scene settings, or open
 `?scene=bukit-merah`. The apartment uses a baked derivative of the supplied
 `flat-native.glb`, preserving its geometry and door positions. The active PBR
 variant uses clean textured paint, porcelain tile, natural veneer, and neutral surfaces.
-The ceiling stays visible in every view. Living / dining is the default view;
-Hallway and Exterior overview are also available. Walk mode is the apartment
+The ceiling stays visible. The camera starts in the living / dining area.
+Walk mode is the apartment
 default: WASD or the mobile stick moves at a fixed 1.65 m eye height, with
 Babylon camera collisions against walls and doors. Drag to look; Shift walks
 faster. Walk mode assumes a level floor and does not simulate stairs or gravity.
-Select Fly for vertical movement. Exterior overview automatically selects Fly.
+Select Fly for vertical movement.
 Live sun effects work in both scenes.
 
 Apartment AO and skylight are baked at 4096 pixels with 1024 samples and four
@@ -112,7 +112,6 @@ to change height. Movement, looking, and height controls support simultaneous to
 Forward flight follows the camera view. Up and down follow the world vertical axis.
 Movement stops when controls are released, focus changes, or the page is hidden.
 Scene settings can be expanded or collapsed to leave space for the viewer.
-Select Atrium, Reverse atrium, or Upper overview to reset the camera.
 Controls expose sun azimuth/elevation, shadow resolution, exposure, render scale, FXAA, and the Babylon inspector.
 Sun changes update direct lighting and PCSS shadows once per frame. Light shafts
 use a separate 512-pixel depth map and 128-step volume mesh, refreshed at most
@@ -210,7 +209,7 @@ no soft filtering. Compare at the same resolution and camera path on the actual 
 
 ## Stage 1 optimization and benchmarks
 
-Graphics preferences are shared across scenes and reloads. Camera view and navigation
+Graphics preferences are shared across scenes and reloads. Camera position and navigation
 mode are not shared. Reset graphics to defaults restores PCF Low, a 1024-square map,
 native resolution, and all default effects.
 
@@ -233,7 +232,7 @@ GPU timings when valid and supported, and shadow/rebuild diagnostics. GPU timing
 are separate from frame intervals. Interrupted runs are marked incomplete.
 
 For the iPhone 14 Pro comparison, use the apartment at native resolution and PCF Low
-with a 1024-square map. Run Living / dining, Hallway, and Manual walking with a static
+with a 1024-square map. Position the camera manually for stationary tests and walk with a static
 sun. Test Moving sun separately. Repeat each trial three times, then repeat after ten
 minutes of use. Keep the same walking route. The walking target is median at least
 59 fps, p95 frame interval at most 20 ms, and fewer than 1% of frames above 33.3 ms.
