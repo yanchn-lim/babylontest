@@ -80,7 +80,7 @@ export function attachRealtimeGI(
     const previousObservers = new Set(scene.onBeforeDrawPhaseObservable.observers);
     const previousTargets = new Set(scene.customRenderTargets);
     const previousBuffers = new Set(engine._uniformBuffers);
-    rsm = new ReflectiveShadowMap(scene, sun, { width: 256, height: 256 });
+    rsm = new ReflectiveShadowMap(scene, sun, { width: 512, height: 512 });
     // 9.25 leaves the RSM scene UBO alive on disposal. Track only its new buffers.
     rsmBuffers = engine._uniformBuffers.filter(buffer => !previousBuffers.has(buffer));
     for (const mesh of meshes) rsm.addMesh(mesh);
@@ -96,15 +96,20 @@ export function attachRealtimeGI(
       if (material instanceof PBRMaterial) material.lightmapTexture = null;
     }
     manager = new FrameGraphGIManager(scene, { width: 1, height: 1 },
-      { width: 1, height: 1 }, 64, Constants.TEXTURETYPE_HALF_FLOAT);
+      { width: 1, height: 1 }, 128, Constants.TEXTURETYPE_HALF_FLOAT);
+    manager.useQualityBlur = true;
+    manager.blurKernel = 3;
+    manager.useQualityUpsampling = true;
+    manager.upsamplerKernel = 2;
     sampleTexture = scene.textures.find(texture =>
       !previousTextures.has(texture) && texture.name === "GIRSMSamples");
     draw = scene.onBeforeDrawPhaseObservable.observers.find(observer => !previousObservers.has(observer));
     if (!draw) throw new Error("Babylon GI draw hook was not found.");
     const gi = new GIRSM(rsm);
-    gi.numSamples = 64;
+    gi.numSamples = 128;
     gi.radius = 0.1;
-    gi.intensity = 0.1;
+    // Babylon sums samples without dividing by their count.
+    gi.intensity = 0.05;
     manager.addGIRSM(gi);
     for (const material of materials) manager.addMaterial(material);
   }
@@ -140,7 +145,7 @@ export function attachRealtimeGI(
         manager.enable = false;
         manager.setOutputDimensions({ width, height });
         manager.setGITextureDimensions({
-          width: Math.max(1, Math.ceil(width / 4)), height: Math.max(1, Math.ceil(height / 4)),
+          width: Math.max(1, Math.ceil(width / 2)), height: Math.max(1, Math.ceil(height / 2)),
         });
         dimensions = next;
       }
@@ -179,7 +184,7 @@ export function attachRealtimeGI(
       draw.callback(scene, new EventState(-1));
       plugins(true);
       frames++;
-      message.textContent = "Real-time sunlight bounce · 256² RSM · 64 samples · quarter-resolution GI. Fixed environment fill remains.";
+      message.textContent = "Real-time sunlight bounce · 512² RSM · 128 samples · half-resolution GI with quality filtering. Fixed environment fill remains.";
     } catch (error) { fallback(error); }
   });
   const restored = engine.onContextRestoredObservable.add(() => { dimensions = ""; });

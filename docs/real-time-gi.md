@@ -39,8 +39,12 @@ upgrading Babylon. No dependency was added.
 
 ## Quality and limits
 
-Defaults: 256 x 256 RSM, 64 samples, quarter-width/quarter-height GI,
-half-float output, and Babylon's default bilateral blur/upsampling.
+Defaults: 512 x 512 RSM, 128 samples, half-width/half-height GI,
+half-float output, and Babylon's quality bilateral blur/upsampling.
+Quality filter radii are 3 for blur and 2 for upsampling. These use 49 and
+25 taps respectively, which bounds the extra filtering cost.
+Sample intensity is 0.05 instead of 0.1 because Babylon sums samples without
+normalizing their count. Doubling samples should not double GI brightness.
 The capture materials follow the existing normal, roughness, and metallic controls.
 
 This is an approximate single sunlight bounce. It does not calculate multiple
@@ -83,6 +87,9 @@ change adds no artificial lights.
 
 ### Performance
 
+The following table records the initial 256 x 256 / 64-sample / quarter-size
+implementation, before the apartment quality correction below.
+
 Existing stationary benchmark, default settings and starting cameras,
 699 x 920 pixels, Windows/Chrome 152/WebGL 2. Each run used 15 seconds of
 warm-up and 60 seconds of measurement. Values are milliseconds.
@@ -104,3 +111,22 @@ records base commit `f503235`; these measurements include the uncommitted GI wor
 The disposal check also reports pre-existing scene/shadow renderer buffer
 references outside GI ownership. It does not assert that all Babylon engine
 bookkeeping is empty after scene disposal.
+
+### Apartment quality correction
+
+Close views of the apartment walls and floor exposed coarse GI detail that
+the initial response tests did not detect. The revised defaults increase
+capture detail and GI resolution and use Babylon's two-dimensional filters.
+The existing 1024-pixel direct shadow map also produces stepped sunlight
+edges; those persist with baked lighting and are separate from GI filtering.
+Its resolution and filtering remain adjustable in Settings > Lighting > Shadows.
+
+The revised GI passed both scenes' GPU checks and all 40 Node tests.
+At 1280 x 720, apartment camera position (-10.5, 1.65, -5.8), rotation
+(0.3, 0.00059265, 0), sun azimuth 35 and elevation 25 degrees, a stationary
+15-second warm-up / 60-second measurement gave 4.306 ms median GPU time,
+5.478 ms GPU p95, 120.5 fps median, and 9.3 ms frame-interval p95.
+The original public GI at the same settings and camera measured 2.457 ms
+median GPU time, 5.173 ms GPU p95, 120.5 fps median, and 9.4 ms frame p95.
+The revised quality adds about 1.85 ms median GPU time in this view.
+This is one desktop measurement, not a mobile or long-duration performance guarantee.
