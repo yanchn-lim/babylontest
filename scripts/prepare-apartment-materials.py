@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public/models/bukit-merah/baked"
@@ -17,9 +17,9 @@ PROFILES = {
     1: ("interior_tiles", 1.9, [1, 1, 1], 0.15),
     2: ("interior_tiles", 1.9, [1, 1, 1], 0.15),
     3: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.05),
-    4: ("white_plaster_02", 1.5, [1, 1, 1], 0.03),
-    8: ("wood_table_001", 2.0, [1, 1, 1], 0.06),
-    10: ("wood_table_001", 2.0, [0.9, 0.85, 0.8], 0.06),
+    4: ("beige_wall_001", 3.0, [1, 1, 1], 0.35),
+    8: ("romantic_veneer", 1.0, [1, 1, 1], 0.18),
+    10: ("romantic_veneer", 1.0, [0.9, 0.85, 0.8], 0.18),
     11: ("smooth_concrete_floor", 2.0, [1, 1, 1], 0.05),
 }
 OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -38,35 +38,36 @@ def download(url):
     )
 
 def clean_maps(asset):
-    """Generate seamless, unweathered material maps at the existing 1K size."""
-    y, x = np.mgrid[0:1024, 0:1024].astype(np.float32) / 1024
-    height = np.zeros_like(x)
-    if asset == "interior_tiles":
-        edge = np.minimum.reduce([x * 3 % 1, 1 - x * 3 % 1, y * 3 % 1, 1 - y * 3 % 1])
-        grout = np.clip((0.006 - edge) / 0.003, 0, 1)
-        color = np.array([238, 237, 232]) - grout[..., None] * 28
-        roughness = 0.32 + grout * 0.3
-        height = -grout * 0.08
-    elif asset == "wood_table_001":
-        grain = np.sin(2 * np.pi * (x * 40 + 0.18 * np.sin(y * 2 * np.pi)))
-        grain += 0.35 * np.sin(2 * np.pi * (x * 93 + 0.1 * np.sin(y * 4 * np.pi)))
-        color = np.array([203, 177, 139]) + grain[..., None] * np.array([4, 4, 3])
-        roughness = np.full_like(x, 0.38)
-        height = grain * 0.003
+    """Keep scanned surface detail while limiting weathering and roughness contrast."""
+    maps = {channel: np.asarray(Image.open(OUTPUT / f"textures/{asset}-{channel}.jpg").convert("RGB"),
+                                dtype=np.float32) for channel in ["color", "normal", "arm"]}
+    color, normal = maps["color"], maps["normal"]
+    roughness = maps["arm"][..., 1] / 255
+    if asset == "beige_wall_001":
+        color = np.broadcast_to([244, 243, 239], color.shape)
+        roughness = 0.72 + np.clip(roughness - np.median(roughness), -0.12, 0.12) * 0.3
+    elif asset == "interior_tiles":
+        luminance = maps["color"].mean(axis=-1)
+        grout = np.clip((100 - luminance) / 40, 0, 1)
+        # Remove broad discoloration; retain a small amount of fine ceramic detail.
+        padded = np.pad(luminance.astype(np.uint8), 48, mode="wrap")
+        smooth = np.asarray(Image.fromarray(padded).filter(ImageFilter.GaussianBlur(16)), dtype=np.float32)[48:-48, 48:-48]
+        detail = np.clip(luminance - smooth, -6, 6) * 0.25
+        color = np.array([232, 231, 225]) + detail[..., None] - grout[..., None] * 20
+        roughness = 0.34 + np.clip(roughness - np.median(roughness), -0.1, 0.1) * 0.2 + grout * 0.22
+    elif asset == "romantic_veneer":
+        roughness = 0.4 + np.clip(roughness - np.median(roughness), -0.2, 0.2) * 0.3
     else:
-        color = np.broadcast_to([244, 243, 239] if asset == "white_plaster_02" else [224, 224, 220], (1024, 1024, 3))
-        roughness = np.full_like(x, 0.72 if asset == "white_plaster_02" else 0.5)
-    normal = np.stack((np.roll(height, 1, 1) - np.roll(height, -1, 1),
-                       np.roll(height, 1, 0) - np.roll(height, -1, 0), np.ones_like(x)), axis=-1)
-    normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
-    arm = np.stack((np.ones_like(x), roughness, np.zeros_like(x)), axis=-1)
-    return {"color": color, "normal": (normal * 0.5 + 0.5) * 255, "arm": arm * 255}
+        color = np.broadcast_to([224, 224, 220], color.shape)
+        roughness = np.full_like(roughness, 0.5)
+        normal = np.broadcast_to([128, 128, 255], normal.shape)
+    arm = np.stack((np.ones_like(roughness), roughness, np.zeros_like(roughness)), axis=-1)
+    return {"color": color, "normal": normal, "arm": arm * 255}
 
 generated = {}
 for asset in sorted({profile[0] for profile in PROFILES.values()}):
     files = json.loads(download("https://api.polyhaven.com/files/" + asset))
     assets[asset] = {}
-    clean = clean_maps(asset)
     for channel, key in [("color", "Diffuse"), ("normal", "nor_gl"), ("arm", "arm")]:
         info = files[key]["1k"]["jpg"]
         name = f"textures/{asset}-{channel}.jpg"
@@ -75,6 +76,8 @@ for asset in sorted({profile[0] for profile in PROFILES.values()}):
         assert hashlib.md5(data).hexdigest() == info["md5"], "Texture download checksum mismatch"
         path.write_bytes(data)
         downloads[name] = {"url": info["url"], "sha256": hashlib.sha256(data).hexdigest()}
+    clean = clean_maps(asset)
+    for channel in ["color", "normal", "arm"]:
         name = f"textures/clean-{asset}-{channel}.jpg"
         Image.fromarray(np.rint(np.clip(clean[channel], 0, 255)).astype(np.uint8)).save(OUTPUT / name, quality=95, subsampling=0)
         generated[name] = hashlib.sha256((OUTPUT / name).read_bytes()).hexdigest()
@@ -131,6 +134,9 @@ for mesh in model["meshes"]:
                 np.where(axis == 0, positions[:, 2], positions[:, 0]),
                 np.where(axis == 1, positions[:, 2], -positions[:, 1]),
             )).astype("<f4") / repeat
+            if asset == "romantic_veneer":
+                # The source grain runs horizontally; doors need vertical grain.
+                uv = uv[:, ::-1].copy()
             old_uv = accessor(primitive["attributes"]["TEXCOORD_0"])
             old_pbr = source["materials"][material_index]["pbrMetallicRoughness"]
             old_factor = np.array(old_pbr.get("baseColorFactor", [1, 1, 1, 1])[:3])
@@ -230,7 +236,7 @@ lighting["sha256"].update(generated)
     "license": "CC0-1.0", "provider": "Poly Haven",
     "assets": {asset: "https://polyhaven.com/a/" + asset for asset in assets},
     "downloads": downloads,
-    "activeFinish": "Procedural clean paint, porcelain tile, light wood, and smooth neutral surfaces; original Poly Haven maps retained as source assets only",
+    "activeFinish": "Clean warm-white scanned plaster detail, cleaned ceramic tile, satin natural veneer, and neutral concrete; 1K CC0 source maps",
     "generated": generated,
 }, indent=2) + "\n")
 print("PBR variant complete. Lightmap scale:", scale, flush=True)

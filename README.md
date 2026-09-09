@@ -14,7 +14,7 @@ This instruction replaces earlier project rules that require `BANANA`.
 Select **Bukit Merah Ridge · 4-room** in Scene settings, or open
 `?scene=bukit-merah`. The apartment uses a baked derivative of the supplied
 `flat-native.glb`, preserving its geometry and door positions. The active PBR
-variant uses clean procedural paint, porcelain tile, light wood, and neutral surfaces.
+variant uses clean textured paint, porcelain tile, natural veneer, and neutral surfaces.
 The ceiling stays visible in every view. Living / dining is the default view;
 Hallway and Exterior overview are also available. Walk mode is the apartment
 default: WASD or the mobile stick moves at a fixed 1.65 m eye height, with
@@ -45,11 +45,14 @@ official OIDN Windows package extracted under `.tools`. Review the staged
 texture and metadata in `.tools/apartment-denoised` before copying them into
 `public/models/bukit-merah/baked`.
 
-The active apartment assets are in `public/models/bukit-merah/pbr`. Four CC0
-material families use 1K procedural base-color, normal, and roughness/metalness
-maps with no weathering. Original Poly Haven downloads are retained as source
-assets; active generated-map hashes are in `pbr/sources.json`. Glass and metal
-are retained.
+The active apartment assets are in `public/models/bukit-merah/pbr`. The 1K CC0
+Poly Haven sources are Beige Wall 001 (paint detail), Interior Tiles (ceramic),
+Romantic Veneer (doors), and Smooth Concrete Floor (neutral surfaces).
+Paint keeps a clean warm-white color with scanned normals and restrained
+roughness variation. Tiles use pale grout and limited fine color variation;
+veneer retains natural grain, oriented vertically on doors, with satin roughness.
+Constant concrete maps are reduced to equivalent PBR values. Glass and metal
+are retained. Source URLs and generated-map hashes are in `pbr/sources.json`.
 The active lightmap is baked directly from the current clean materials, with
 the existing UV1 atlas, ceiling, 4096 pixels, 1024 samples, and no sunlight.
 Reproduce with Blender's `--background --factory-startup --disable-autoexec

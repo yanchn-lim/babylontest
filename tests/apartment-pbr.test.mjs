@@ -77,23 +77,30 @@ test("PBR files match their hashes and retain the denoised bake provenance", () 
 });
 
 
-test("constant finishes use equivalent linear color and roughness without normal maps", () => {
+test("clean scanned finishes retain detail while constant concrete stays optimized", () => {
   const linear = byte => { const value = byte / 255; return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4; };
-  for (const index of [0, 3, 4, 11]) {
+  for (const index of [0, 3, 11]) {
     const material = model.materials[index], pbr = material.pbrMetallicRoughness;
     assert.equal(pbr.baseColorTexture, undefined);
     assert.equal(pbr.metallicRoughnessTexture, undefined);
     assert.equal(material.normalTexture, undefined);
-    const expected = index === 4 ? [244, 243, 239] : [224, 225, 220];
-    expected.forEach((byte, channel) => assert.ok(Math.abs(pbr.baseColorFactor[channel] - linear(byte)) < 1e-6));
-    assert.ok(Math.abs(pbr.roughnessFactor - (index === 4 ? 184 : 127) / 255) < 1e-6);
+    [224, 225, 220].forEach((byte, channel) => assert.ok(Math.abs(pbr.baseColorFactor[channel] - linear(byte)) < 1e-6));
+    assert.ok(Math.abs(pbr.roughnessFactor - 127 / 255) < 1e-6);
   }
-  for (const index of [1, 2, 8, 10]) {
-    assert.ok(model.materials[index].pbrMetallicRoughness.baseColorTexture);
-    assert.ok(model.materials[index].normalTexture);
+  const paint = model.materials[4].pbrMetallicRoughness;
+  assert.equal(paint.baseColorTexture, undefined);
+  [244, 243, 239].forEach((byte, channel) => assert.ok(Math.abs(paint.baseColorFactor[channel] - linear(byte)) < 1e-6));
+  const families = { 1: "interior_tiles", 2: "interior_tiles", 4: "beige_wall_001", 8: "romantic_veneer", 10: "romantic_veneer" };
+  for (const [index, family] of Object.entries(families)) {
+    const material = model.materials[index], pbr = material.pbrMetallicRoughness;
+    for (const [info, channel] of [[material.normalTexture, "normal"], [pbr.metallicRoughnessTexture, "arm"]]) {
+      assert.ok(info);
+      assert.equal(model.images[model.textures[info.index].source].uri, `textures/clean-${family}-${channel}.jpg`);
+    }
+    if (Number(index) !== 4) assert.ok(pbr.baseColorTexture);
   }
-  for (const index of [8, 10]) {
-    assert.equal(model.materials[index].pbrMetallicRoughness.metallicRoughnessTexture, undefined);
-    assert.ok(Math.abs(model.materials[index].pbrMetallicRoughness.roughnessFactor - 97 / 255) < 1e-6);
-  }
+  assert.deepEqual(model.materials[10].pbrMetallicRoughness.baseColorFactor, [0.9, 0.85, 0.8, 1]);
+  const sources = JSON.parse(read("pbr/sources.json"));
+  assert.deepEqual(Object.keys(sources.assets).sort(), ["beige_wall_001", "interior_tiles", "romantic_veneer", "smooth_concrete_floor"]);
+  for (const [name, expected] of Object.entries(sources.generated)) assert.equal(hash(read("pbr/" + name)), expected);
 });
