@@ -77,6 +77,8 @@ for material in mesh.materials:
     for normal in material.node_tree.nodes:
         if normal.type == "NORMAL_MAP":
             normal.uv_map = uv0.name
+            if material.name.startswith("Paint |"):
+                normal.inputs["Strength"].default_value = 0
 
 print("REBAKE: Current materials, ceiling, existing UV1; 4096 pixels, 1024 samples", flush=True)
 bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT", "COLOR"}, uv_layer=uv1.name, use_clear=True)
@@ -84,6 +86,7 @@ pixels = np.empty(SIZE * SIZE * 4, dtype=np.float32)
 target.pixels.foreach_get(pixels)
 radiance = np.maximum(pixels.reshape(SIZE, SIZE, 4)[:, :, :3], 0)
 assert np.isfinite(radiance).all() and radiance.max() > 0
+np.save(OUTPUT / "indirect-linear.npy", np.flipud(radiance))
 scale = float(2 ** max(0, math.ceil(math.log2(float(radiance.max())))))
 encoded = np.flipud(np.rint(np.clip(radiance / scale, 0, 1) ** (1 / 2.2) * 255).astype(np.uint8))
 def chunk(kind, data):
@@ -95,7 +98,14 @@ metadata.pop("materialRetint", None)
 metadata.pop("denoising", None)
 metadata.update(blender=bpy.app.version_string, device=devices[0].name if devices else "CPU",
                 samples=SAMPLES, resolution=SIZE, lightmapScale=scale)
-metadata["currentMaterialBake"] = {"inputs": hashes, "preservedUVChannel": 1, "seed": 23}
+metadata["currentMaterialBake"] = {
+    "inputs": hashes, "preservedUVChannel": 1, "seed": 23,
+    "paintNormalDetail": "runtime only",
+    "linearIntermediate": {
+        "file": "indirect-linear.npy", "encoding": "linear float32 RGB, PNG row order",
+        "sha256": hashlib.sha256((OUTPUT / "indirect-linear.npy").read_bytes()).hexdigest(),
+    },
+}
 metadata["statistics"]["indirectPeak"] = float(radiance.max())
 metadata["statistics"]["indirectMean"] = float(radiance[radiance.max(axis=2) > 0].mean())
 metadata["statistics"]["skyMean"] = metadata["statistics"]["indirectMean"]

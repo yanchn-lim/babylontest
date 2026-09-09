@@ -69,6 +69,12 @@ test("PBR files match their hashes and retain the denoised bake provenance", () 
   assert.equal(lighting.samples, 1024);
   assert.equal(lighting.includesSunBounce, false);
   assert.equal(lighting.denoising.filter, "Open Image Denoise RTLightmap");
+  assert.equal(lighting.currentMaterialBake.paintNormalDetail, "runtime only");
+  assert.equal(lighting.denoising.inputEncoding, "linear float32 RGB");
+  assert.equal(lighting.denoising.paintResolutionScale, 0.25);
+  assert.equal(lighting.denoising.inputSha256, lighting.currentMaterialBake.linearIntermediate.sha256);
+  assert.match(lighting.denoising.inputSha256, /^[a-f0-9]{64}$/);
+  assert.equal(model.materials[4].normalTexture.scale, 0.35);
   assert.ok(lighting.lightmapScale > 0);
   const sources = JSON.parse(read("pbr/sources.json"));
   assert.equal(sources.license, "CC0-1.0");

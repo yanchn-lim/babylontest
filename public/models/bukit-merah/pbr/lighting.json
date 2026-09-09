@@ -30,16 +30,16 @@
     "nonzeroAoTexels": 4519881,
     "aoMean": 0.7320865392684937,
     "aoMinimum": 0.00013950893480796367,
-    "indirectPeak": 1.1764559745788574,
-    "indirectMean": 0.4457043409347534,
+    "indirectPeak": 1.1766705513000488,
+    "indirectMean": 0.44574564695358276,
     "sunIndirectMean": 0.0,
-    "skyMean": 0.4457043409347534
+    "skyMean": 0.44574564695358276
   },
   "ceilingIncluded": true,
   "sha256": {
     "Apartment.gltf": "c10b810b449afe2e48c337c2d3fbc6d711db4e35afcded6ec6c712af58b53f2e",
     "materials.bin": "441f1dc19264a8b0c98406180ea16a341428c064e54e48f183f91022cbe681e2",
-    "indirect.png": "9c6b96d1db28703d5529fdfd59d0336c786d60c475985091c82ca0e3f76338d4",
+    "indirect.png": "69c18f05174d87cef67d5c8616a9b4f04df75ac9aadb027a03bb929260f53df0",
     "../baked/ao.png": "747e5153e22f20e698196ef81ce2361b6eae2a2ba12d7c18c526ddf9896c5d28",
     "textures/beige_wall_001-color.jpg": "72104704d0b9bd3713c5f6238971252b63eccf6e61263059c674caa8f3d0fa6d",
     "textures/beige_wall_001-normal.jpg": "cec747be50f91da0693986080b6f59ef868d53cb2ab7d577982165ece63ed75e",
@@ -89,13 +89,21 @@
       "textures/clean-smooth_concrete_floor-normal.jpg": "b60b01b16dc15f51b5a976388a4e0ec2833dad9c4920238573cf42c1fe61d32c"
     },
     "preservedUVChannel": 1,
-    "seed": 23
+    "seed": 23,
+    "paintNormalDetail": "runtime only",
+    "linearIntermediate": {
+      "file": "indirect-linear.npy",
+      "encoding": "linear float32 RGB, PNG row order",
+      "sha256": "df80e7d7769a794d7fcfbdaeadf625a12012b9326d9092c8af2a44dd870a348d"
+    }
   },
   "denoising": {
     "filter": "Open Image Denoise RTLightmap",
     "colorSpace": "linear",
     "uvIslands": 973,
     "paddingPixels": 32,
-    "inputSha256": "c48a6367061f57ce785b3d93e15dce17f87b64645abef8b57a45396c39cc6c5e"
+    "inputSha256": "df80e7d7769a794d7fcfbdaeadf625a12012b9326d9092c8af2a44dd870a348d",
+    "inputEncoding": "linear float32 RGB",
+    "paintResolutionScale": 0.25
   }
 }

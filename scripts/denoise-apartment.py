@@ -20,7 +20,15 @@ assert "denoising" not in metadata, "Start from the original bake, not a denoise
 buffers = [(SOURCE / item["uri"]).read_bytes() for item in model["buffers"]]
 original = np.asarray(Image.open(INPUT / "indirect.png").convert("RGB"))
 height, width = original.shape[:2]
-linear = (original.astype(np.float32) / 255) ** 2.2 * metadata["lightmapScale"]
+if PBR_REBAKE:
+    intermediate = metadata["currentMaterialBake"]["linearIntermediate"]
+    linear_path = INPUT / "indirect-linear.npy"
+    assert hashlib.sha256(linear_path.read_bytes()).hexdigest() == intermediate["sha256"], "Linear bake hash mismatch"
+    linear = np.load(linear_path, allow_pickle=False)
+    assert linear.dtype == np.float32 and linear.shape == original.shape, "Invalid linear bake format"
+    assert np.isfinite(linear).all() and (linear >= 0).all(), "Invalid linear bake pixels"
+else:
+    linear = (original.astype(np.float32) / 255) ** 2.2 * metadata["lightmapScale"]
 
 def accessor(index):
     item = model["accessors"][index]
@@ -32,6 +40,12 @@ def accessor(index):
         offset=view.get("byteOffset", 0) + item.get("byteOffset", 0),
         strides=(view.get("byteStride", columns * dtype.itemsize), dtype.itemsize),
     )
+
+paint_uvs = set()
+for mesh in model["meshes"]:
+    for primitive in mesh["primitives"]:
+        if model["materials"][primitive["material"]]["name"].startswith("Paint |"):
+            paint_uvs.update(map(tuple, accessor(primitive["attributes"]["TEXCOORD_1"])))
 
 triangles = []
 for mesh in model["meshes"]:
@@ -58,6 +72,8 @@ groups = {}
 for index, triangle in enumerate(triangles):
     groups.setdefault(root(index), []).append(triangle)
 
+paint_islands = {label for label, group in enumerate(groups.values(), 1)
+                 if any(tuple(vertex) in paint_uvs for triangle in group for vertex in triangle)}
 owners = np.zeros((height, width), dtype=np.int32)
 for label, group in enumerate(groups.values(), 1):
     for triangle in group:
@@ -114,6 +130,12 @@ def nearest(indices, count):
     return np.where(abs(indices[left] - positions) <= abs(indices[right] - positions),
                     indices[left], indices[right])
 
+def resize_linear(pixels, dimensions):
+    return np.ascontiguousarray(np.stack([
+        np.asarray(Image.fromarray(pixels[..., channel]).resize(dimensions, Image.Resampling.BILINEAR))
+        for channel in range(3)
+    ], axis=-1))
+
 check()
 result = linear.copy()
 for label in range(1, len(groups) + 1):
@@ -128,6 +150,9 @@ for label in range(1, len(groups) + 1):
         filled[row] = filled[row, nearest(np.flatnonzero(mask[row]), filled.shape[1])]
     filled = filled[nearest(rows, filled.shape[0])]
     color = np.ascontiguousarray(np.pad(filled, ((32, 32), (32, 32), (0, 0)), mode="edge"))
+    original_size = (color.shape[1], color.shape[0])
+    if PBR_REBAKE and label in paint_islands:
+        color = resize_linear(color, tuple(max(1, (side + 3) // 4) for side in original_size))
     output = np.empty_like(color)
     filter_handle = new_filter(device, b"RTLightmap")
     for name, array in [(b"color", color), (b"output", output)]:
@@ -138,6 +163,8 @@ for label in range(1, len(groups) + 1):
     execute(filter_handle)
     check()
     release(filter_handle)
+    if PBR_REBAKE and label in paint_islands:
+        output = resize_linear(output, original_size)
     assert np.isfinite(output).all(), "Denoiser returned invalid pixels"
     result[y0:y1, x0:x1][mask] = np.maximum(output[32:-32, 32:-32][mask], 0)
     if label % 50 == 0:
@@ -160,7 +187,9 @@ metadata["denoising"] = {
     "colorSpace": "linear",
     "uvIslands": len(groups),
     "paddingPixels": 32,
-    "inputSha256": metadata["sha256"]["indirect.png"],
+    "inputSha256": intermediate["sha256"] if PBR_REBAKE else metadata["sha256"]["indirect.png"],
+    "inputEncoding": "linear float32 RGB" if PBR_REBAKE else "gamma2.2 RGB8",
+    "paintResolutionScale": 0.25 if PBR_REBAKE else 1.0,
 }
 metadata["sha256"]["indirect.png"] = hashlib.sha256((OUTPUT / "indirect.png").read_bytes()).hexdigest()
 (OUTPUT / "lighting.json").write_text(json.dumps(metadata, indent=2) + "\n")

@@ -11,6 +11,8 @@ This instruction replaces earlier project rules that require `BANANA`.
 
 ## Apartment scene
 
+See the [apartment lighting workflow](docs/lighting-workflow.md) for the current bake, denoise, and runtime lighting process.
+
 Select **Bukit Merah Ridge · 4-room** in Scene settings, or open
 `?scene=bukit-merah`. The apartment uses a baked derivative of the supplied
 `flat-native.glb`, preserving its geometry and door positions. The active PBR
@@ -60,6 +62,8 @@ Reproduce with Blender's `--background --factory-startup --disable-autoexec
 `python scripts/denoise-apartment.py --pbr-rebake`.
 Review `.tools/apartment-pbr-denoised`, then copy `indirect.png` and `lighting.json`
 to `public/models/bukit-merah/pbr`. Geometry, UVs, and AO are not regenerated.
+The bake retains a linear float intermediate for denoising before final PNG encoding.
+Paint normal detail stays in the runtime material and is excluded from the bake.
 If materials are regenerated with `python scripts/prepare-apartment-materials.py`,
 rerun this bake and denoise workflow afterward; that generator produces only an
 approximate recolored lightmap.

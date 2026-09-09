@@ -1,6 +1,6 @@
 export const balancedLighting: Record<string, string> = {
   "sun-intensity": "3", "environment-intensity": "0.65", "environment-diffuse": "0.65",
-  "baked-intensity": "1", "ao-strength": "1", exposure: "1.9", contrast: "1",
+  "baked-intensity": "0.65", "ao-strength": "1", exposure: "1.9", contrast: "1",
 };
 
 export const graphicsDefaults: Record<string, string | boolean> = {
