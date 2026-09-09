@@ -64,6 +64,13 @@ If materials are regenerated with `python scripts/prepare-apartment-materials.py
 rerun this bake and denoise workflow afterward; that generator produces only an
 approximate recolored lightmap.
 
+
+Settings > Sun & lighting exposes diffuse environment fill, baked light strength,
+and ambient occlusion strength. Apply balanced lighting restores the lighting preset
+without changing graphics quality or sun direction. Saved custom settings remain
+active until the preset is selected. These controls do not rebuild the render graph
+or modify baked assets.
+
 ## Windows setup
 
 Run in PowerShell:

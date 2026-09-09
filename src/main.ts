@@ -92,13 +92,17 @@ async function start() {
   const environment = CubeTexture.CreateFromPrefilteredData(
     import.meta.env.BASE_URL + "environments/environmentSpecular.dds", activeScene,
   );
-  // Both scenes have baked skylight; retain a reduced diffuse environment fill.
-  environment.onLoadObservable.addOnce(() => {
-    const polynomial = environment.sphericalPolynomial;
-    if (!polynomial) return;
-    const harmonics = SphericalHarmonics.FromPolynomial(polynomial);
-    harmonics.scaleInPlace(0.35);
+  // Always scale the original coefficients, so slider edits do not accumulate.
+  let environmentPolynomial: SphericalPolynomial | null = null;
+  function updateEnvironmentDiffuse(value: number) {
+    environmentPolynomial ??= environment.sphericalPolynomial;
+    if (!environmentPolynomial) return;
+    const harmonics = SphericalHarmonics.FromPolynomial(environmentPolynomial);
+    harmonics.scaleInPlace(value);
     environment.sphericalPolynomial = SphericalPolynomial.FromHarmonics(harmonics);
+  }
+  environment.onLoadObservable.addOnce(() => {
+    updateEnvironmentDiffuse(Number(document.querySelector<HTMLInputElement>("#environment-diffuse")!.value));
   });
   activeScene.environmentTexture = environment;
   activeScene.environmentIntensity = Number(document.querySelector<HTMLInputElement>("#environment-intensity")!.value);
@@ -486,6 +490,13 @@ async function start() {
   }
   bindSlider("sun-intensity", 1, value => { sun.intensity = value; });
   bindSlider("environment-intensity", 2, value => { activeScene.environmentIntensity = value; });
+  bindSlider("environment-diffuse", 2, updateEnvironmentDiffuse);
+  bindSlider("baked-intensity", 2, value => { indirect.level = lighting.lightmapScale * value; });
+  bindSlider("ao-strength", 2, value => {
+    for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
+      if (material instanceof PBRMaterial) material.ambientTextureStrength = value;
+    }
+  });
   bindSlider("shaft-strength", 2, value => { shafts.lightPower = new Color3(value, value, value); });
   bindSlider("bloom-strength", 2, value => { bloom.bloom.weight = value; });
   bindSlider("contrast", 2, value => { activeScene.imageProcessingConfiguration.contrast = value; });
@@ -515,6 +526,7 @@ async function start() {
     } finally { inspector.disabled = false; }
   });
   document.querySelector<HTMLButtonElement>("#reset-graphics")!.addEventListener("click", () => preferences.reset());
+  document.querySelector<HTMLButtonElement>("#balance-lighting")!.addEventListener("click", () => preferences.balanceLighting());
   document.querySelector<HTMLOutputElement>("#shadow-softness-value")!.value = Number(shadowSoftness.value).toFixed(3);
   document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
   resetView();
@@ -523,6 +535,7 @@ async function start() {
   await graphBuild.catch(fail);
   await firstBuildReady;
   await activeScene.whenReadyAsync();
+  updateEnvironmentDiffuse(Number(document.querySelector<HTMLInputElement>("#environment-diffuse")!.value));
   shadowCache.invalidate();
   const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, preferences.snapshot,
     () => frameGraph.pausedExecution || graphFailed,

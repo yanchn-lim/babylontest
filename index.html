@@ -46,6 +46,11 @@
             <label>Sun elevation <output id="sun-elevation-value">58.6</output><input id="sun-elevation" type="range" min="5" max="85" step="0.1" value="58.6"></label>
             <label>Sun brightness <output id="sun-intensity-value">3.0</output><input id="sun-intensity" type="range" min="0" max="6" step="0.1" value="3"></label>
             <label>Environment brightness <output id="environment-intensity-value">0.65</output><input id="environment-intensity" type="range" min="0" max="2" step="0.05" value="0.65"></label>
+            <label>Diffuse environment fill <output id="environment-diffuse-value">0.65</output><input id="environment-diffuse" type="range" min="0" max="1" step="0.05" value="0.65"></label>
+            <label>Baked light strength <output id="baked-intensity-value">1.00</output><input id="baked-intensity" type="range" min="0" max="2" step="0.05" value="1"></label>
+            <label>Ambient occlusion strength <output id="ao-strength-value">1.00</output><input id="ao-strength" type="range" min="0" max="1" step="0.05" value="1"></label>
+            <button id="balance-lighting" type="button">Apply balanced lighting</button>
+            <p class="help">Environment brightness affects reflections and diffuse fill. Diffuse fill adds light without changing reflections. Baked light: 1 is the original bake. Ambient occlusion controls baked crevice shading; it does not change sun shadows. Balanced lighting also sets exposure and contrast, while preserving sun direction and graphics quality.</p>
             <label class="toggle"><input id="shafts" type="checkbox" checked>Sun shafts</label>
             <label>Shaft strength <output id="shaft-strength-value">0.10</output><input id="shaft-strength" type="range" min="0" max="0.4" step="0.01" value="0.1"></label>
             <label>Shaft scattering <output id="shaft-scattering-value">0.05</output><input id="shaft-scattering" type="range" min="-0.8" max="0.8" step="0.01" value="0.05"></label>
@@ -57,7 +62,7 @@
           <summary>Image &amp; performance</summary>
           <div class="group-body">
             <label>Render scale<select id="scale"><option value="1">100% · native pixels</option><option value="0.75">75%</option><option value="0.5">50%</option></select></label>
-            <label>Exposure <output id="exposure-value">2.0</output><input id="exposure" type="range" min="0.2" max="2.5" step="0.1" value="2"></label>
+            <label>Exposure <output id="exposure-value">1.9</output><input id="exposure" type="range" min="0.2" max="2.5" step="0.1" value="1.9"></label>
             <label>Contrast <output id="contrast-value">1.00</output><input id="contrast" type="range" min="0.5" max="2" step="0.05" value="1"></label>
             <label class="toggle"><input id="bloom-enabled" type="checkbox" checked>Bloom</label>
             <label>Bloom strength <output id="bloom-strength-value">0.12</output><input id="bloom-strength" type="range" min="0" max="0.5" step="0.01" value="0.12"></label>
