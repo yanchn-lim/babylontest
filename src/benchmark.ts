@@ -1,3 +1,4 @@
+import { daylightAt } from "./day-night";
 import { EngineInstrumentation } from "@babylonjs/core";
 import type { Engine, Scene, UniversalCamera } from "@babylonjs/core";
 import { BenchmarkRun, summarizeFrames } from "./performance";
@@ -32,7 +33,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   let distance = 0;
   let previousPosition = camera.position.clone();
   let previousRotation = camera.rotation.clone();
-  let sunTrace: { elapsedMs: number; azimuth: string; elevation: string }[] = [];
+  let sunTrace: { elapsedMs: number; azimuth: string; elevation: string; timeOfDay?: string }[] = [];
   const dimensions = () => [engine.getRenderWidth(), engine.getRenderHeight()];
   const cameraState = () => ({ position: camera.position.asArray(), rotation: camera.rotation.asArray() });
   const navigation = document.querySelector<HTMLSelectElement>("#navigation")!;
@@ -124,12 +125,13 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   const changed = (event: Event) => {
     if (!run || !(event.target instanceof HTMLElement)) return;
     const id = event.target.id;
-    if (id === "sun-azimuth" || id === "sun-elevation") {
+    if (id === "sun-azimuth" || id === "sun-elevation" || id === "day-time") {
       if (mode.value !== "moving-sun") { finish("Sun moved during a static-sun run."); return; }
       const snapshot = settings();
       if (JSON.stringify(snapshot) === initialSettings) return;
+      const daylight = snapshot["day-cycle"] ? daylightAt(Number(snapshot["day-time"])) : null;
       sunTrace.push({ elapsedMs: performance.now() - run.started,
-        azimuth: String(snapshot["sun-azimuth"]), elevation: String(snapshot["sun-elevation"]) });
+        azimuth: String(daylight?.azimuth ?? snapshot["sun-azimuth"]), elevation: String(daylight?.elevation ?? snapshot["sun-elevation"]), timeOfDay: String(snapshot["day-time"]) });
       sunChanges++;
       initialSettings = JSON.stringify(snapshot);
       return;

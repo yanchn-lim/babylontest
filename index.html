@@ -58,6 +58,20 @@
 <p>Balance sunlight, baked illumination and surface shadows.</p>
 </div>
 <details class="settings-group" open>
+<summary>Day / night</summary>
+<div class="group-body">
+<label class="toggle"><input id="day-cycle" type="checkbox">Use time of day</label>
+<p id="day-phase" class="help">Manual sun direction</p>
+<label>Time of day <output id="day-time-value">14:00</output><input aria-label="Time of day" id="day-time" type="range" min="0" max="23.999" step="0.001" value="14"></label>
+<div class="day-presets" role="group" aria-label="Time shortcuts">
+<button type="button" data-hour="6.5">Dawn</button><button type="button" data-hour="12">Noon</button><button type="button" data-hour="17.7">Sunset</button><button type="button" data-hour="0">Night</button>
+</div>
+<label>Full day duration <output id="day-length-value">5 min</output><input aria-label="Full day duration" id="day-length" type="range" min="1" max="30" step="1" value="5"></label>
+<button id="day-play" type="button" aria-pressed="false">Play cycle</button>
+<p class="help">Time controls sun direction and warmth. Brightness sliders set daytime levels; the cycle fades sky, baked light, reflections and shafts at night. Playback starts paused on reload. This is an artistic path, not a geographic solar clock.</p>
+</div>
+</details>
+<details class="settings-group" open>
 <summary>Sunlight</summary>
 <div class="group-body">
 <label>Sun azimuth <output id="sun-azimuth-value">35</output>

@@ -110,3 +110,7 @@ output { color: #c8f4e6; font-family: ui-monospace, monospace; font-size: .75rem
   .panel-header { padding: 10px 16px; }
   .hud { max-width: 32vw; }
 }
+
+.day-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.day-presets button { padding: 8px 4px; }
+#day-play[aria-pressed=true] { background: #29433f; color: #c8f4e6; }

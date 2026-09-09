@@ -1,5 +1,5 @@
 import {
-  Color3, Color4, Constants, CubeTexture, DirectionalLight, Engine, FrameGraph,
+  Color3, Color4, Constants, VertexBuffer, CubeTexture, DirectionalLight, Engine, FrameGraph,
   FrameGraphClearTextureTask, FrameGraphObjectRendererTask, FrameGraphShadowGeneratorTask,
   FrameGraphLightingVolumeTask, FrameGraphVolumetricLightingTask,
   FrameGraphBloomTask, FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
@@ -12,6 +12,7 @@ import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
 import { attachFlyControls } from "./fly-controls";
 import { ShadowCache, createRebuildQueue } from "./performance";
+import { attachDayNight } from "./day-night";
 import { attachMaterialControls } from "./material-controls";
 import { attachGraphicsPreferences } from "./graphics-settings";
 import { attachBenchmark } from "./benchmark";
@@ -100,6 +101,8 @@ async function start() {
   scene = new Scene(engine);
   const activeEngine = engine;
   const activeScene = scene;
+  const dayNight = attachDayNight();
+  activeScene.onDisposeObservable.add(() => dayNight.dispose());
   activeScene.clearColor = new Color4(0.16, 0.20, 0.26, 1);
   const environment = CubeTexture.CreateFromPrefilteredData(
     import.meta.env.BASE_URL + "environments/environmentSpecular.dds", activeScene,
@@ -141,6 +144,8 @@ async function start() {
   skyMaterial.useSunPosition = true;
   skyMaterial.turbidity = 2;
   sky.material = skyMaterial;
+  const skyColors = new Float32Array(sky.getTotalVertices() * 4).fill(1);
+  sky.setVerticesData(VertexBuffer.ColorKind, skyColors, true);
 
   activeEngine.runRenderLoop(() => activeScene.render());
   const bakedUrl = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/pbr/" : "models/sponza/baked/");
@@ -274,8 +279,9 @@ async function start() {
     camera.setTarget(target);
   }
   function updateSunDirection() {
-    const azimuth = Number(sunAzimuth.value) * Math.PI / 180;
-    const elevation = Number(sunElevation.value) * Math.PI / 180;
+    const daylight = dayNight.sample();
+    const azimuth = (daylight?.azimuth ?? Number(sunAzimuth.value)) * Math.PI / 180;
+    const elevation = (daylight?.elevation ?? Number(sunElevation.value)) * Math.PI / 180;
     sun.direction.set(-Math.cos(elevation) * Math.cos(azimuth), -Math.sin(elevation), -Math.cos(elevation) * Math.sin(azimuth));
     sun.position.copyFrom(center.subtract(sun.direction.scale(Vector3.Distance(minimum, maximum))));
     skyMaterial.sunPosition.copyFrom(sun.direction).scaleInPlace(-1000);
@@ -444,7 +450,7 @@ async function start() {
   });
   function updateShadows() {
     const size = Number(shadows.value);
-    const enableShafts = shaftsEnabled.checked;
+    const enableShafts = shaftsEnabled.checked && (dayNight.sample()?.sun ?? 1) > 0;
 
     shadowFilter.disabled = !size || shadowMethod.value === "hard";
     shadowSoftness.disabled = !size || shadowMethod.value !== "pcss";
@@ -474,15 +480,17 @@ async function start() {
   }
   const casterStates = new Map<typeof meshes[number], string>();
   const sunUpdates = activeScene.onBeforeRenderObservable.add(() => {
+    dayNight.tick(performance.now(), frameGraph.pausedExecution);
     if (frameGraph.pausedExecution) return;
     const castersChanged = trackShadowCasters(meshes, casterStates);
     if (sunPending || castersChanged) {
       updateSunDirection();
+      applyDaylight();
       shadowCache.invalidate();
       sunPending = false;
       volumeDirty = true;
     }
-    shadowRevision = shadowCache.begin(Number(shadows.value) !== 0);
+    shadowRevision = shadowCache.begin(Number(shadows.value) !== 0 && (dayNight.sample()?.sun ?? 1) > 0);
     shadowTask.disabled = shadowRevision === null;
     const now = performance.now();
     // Wait for an in-flight readback and retain the newest requested direction.
@@ -493,6 +501,8 @@ async function start() {
     }
     volumeShadowTask.disabled = volume.disabled || !volume.lightingVolume.firstUpdate;
   });
+  document.querySelector("#day-time")!.addEventListener("input", moveSun);
+  document.querySelector("#day-cycle")!.addEventListener("change", moveSun);
   sunAzimuth.addEventListener("input", moveSun);
   sunElevation.addEventListener("input", moveSun);
   activeScene.onDisposeObservable.add(() => activeScene.onBeforeRenderObservable.remove(sunUpdates));
@@ -517,20 +527,39 @@ async function start() {
       output.value = Number(input.value).toFixed(digits);
     });
   }
-  bindSlider("sun-warmth", 2, value => { sun.diffuse = new Color3(1, 1 - value * 0.12, 1 - value * 0.25); sun.specular.copyFrom(sun.diffuse); });
+  function applyDaylight() {
+    const daylight = dayNight.sample();
+    const value = (id: string) => Number(document.querySelector<HTMLInputElement>("#" + id)!.value);
+    const warmth = daylight?.warmth ?? value("sun-warmth");
+    sun.diffuse.set(1, 1 - warmth * 0.12, 1 - warmth * 0.25);
+    sun.specular.copyFrom(sun.diffuse);
+    sun.intensity = value("sun-intensity") * (daylight?.sun ?? 1);
+    activeScene.environmentIntensity = value("environment-intensity") * (daylight?.ambient ?? 1);
+    indirect.level = lighting.lightmapScale * value("baked-intensity") * (daylight?.ambient ?? 1);
+    const strength = value("shaft-strength") * (daylight?.sun ?? 1);
+    shafts.lightPower.set(strength, strength, strength);
+    const skyStrength = daylight?.sky ?? 1;
+    for (let i = 0; i < skyColors.length; i += 4) {
+      skyColors[i] = skyColors[i + 1] = skyColors[i + 2] = skyStrength;
+    }
+    sky.updateVerticesData(VertexBuffer.ColorKind, skyColors);
+    const wantShafts = shaftsEnabled.checked && (daylight?.sun ?? 1) > 0;
+    if (wantShafts !== !volume.disabled) updateShadows();
+  }
+  bindSlider("sun-warmth", 2, applyDaylight);
   bindSlider("directional-strength", 2, value => { for (const plugin of directionalPlugins) plugin.strength = directionalControl.checked ? value : 0; });
   bindSlider("shadow-bias", 4, value => { shadowTask.bias = value; shadowCache.invalidate(); });
   bindSlider("shadow-normal-bias", 3, value => { shadowTask.normalBias = value; shadowCache.invalidate(); });
-  bindSlider("sun-intensity", 1, value => { sun.intensity = value; });
-  bindSlider("environment-intensity", 2, value => { activeScene.environmentIntensity = value; });
+  bindSlider("sun-intensity", 1, applyDaylight);
+  bindSlider("environment-intensity", 2, applyDaylight);
   bindSlider("environment-diffuse", 2, updateEnvironmentDiffuse);
-  bindSlider("baked-intensity", 2, value => { indirect.level = lighting.lightmapScale * value; });
+  bindSlider("baked-intensity", 2, applyDaylight);
   bindSlider("ao-strength", 2, value => {
     for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
       if (material instanceof PBRMaterial) material.ambientTextureStrength = value;
     }
   });
-  bindSlider("shaft-strength", 2, value => { shafts.lightPower = new Color3(value, value, value); });
+  bindSlider("shaft-strength", 2, applyDaylight);
   bindSlider("bloom-strength", 2, value => { bloom.bloom.weight = value; });
   bindSlider("contrast", 2, value => { activeScene.imageProcessingConfiguration.contrast = value; });
   bindSlider("bloom-threshold", 2, value => { bloom.bloom.threshold = value; });
@@ -570,7 +599,7 @@ async function start() {
   await activeScene.whenReadyAsync();
   updateEnvironmentDiffuse(Number(document.querySelector<HTMLInputElement>("#environment-diffuse")!.value));
   shadowCache.invalidate();
-  const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, () => ({ ...preferences.snapshot(), materials: materialControls.snapshot() }),
+  const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, () => ({ ...preferences.snapshot(), materials: materialControls.snapshot(), cyclePlaying: dayNight.playing }),
     () => frameGraph.pausedExecution || graphFailed,
     () => ({ rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
       shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,

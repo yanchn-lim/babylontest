@@ -271,3 +271,25 @@ scene, and graphics settings remain shared. Reset this material restores the sel
 material; Reset all graphics restores both graphics and the current scene's materials.
 Benchmark exports include material adjustments and stop if these change during a run.
 These controls use existing Babylon material/light properties and add no render passes.
+
+
+## Sun day/night cycle
+
+Open Settings > Lighting > Day / night. Enable Use time of day to scrub the clock,
+or choose Dawn, Noon, Sunset, or Night. Play cycle advances a full day in 1-30
+real minutes; Pause cycle holds the current lighting. Playback starts paused after
+reload. Time and duration are saved. Disable Use time of day to restore your manual
+sun direction and warmth; the saved manual values are retained.
+
+The artistic orbit has sunrise at 06:00, sunset at 18:00, and a 65-degree noon
+altitude. It is not location/date accurate. Babylon's existing directional light,
+SkyMaterial, shadow maps and shafts follow the cycle. Daytime brightness controls
+remain multipliers. Environment and baked skylight fade to 1.5% at night; direct
+sun and shafts turn off below the horizon. No moon, stars, room lights, or new
+sunlight bounce are simulated. The baked daytime illumination is faded, not rebaked.
+
+Sun updates are capped at ten per second during playback, without graph rebuilds
+or additional render passes. Paused daylight reuses the surface shadow map; night
+skips sun-shadow rendering and shafts. Moving sun costs more than a static sun,
+so compare performance on the target device. Use the Moving sun benchmark mode
+for playback; stationary/static-sun runs stop when cycle time changes.
