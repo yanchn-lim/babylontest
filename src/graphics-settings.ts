@@ -5,6 +5,7 @@ export const balancedLighting: Record<string, string> = {
 
 export const graphicsDefaults: Record<string, string | boolean> = {
   ...balancedLighting,
+  "directional-lightmaps": true,
   shadows: "1024", "shadow-method": "pcf", "shadow-filter": "low", "shadow-softness": "0.005",
   "sun-azimuth": "35", "sun-elevation": "58.6", shafts: true, "shaft-strength": "0.1",
   scale: "1", "bloom-enabled": true, "bloom-strength": "0.12", fxaa: true,

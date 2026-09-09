@@ -77,8 +77,7 @@ for material in mesh.materials:
     for normal in material.node_tree.nodes:
         if normal.type == "NORMAL_MAP":
             normal.uv_map = uv0.name
-            if material.name.startswith("Paint |"):
-                normal.inputs["Strength"].default_value = 0
+            normal.inputs["Strength"].default_value = 0
 
 print("REBAKE: Current materials, ceiling, existing UV1; 4096 pixels, 1024 samples", flush=True)
 bpy.ops.object.bake(type="DIFFUSE", pass_filter={"DIRECT", "INDIRECT", "COLOR"}, uv_layer=uv1.name, use_clear=True)
@@ -96,11 +95,14 @@ png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", SIZE, SIZE, 
 (OUTPUT / "indirect.png").write_bytes(png + chunk(b"IDAT", zlib.compress(rows, 6)) + chunk(b"IEND", b""))
 metadata.pop("materialRetint", None)
 metadata.pop("denoising", None)
+metadata.pop("directional", None)
+metadata["sha256"].pop("direction.png", None)
 metadata.update(blender=bpy.app.version_string, device=devices[0].name if devices else "CPU",
                 samples=SAMPLES, resolution=SIZE, lightmapScale=scale)
 metadata["currentMaterialBake"] = {
     "inputs": hashes, "preservedUVChannel": 1, "seed": 23,
     "paintNormalDetail": "runtime only",
+    "normalDetail": "runtime only",
     "linearIntermediate": {
         "file": "indirect-linear.npy", "encoding": "linear float32 RGB, PNG row order",
         "sha256": hashlib.sha256((OUTPUT / "indirect-linear.npy").read_bytes()).hexdigest(),

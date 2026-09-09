@@ -7,6 +7,7 @@ This guide describes the current Bukit Merah Ridge lighting. It uses the existin
 | Layer | Source | Purpose |
 | --- | --- | --- |
 | Baked diffuse skylight | Blender Cycles, stored in `indirect.png` | Soft interior illumination and light reflected between static surfaces |
+| Directional baked response | `direction.png` and a Babylon material plugin | Makes the baked diffuse light respond to material normals |
 | Ambient occlusion (AO) | Existing `baked/ao.png` | Extra shading where surfaces meet |
 | Direct sun and shadows | Babylon directional light and shadow map | Movable sunlight with realtime surface shadows |
 | Environment lighting | Prefiltered environment texture | Reflections and adjustable diffuse fill |
@@ -22,12 +23,14 @@ The visible sky shader is separate from the uniform sky used for baking. Changin
 - [Current model and materials](../public/models/bukit-merah/pbr/Apartment.gltf)
 - [Bake settings, input hashes, and lightmap metadata](../public/models/bukit-merah/pbr/lighting.json)
 - [Current-material bake script](../scripts/rebake-apartment.py)
+- [Direction bake script](../scripts/bake-directional-lightmap.py)
+- [Directional material plugin](../src/directional-lightmap.ts)
 - [Denoise script](../scripts/denoise-apartment.py)
 - [Material generator](../scripts/prepare-apartment-materials.py)
 - [Babylon lighting setup](../src/main.ts)
 - [Lighting preset and saved preferences](../src/graphics-settings.ts)
 
-UV0 supplies material texture coordinates. UV1 supplies the existing baked-light and AO coordinates. Keep these channels intact. The workflow below updates only the active lightmap and its metadata; it leaves AO unchanged.
+UV0 supplies material texture coordinates. UV1 supplies the existing baked-light and AO coordinates. Keep these channels intact. The workflow below updates the lighting textures and their metadata; it leaves AO unchanged.
 
 ## 1. Prepare the current materials
 
@@ -47,7 +50,7 @@ Run commands from the repository root in PowerShell. The current Windows setup u
   --python scripts/rebake-apartment.py
 ```
 
-The script imports the current glTF into a temporary Blender scene. It joins meshes there for baking, but does not export that joined model. Material textures use UV0; the bake targets UV1. Paint normal detail is disabled only in this temporary bake scene, so the lightmap stores broad illumination rather than fixed paint microdetail. The runtime paint normal map remains unchanged.
+The script imports the current glTF into a temporary Blender scene. It joins meshes there for baking, but does not export that joined model. Material textures use UV0; the bake targets UV1. Normal-map detail is disabled only in this temporary bake scene, so the lightmap stores illumination for the unperturbed surface. Runtime normal maps remain unchanged. This avoids applying normal detail twice when directional lighting is enabled.
 
 | Setting | Current value |
 | --- | --- |
@@ -93,14 +96,34 @@ The denoiser verifies the float intermediate against its recorded hash, checks i
 
 Wait for `Denoising complete`. Review both staged files in `.tools/apartment-pbr-denoised/`. Do not denoise an already denoised lightmap; the script rejects metadata that already records a denoise pass.
 
-## 4. Publish the reviewed pair
+## 4. Bake lighting direction
 
-Keep a backup or Git revision of the active files. After checking the staged result, replace both files together:
+After denoising, run:
+
+```powershell
+& .\.tools\blender-4.5.3-windows-x64\blender.exe `
+  --background --factory-startup --disable-autoexec --python-exit-code 1 `
+  --python scripts/bake-directional-lightmap.py -- --rebaked
+```
+
+The `--rebaked` flag reads the staged denoised lighting. Without it, the script reads the active public lightmap, which is useful when regenerating direction alone.
+
+The script samples 1024 directions over the surface hemisphere at points spaced approximately 0.2 m apart. Rays that escape the model sample the same uniform sky as the base bake. Rays that hit opaque surfaces sample their existing baked diffuse radiance. Glass is treated as straight-through transmission, without tint or refraction. This is an approximate final gather from the existing bake, not a new full directional Cycles path trace.
+
+The luminance-weighted mean incoming direction is interpolated within each UV island and written to a 4096 x 4096 RGB PNG. Components are encoded as `0.5 + 0.5 * moment`, in glTF model coordinates. Unused pixels have a near-zero decoded vector. The script preserves the model and existing UVs.
+
+Output is staged in `.tools/apartment-directional/`. Its `lighting.json` records the direction texture hash and the exact color-lightmap hash it belongs to. Rebuilding the base bake clears old direction metadata; regenerate directions after changing baked lighting.
+
+## 5. Publish the reviewed assets
+
+Keep a backup or Git revision of the active files. After checking the staged result, replace all three files together:
 
 ```powershell
 Copy-Item -LiteralPath .tools/apartment-pbr-denoised/indirect.png `
   -Destination public/models/bukit-merah/pbr/indirect.png
-Copy-Item -LiteralPath .tools/apartment-pbr-denoised/lighting.json `
+Copy-Item -LiteralPath .tools/apartment-directional/direction.png `
+  -Destination public/models/bukit-merah/pbr/direction.png
+Copy-Item -LiteralPath .tools/apartment-directional/lighting.json `
   -Destination public/models/bukit-merah/pbr/lighting.json
 ```
 
@@ -114,9 +137,17 @@ npm run build
 npm run dev
 ```
 
-Open the local viewer with `?scene=bukit-merah`. Review the result before committing and deploying the two assets. After deployment, confirm the deployed revision and lightmap hash match the reviewed files.
+Open the local viewer with `?scene=bukit-merah`. Review the result before committing and deploying the assets. After deployment, confirm the deployed revision and lightmap hash match the reviewed files.
 
-## 5. Balance the lighting in Babylon
+## 6. Balance the lighting in Babylon
+
+**Directional baked lighting** is enabled by default for the apartment. Its toggle is saved with the other graphics settings. Sponza retains its original lightmap path.
+
+Babylon's standard PBR lightmap is additive. The material plugin adjusts that contribution using the ratio between the perturbed-normal and reference-normal cosine responses to the baked direction. It transforms directions with the mesh world matrix, preserving glTF handedness. The reference normal produces a multiplier of 1. Near-zero moments fall back to the original lightmap; grazing responses are bounded. Reflections still use Babylon's existing PBR environment path.
+
+This adds one texture lookup to normal-mapped materials and approximately 64 MiB of uncompressed GPU texture storage. Turning the toggle off bypasses the shader lookup but retains the texture in memory. Compare phone benchmarks at identical settings; this is not a guaranteed performance-neutral change.
+
+The approximation stores one incoming-light moment, not multiple colored lobes or directional specular lighting. It cannot generate new sunlight bounce. Subtle source normal maps still produce subtle detail.
 
 Start with **Settings > Sun & lighting > Apply balanced lighting**. Saved custom settings persist across reloads and scene changes, so new defaults do not overwrite them automatically.
 
@@ -151,3 +182,7 @@ The current atlas has narrow gutters. Baked texture mipmaps are disabled to avoi
 Changes to material color or baked sky lighting require a fresh bake for a matching result. Exposure, sun direction, and runtime strength adjustments do not. The baked result remains static and cannot reproduce changing sunlight bounce. This is the tradeoff that keeps the sun movable while retaining inexpensive interior lighting.
 
 Use the in-app benchmark on the actual iPhone after visual checks. Keep walking and moving-sun measurements separate. A successful build or a smooth desktop preview does not establish mobile performance.
+
+## Directional-lightmap verification
+
+`npm test` checks texture encoding and matching asset provenance. With the development server running, open `/tests/directional-lightmap.browser.html` for GPU checks of the actual material plugin. It checks a flat normal, a tilted normal, rotation, glTF reflection, neutral direction texels, and toggling back to the original lightmap.

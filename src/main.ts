@@ -14,6 +14,7 @@ import { attachFlyControls } from "./fly-controls";
 import { ShadowCache, createRebuildQueue } from "./performance";
 import { attachGraphicsPreferences } from "./graphics-settings";
 import { attachBenchmark } from "./benchmark";
+import { DirectionalLightmapPlugin } from "./directional-lightmap";
 import { BloomToneMappingTask } from "./bloom-tone-mapping";
 import { bindSurfaceShadow, trackShadowCasters } from "./shadow-binding";
 const preferences = attachGraphicsPreferences();
@@ -168,6 +169,26 @@ async function start() {
   ao.gammaSpace = false;
   indirect.gammaSpace = true;
   indirect.level = lighting.lightmapScale;
+  const directionalControl = document.querySelector<HTMLInputElement>("#directional-lightmaps")!;
+  document.querySelector<HTMLElement>("#directional-lightmaps-setting")!.hidden = !apartment;
+  let direction: Texture | undefined;
+  const directionalPlugins: DirectionalLightmapPlugin[] = [];
+  if (apartment && lighting.directional) {
+    if (lighting.directional.version !== 1 || lighting.directional.space !== "glTF model"
+      || lighting.directional.file !== "direction.png" || !/^[a-f0-9]{64}$/.test(lighting.sha256["direction.png"] ?? "")
+      || lighting.directional.referenceLightmapSha256 !== lighting.sha256["indirect.png"]) {
+      throw new Error("Directional lighting does not match the current lightmap.");
+    }
+    direction = new Texture(bakedUrl + "direction.png?v=" + lighting.sha256["direction.png"], activeScene, true, false,
+      Texture.BILINEAR_SAMPLINGMODE, undefined, message => fail(new Error(message ?? "Could not load directional lightmap.")));
+    direction.gammaSpace = false;
+    direction.coordinatesIndex = 1;
+    direction.wrapU = direction.wrapV = Texture.CLAMP_ADDRESSMODE;
+  }
+  directionalControl.disabled = !direction;
+  directionalControl.addEventListener("change", () => {
+    for (const plugin of directionalPlugins) plugin.strength = directionalControl.checked ? 1 : 0;
+  });
   for (const material of new Set(result.meshes.map(mesh => mesh.material))) {
     if (!(material instanceof PBRMaterial)) continue;
     material.ambientTexture = ao;
@@ -175,6 +196,11 @@ async function start() {
     material.ambientTextureImpactOnAnalyticalLights = 0;
     material.lightmapTexture = indirect;
     material.useLightmapAsShadowmap = false;
+    if (direction && material.bumpTexture) {
+      const plugin = new DirectionalLightmapPlugin(material, direction);
+      plugin.strength = directionalControl.checked ? 1 : 0;
+      directionalPlugins.push(plugin);
+    }
     material.needDepthPrePass = optimizedRenderer && !material.needAlphaBlending() && !material.needAlphaTesting();
   }
   const meshes = result.meshes.filter(mesh => mesh.getTotalVertices() > 0);

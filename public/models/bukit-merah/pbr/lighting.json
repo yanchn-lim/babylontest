@@ -31,15 +31,15 @@
     "aoMean": 0.7320865392684937,
     "aoMinimum": 0.00013950893480796367,
     "indirectPeak": 1.1766705513000488,
-    "indirectMean": 0.44574564695358276,
+    "indirectMean": 0.4457394778728485,
     "sunIndirectMean": 0.0,
-    "skyMean": 0.44574564695358276
+    "skyMean": 0.4457394778728485
   },
   "ceilingIncluded": true,
   "sha256": {
     "Apartment.gltf": "c10b810b449afe2e48c337c2d3fbc6d711db4e35afcded6ec6c712af58b53f2e",
     "materials.bin": "441f1dc19264a8b0c98406180ea16a341428c064e54e48f183f91022cbe681e2",
-    "indirect.png": "69c18f05174d87cef67d5c8616a9b4f04df75ac9aadb027a03bb929260f53df0",
+    "indirect.png": "ab70754bf4b8a9c37929aced43b388e7618f13bd176d55c3b3d8c8a81264f3e0",
     "../baked/ao.png": "747e5153e22f20e698196ef81ce2361b6eae2a2ba12d7c18c526ddf9896c5d28",
     "textures/beige_wall_001-color.jpg": "72104704d0b9bd3713c5f6238971252b63eccf6e61263059c674caa8f3d0fa6d",
     "textures/beige_wall_001-normal.jpg": "cec747be50f91da0693986080b6f59ef868d53cb2ab7d577982165ece63ed75e",
@@ -64,7 +64,8 @@
     "textures/clean-romantic_veneer-arm.jpg": "84a58775bc4a56c4b7a57f88548342d9fc5ba21662acf17e15fc45293a61cda1",
     "textures/clean-smooth_concrete_floor-color.jpg": "83fc3caf2c4923b7dc2bacea60086beb256d02c09194d82884b77e0c7c1dbe9f",
     "textures/clean-smooth_concrete_floor-normal.jpg": "b60b01b16dc15f51b5a976388a4e0ec2833dad9c4920238573cf42c1fe61d32c",
-    "textures/clean-smooth_concrete_floor-arm.jpg": "5a4dd7078b387419c372f797ce5c7781af95e0c68c04fa08d7d06b63e60c06ae"
+    "textures/clean-smooth_concrete_floor-arm.jpg": "5a4dd7078b387419c372f797ce5c7781af95e0c68c04fa08d7d06b63e60c06ae",
+    "direction.png": "c026ad2f0528a59adf0f7e8ebc9db4c3f3439fe1bd839f583a83e5ac4dbd0388"
   },
   "currentMaterialBake": {
     "inputs": {
@@ -91,10 +92,11 @@
     "preservedUVChannel": 1,
     "seed": 23,
     "paintNormalDetail": "runtime only",
+    "normalDetail": "runtime only",
     "linearIntermediate": {
       "file": "indirect-linear.npy",
       "encoding": "linear float32 RGB, PNG row order",
-      "sha256": "df80e7d7769a794d7fcfbdaeadf625a12012b9326d9092c8af2a44dd870a348d"
+      "sha256": "f689dac92b016dc85a7c51bed2c85446b94a1c7f4c357c0d9a0bff5eca4e1997"
     }
   },
   "denoising": {
@@ -102,8 +104,22 @@
     "colorSpace": "linear",
     "uvIslands": 973,
     "paddingPixels": 32,
-    "inputSha256": "df80e7d7769a794d7fcfbdaeadf625a12012b9326d9092c8af2a44dd870a348d",
+    "inputSha256": "f689dac92b016dc85a7c51bed2c85446b94a1c7f4c357c0d9a0bff5eca4e1997",
     "inputEncoding": "linear float32 RGB",
     "paintResolutionScale": 0.25
+  },
+  "directional": {
+    "version": 1,
+    "file": "direction.png",
+    "encoding": "RGB8 signed mean incoming direction",
+    "space": "glTF model",
+    "method": "uniform hemisphere final gather from baked diffuse radiance and sky",
+    "samples": 1024,
+    "probeSpacingMetres": 0.2,
+    "probes": 37646,
+    "resolution": 4096,
+    "referenceLightmapSha256": "ab70754bf4b8a9c37929aced43b388e7618f13bd176d55c3b3d8c8a81264f3e0",
+    "transparentSurfaces": "straight-through, no tint or refraction",
+    "includesSunBounce": false
   }
 }

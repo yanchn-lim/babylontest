@@ -63,7 +63,11 @@ Reproduce with Blender's `--background --factory-startup --disable-autoexec
 Review `.tools/apartment-pbr-denoised`, then copy `indirect.png` and `lighting.json`
 to `public/models/bukit-merah/pbr`. Geometry, UVs, and AO are not regenerated.
 The bake retains a linear float intermediate for denoising before final PNG encoding.
-Paint normal detail stays in the runtime material and is excluded from the bake.
+Normal detail stays in the runtime materials and is excluded from the bake.
+The apartment also uses a direction lightmap through Babylon's material-plugin API.
+Directional baked lighting in Sun & lighting lets you compare the normal response.
+After denoising, run `scripts/bake-directional-lightmap.py` in Blender with `-- --rebaked`,
+then publish its direction texture and metadata alongside the denoised color texture.
 If materials are regenerated with `python scripts/prepare-apartment-materials.py`,
 rerun this bake and denoise workflow afterward; that generator produces only an
 approximate recolored lightmap.
