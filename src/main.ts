@@ -551,7 +551,7 @@ async function start() {
     const daylight = dayNight.sample();
     const value = (id: string) => Number(document.querySelector<HTMLInputElement>("#" + id)!.value);
     const warmth = daylight?.warmth ?? value("sun-warmth");
-    sun.diffuse.set(1, 1 - warmth * 0.12, 1 - warmth * 0.25);
+    sun.diffuse.set(1, 1 - warmth * 0.45, 1 - warmth * 0.80);
     sun.specular.copyFrom(sun.diffuse);
     sun.intensity = value("sun-intensity") * (daylight?.sun ?? 1);
     activeScene.environmentIntensity = value("environment-intensity") * (daylight?.ambient ?? 1);
