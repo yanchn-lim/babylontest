@@ -27,9 +27,9 @@ arrangeSettings();
 
 const apartment = true;
 const optimizedRenderer = new URLSearchParams(location.search).get("renderer") !== "baseline";
-const sceneName = apartment ? "Bukit Merah Ridge Â· 4-room" : "Sponza";
+const sceneName = apartment ? "Bukit Merah Ridge · 4-room" : "Sponza";
 document.querySelector("h1")!.textContent = sceneName;
-document.title = sceneName + " Â· Babylon.js Lab";
+document.title = sceneName + " · Babylon.js Lab";
 const sourceLink = document.querySelector<HTMLAnchorElement>("#model-source")!;
 sourceLink.href = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/SOURCE.md" : "models/sponza/SOURCE.md");
 
@@ -271,11 +271,11 @@ async function start() {
     camera.checkCollisions = walking;
     document.querySelector<HTMLElement>(".height-controls")!.hidden = walking;
     document.querySelector<HTMLElement>(".desktop-hint")!.innerHTML = walking
-      ? "WASD / arrows: walk<br>Shift: faster Â· Drag: look Â· Esc: release mouse"
-      : "WASD / arrows: fly Â· E / Q: up / down<br>Shift: faster Â· Drag: look Â· Esc: release mouse";
+      ? "WASD / arrows: walk<br>Shift: faster · Drag: look · Esc: release mouse"
+      : "WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse";
     document.querySelector<HTMLElement>(".mobile-hint")!.innerHTML = walking
-      ? "Left stick: walk Â· Drag scene: look"
-      : "Left stick: fly Â· Drag scene: look<br>Hold Up / Down to change height.";
+      ? "Left stick: walk · Drag scene: look"
+      : "Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.";
     canvas.setAttribute("aria-label", walking
       ? "Apartment walking camera. Drag to look; use keyboard or touch controls to walk."
       : "Fly camera. Drag to look; use keyboard or touch controls to move.");
@@ -447,7 +447,7 @@ async function start() {
       resolveFirstBuild();
       retryGraphics.hidden = true;
       status.classList.remove("error");
-      status.textContent = "Ready Â· " + meshes.length + " meshes";
+      status.textContent = "Ready · " + meshes.length + " meshes";
       frameGraph.pausedExecution = false;
     } catch (error) {
       graphFailed = true;

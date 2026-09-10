@@ -37,15 +37,15 @@
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <div class="panel-header">
 <div>
-<span class="eyebrow">APARTMENT / DESIGN PREVIEW</span>
-<h2 id="settings-title">Scene settings</h2>
+<span class="eyebrow">BUKIT MERAH / INTERIOR STUDIO</span>
+<h2 id="settings-title">Design studio</h2>
 </div>
-<button id="close-settings" type="button" autofocus aria-label="Close settings">Close</button>
+<div class="panel-actions"><button id="expand-settings" type="button" aria-expanded="false" aria-controls="settings-dialog">Expand</button><button id="close-settings" type="button" autofocus aria-label="Close settings">Done</button></div>
 </div>
     <nav class="panel-nav" aria-label="Settings sections">
-<button type="button" data-section="lighting" aria-pressed="true">Lighting</button>
-<button type="button" data-section="fixtures" aria-pressed="false">Fixtures</button>
-<button type="button" data-section="materials" aria-pressed="false">Materials</button>
+<button type="button" data-section="lighting" aria-pressed="true">Daylight</button>
+<button type="button" data-section="fixtures" aria-pressed="false">Lights</button>
+<button type="button" data-section="materials" aria-pressed="false">Finishes</button>
 <button type="button" data-section="effects" aria-pressed="false">Image</button>
 <button type="button" data-section="quality" aria-pressed="false">Quality</button>
 <button type="button" data-section="scene" aria-pressed="false">Camera</button>
@@ -55,7 +55,7 @@
         <legend>Scene controls</legend>
 <section data-panel="lighting" aria-label="Shape the light">
 <div class="section-intro">
-<h3>Shape the light</h3>
+<h3>Daylight & ambience</h3>
 <p>Choose your lighting method, then shape the daylight.</p>
 </div>
 <details class="settings-group" open>
@@ -160,10 +160,10 @@
 </div>
         </details>
 </section>
-<section data-panel="fixtures" aria-label="Interior fixtures" hidden><div class="section-intro"><h3>Interior fixtures</h3><p>Place a light. Set its brightness, warmth, and direction.</p></div></section>
+<section data-panel="fixtures" aria-label="Interior fixtures" hidden><div class="section-intro"><h3>Interior lights</h3><p>Place a light. Set its brightness, warmth, and direction.</p></div></section>
 <section data-panel="materials" aria-label="Refine each surface" hidden>
 <div class="section-intro">
-<h3>Refine each surface</h3>
+<h3>Materials & finishes</h3>
 <p>Tune a material and see the result in the scene.</p>
 </div>
 <details class="settings-group" open>
@@ -236,7 +236,7 @@
 </section>
 <section data-panel="quality" aria-label="Set the rendering budget" hidden>
 <div class="section-intro">
-<h3>Set the rendering budget</h3>
+<h3>Rendering & performance</h3>
 <p>Compare quality and performance at a consistent resolution.</p>
 </div>
 <details class="settings-group" open>

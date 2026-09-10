@@ -1,15 +1,52 @@
 /** Move existing controls without replacing their values or event handlers. */
 export function arrangeSettings() {
-  const lighting=document.querySelector('[data-panel="lighting"]')!;
-  const card=document.createElement('div');card.className='lighting-method';
-  const heading=document.createElement('span');heading.className='eyebrow';heading.textContent='LIGHTING METHOD';
-  card.append(heading,document.getElementById('gi-mode')!.closest('label')!);
-  const hint=document.createElement('p');hint.className='help';hint.textContent='Baked is the reference. Probe GI responds to lighting edits and needs time to prepare.';card.append(hint);
+  const panel = (name: string) => document.querySelector<HTMLElement>(`[data-panel="${name}"]`)!;
+  function group(title: string, open = true) {
+    const details = document.createElement('details');
+    details.className = 'settings-group'; details.open = open;
+    const summary = document.createElement('summary'); summary.textContent = title;
+    const body = document.createElement('div'); body.className = 'group-body';
+    details.append(summary, body);
+    return { details, body };
+  }
+  const lighting = panel('lighting');
+  const card = document.createElement('div'); card.className = 'lighting-method';
+  const heading = document.createElement('span'); heading.className = 'eyebrow'; heading.textContent = 'INDIRECT LIGHTING';
+  const hint = document.createElement('p'); hint.className = 'help';
+  hint.textContent = 'Use baked lighting as a reference, or probe GI for changing sunlight and fixtures.';
+  card.append(heading, document.getElementById('gi-mode')!.closest('label')!, hint, document.getElementById('gi-status')!);
   lighting.querySelector('.section-intro')!.after(card);
-  document.querySelector('.panel-header')!.after(document.getElementById('gi-status')!);
-  const cycle=(document.getElementById('day-cycle') as HTMLInputElement).checked;
-  for(const group of Array.from(lighting.querySelectorAll('details')))group.open=group.querySelector(cycle?'#day-time':'#sun-azimuth')!==null;
-  const advanced=document.createElement('details');advanced.className='settings-group';advanced.id='probe-settings';advanced.innerHTML='<summary>Indirect lighting</summary><div class="group-body"></div>';lighting.append(advanced);
+  for (const details of Array.from(lighting.querySelectorAll('details'))) details.open = true;
+  const shadows = document.getElementById('shadows')!.closest('details')!;
+  shadows.open = false;
+  panel('quality').querySelector('details')!.after(shadows);
+  const advanced = group('Probe controls', false); advanced.details.id = 'probe-settings';
+  lighting.append(advanced.details);
+
+  const image = panel('effects').querySelector('details')!;
+  const tone = group('Camera response'), bloom = group('Bloom'), shafts = group('Sun shafts');
+  let destination = tone.body;
+  for (const child of Array.from(image.querySelector('.group-body')!.children)) {
+    if (child.querySelector('#bloom-enabled')) destination = bloom.body;
+    if (child.querySelector('#shafts')) destination = shafts.body;
+    destination.append(child);
+  }
+  image.replaceWith(tone.details, bloom.details, shafts.details);
+  panel('quality').querySelector('.group-body')!.prepend(document.querySelector('.stats')!);
+
+  const camera = panel('scene').querySelector('.group-body')!;
+  camera.append(document.getElementById('capture-mouse')!);
+  for (const hint of Array.from(document.querySelectorAll('.desktop-hint, .mobile-hint'))) camera.append(hint);
+  const session = group('Session', false);
+  session.body.append(document.getElementById('reset-graphics')!, document.querySelector('.save-note')!, document.getElementById('model-source')!);
+  panel('scene').append(session.details);
+  const dialog = document.getElementById('settings-dialog')!;
+  const expand = document.getElementById('expand-settings')!;
+  expand.addEventListener('click', () => {
+    const expanded = dialog.classList.toggle('expanded');
+    expand.setAttribute('aria-expanded', String(expanded));
+    expand.textContent = expanded ? 'Compact' : 'Expand';
+  });
 }
 
 export function arrangeFixtureSettings(panel:HTMLDetailsElement) {

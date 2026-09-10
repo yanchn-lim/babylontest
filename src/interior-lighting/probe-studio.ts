@@ -15,15 +15,15 @@ export function attachProbeLighting(scene:Scene,engine:Engine|WebGPUEngine,sun:D
   let gi:ProbeGI|undefined,pending:Promise<void>|undefined,disposed=false,error="",lastLighting="",lastMaterials="";
   const panel=document.createElement("details");panel.className="settings-group";panel.open=true;
   panel.innerHTML=`<summary>Interior lights &amp; probe GI</summary><div class="group-body">
-<p class="help">New surface-cache GI Ã‚Â· experimental: coverage gaps remain. Baked lighting is the reference.</p>
+<p class="help">New surface-cache GI · experimental: coverage gaps remain. Baked lighting is the reference.</p>
 <label>Fixture<select id="fixture"></select></label><div class="preset-actions"><button id="add-spot" type="button">Add downlight</button><button id="add-point" type="button">Add lamp</button><button id="remove-fixture" type="button">Remove selected</button></div>
 <label>State<select id="fixture-enabled"><option value="on">On</option><option value="off">Off</option></select></label>
 ${[["lumens","Output (lm, uncalibrated)",0,2000,10],["kelvin","Color temperature (K)",2000,10000,100],["beamDegrees","Beam angle",15,120,1],["x","Position X (m)",-15,15,.05],["y","Position Y (m)",.1,3,.05],["z","Position Z (m)",-15,15,.05],["pitch","Tilt from downward",0,180,1],["yaw","Rotation",-180,180,1]].map(([id,label,min,max,step])=>`<label>${label}<input id="fixture-${id}" type="number" min="${min}" max="${max}" step="${step}"></label>`).join("")}
 <label>Wall color<input id="probe-wall-color" type="color" value="#ffffff"></label>
-<label title="1Ãƒâ€” preserves calculated energy. Applies only to real-time GI.">Indirect light strength <output id="probe-strength-value">1.00Ãƒâ€”</output>
+<label title="1× preserves calculated energy. Applies only to real-time GI.">Indirect light strength <output id="probe-strength-value">1.00×</output>
 <input id="probe-strength" type="range" min="0" max="2" step="0.05" value="1"></label>
 <label>Inspect lighting<select id="probe-view"><option value="combined">Combined</option><option value="indirect">Indirect only</option></select></label>
-<label>GI refinement<select id="probe-quality"><option value="64">Balanced Ã‚Â· faster refinement</option><option value="32">Lower GPU load Ã‚Â· slower refinement</option></select></label><button id="probe-reset" type="button">Reset accumulated lighting</button></div>`;
+<label>GI refinement<select id="probe-quality"><option value="64">Balanced · faster refinement</option><option value="32">Lower GPU load · slower refinement</option></select></label><button id="probe-reset" type="button">Reset accumulated lighting</button></div>`;
   arrangeFixtureSettings(panel);
   const control=(id:string)=>document.getElementById(id) as HTMLInputElement;
   const listen=(id:string,fn:()=>void,event="input")=>control(id).addEventListener(event,()=>{try{fn();error="";}catch(e){error=String(e)}},{signal:abort.signal});
@@ -38,11 +38,11 @@ ${[["lumens","Output (lm, uncalibrated)",0,2000,10],["kelvin","Color temperature
   listen("remove-fixture",()=>{controller.removeFixture(control("fixture").value);list()},"click");listen("fixture",show,"change");
   for(const key of ["enabled","lumens","kelvin","beamDegrees","x","y","z","pitch","yaw"])listen("fixture-"+key,()=>{controller.updateFixture(control("fixture").value,{enabled:control("fixture-enabled").value==="on",lumens:+control("fixture-lumens").value,kelvin:+control("fixture-kelvin").value,beamDegrees:+control("fixture-beamDegrees").value,position:[+control("fixture-x").value,+control("fixture-y").value,+control("fixture-z").value],rotation:[+control("fixture-pitch").value,+control("fixture-yaw").value,0]})});
   const wall=materials.find(m=>m.name.includes("Paint"))??materials[0];control("probe-wall-color").value=wall.albedoColor.toGammaSpace().toHexString();listen("probe-wall-color",()=>{wall.albedoColor.copyFromFloats(...[1,3,5].map(i=>{const c=parseInt(control("probe-wall-color").value.slice(i,i+2),16)/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4}) as Vec3)});
-  listen("probe-strength",()=>{const value=+control("probe-strength").value;document.getElementById("probe-strength-value")!.textContent=value.toFixed(2)+"Ãƒâ€”";if(gi)gi.strength=value;});
+  listen("probe-strength",()=>{const value=+control("probe-strength").value;document.getElementById("probe-strength-value")!.textContent=value.toFixed(2)+"×";if(gi)gi.strength=value;});
   listen("probe-reset",()=>gi?.reset(),"click");listen("probe-quality",()=>{if(gi)gi.updates=+control("probe-quality").value});list();
   async function prepare(){
     if(!(engine instanceof WebGPUEngine))throw new Error("New probe GI requires WebGPU; baked lighting remains available.");
-    message.textContent="Preparing apartment probe texturesÃ¢â‚¬Â¦";
+    message.textContent="Preparing apartment probe textures…";
     const colors=await albedoLayers(materials);if(disposed)return;
     const triangles:Triangle[]=[],minimum=new Vector3(Infinity,Infinity,Infinity),maximum=new Vector3(-Infinity,-Infinity,-Infinity);
     for(const mesh of meshes){const p=mesh.getVerticesData("position")!,uv=mesh.getVerticesData("uv"),ix=mesh.getIndices()!,world=mesh.computeWorldMatrix(true),tm=(mesh.material as PBRMaterial).albedoTexture?.getTextureMatrix();const points:Vec3[]=[],coords:number[][]=[];
@@ -81,7 +81,7 @@ ${[["lumens","Output (lm, uncalibrated)",0,2000,10],["kelvin","Color temperature
   }
   async function select(){
     const baked=mode.value!=="realtime";setBaked(baked);if(gi)gi.enabled=!baked;
-    if(baked){message.textContent="Baked reference Ã‚Â· does not update for fixture or finish edits.";return;}
+    if(baked){message.textContent="Baked reference · does not update for fixture or finish edits.";return;}
     try{if(!gi){pending??=prepare();await pending;}if(disposed)return;if(gi)gi.enabled=mode.value==="realtime";}
     catch(e){error=String(e);mode.value="baked";setBaked(true);message.textContent=error;}
     finally{pending=undefined;}
@@ -94,7 +94,7 @@ ${[["lumens","Output (lm, uncalibrated)",0,2000,10],["kelvin","Color temperature
     if(gi){const state=JSON.stringify([sun.direction.asArray(),sun.intensity,sun.diffuse.asArray(),controller.fixtures]);if(state!==lastLighting){gi.setLights(sun.direction.scale(-1).normalize().asArray() as Vec3,sun.intensity,sun.diffuse.asArray() as Vec3,controller.fixtures);lastLighting=state;}
       const mat=JSON.stringify(materials.map(m=>[m.albedoColor.asArray(),m.metallic,m.roughness,m.alpha,m.needAlphaBlending()]));if(mat!==lastMaterials){gi.setMaterials(materials);lastMaterials=mat;}gi.enabled=mode.value==="realtime";gi.tick();
       controller.status={phase:gi.phase,preparationProgress:gi.preparationProgress,inactiveProbes:gi.inactiveProbes,converged:gi.progress===1,progress:gi.progress,gpuMs:gi.gpuMs,error:gi.error};
-      if(gi.enabled)message.textContent=error||gi.error||(gi.warmingFixtures?"Preparing light shadersâ€¦":gi.phase==="preparing"?`Preparing lighting Ã‚Â· ${Math.round(gi.preparationProgress*100)}%`:gi.phase==="refining"?`Lighting updating Ã‚Â· ${Math.round(gi.progress*100)}%`:`Lighting settled Ã‚Â· ${(gi.elapsedMs/1000).toFixed(2)} s Ã‚Â· experimental coverage gaps remain`);
+      if(gi.enabled)message.textContent=error||gi.error||(gi.warmingFixtures?"Preparing light shaders…":gi.phase==="preparing"?`Preparing lighting · ${Math.round(gi.preparationProgress*100)}%`:gi.phase==="refining"?`Lighting updating · ${Math.round(gi.progress*100)}%`:`Lighting settled · ${(gi.elapsedMs/1000).toFixed(2)} s · experimental coverage gaps remain`);
     }
     const indirect=mode.value==="realtime"&&control("probe-view").value==="indirect";
     if(indirect!==inspecting){for(const m of materials){if(indirect){saved.set(m,[m.directIntensity,m.specularIntensity,m.environmentIntensity]);m.directIntensity=m.specularIntensity=m.environmentIntensity=0;}else{const values=saved.get(m)!;[m.directIntensity,m.specularIntensity,m.environmentIntensity]=values;}}scene.getMeshByName("sky")?.setEnabled(!indirect);inspecting=indirect;}
