@@ -557,7 +557,7 @@ async function start() {
     activeScene.environmentIntensity = value("environment-intensity") * (daylight?.ambient ?? 1);
     indirect.level = lighting.lightmapScale * value("baked-intensity") * (daylight?.ambient ?? 1);
     const strength = value("shaft-strength") * (daylight?.sun ?? 1);
-    shafts.lightPower.set(strength, strength, strength);
+    shafts.lightPower = sun.diffuse.scale(strength);
     const skyStrength = daylight?.sky ?? 1;
     for (let i = 0; i < skyColors.length; i += 4) {
       skyColors[i] = skyColors[i + 1] = skyColors[i + 2] = skyStrength;
