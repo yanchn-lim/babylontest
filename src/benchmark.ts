@@ -1,11 +1,11 @@
 import { daylightAt } from "./day-night";
-import { EngineInstrumentation } from "@babylonjs/core";
-import type { Engine, Scene, UniversalCamera } from "@babylonjs/core";
+import { Engine, EngineInstrumentation } from "@babylonjs/core";
+import type { WebGPUEngine, Scene, UniversalCamera } from "@babylonjs/core";
 import { BenchmarkRun, summarizeFrames } from "./performance";
 import { timeGpuTask } from "./gpu-task-timer";
 import { createWalkingRoute, WALK_ROUTE } from "./benchmark-route";
 
-export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalCamera,
+export function attachBenchmark(engine: Engine | WebGPUEngine, scene: Scene, camera: UniversalCamera,
   settings: () => Record<string, unknown>, isPaused: () => boolean, diagnostics: () => Record<string, unknown>) {
   const start = document.querySelector<HTMLButtonElement>("#benchmark-start")!;
   const stop = document.querySelector<HTMLButtonElement>("#benchmark-stop")!;
@@ -16,13 +16,13 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
   const output = document.querySelector<HTMLTextAreaElement>("#benchmark-results")!;
   const dialog = document.querySelector<HTMLDialogElement>("#settings-dialog")!;
   const instrumentation = new EngineInstrumentation(engine);
-  const gpuSupported = !!engine.getCaps().timerQuery;
+  const gpuSupported = engine.isWebGPU || !!engine.getCaps().timerQuery;
   const abort = new AbortController();
   const options = { signal: abort.signal };
   let run: BenchmarkRun | undefined;
   const taskName = import.meta.env.DEV ? new URLSearchParams(location.search).get("gpu-task") : null;
   const task = scene.frameGraph?.tasks.find(task => task.name === taskName);
-  const taskTimer = task ? timeGpuTask(engine, task, () => !!run) : undefined;
+  const taskTimer = task && engine instanceof Engine ? timeGpuTask(engine, task, () => !!run) : undefined;
   const gpuCounter = taskTimer?.counter ?? instrumentation.gpuFrameTimeCounter;
   let metadata: Record<string, unknown> = {};
   let initialSettings = "";
@@ -70,7 +70,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
     output.value = JSON.stringify(result, null, 2);
     output.hidden = false;
     copy.disabled = false;
-    instrumentation.captureGPUFrameTime = false;
+    if (engine instanceof Engine) instrumentation.captureGPUFrameTime = false;
     run = undefined;
     start.disabled = false;
     stop.disabled = true;
@@ -104,7 +104,7 @@ export function attachBenchmark(engine: Engine, scene: Scene, camera: UniversalC
       walkingRoute: automatedWalk ? WALK_ROUTE : undefined,
       navigation: navigation.value,
       settings: snapshot, dimensions: dimensions(), devicePixelRatio: window.devicePixelRatio,
-      browser: navigator.userAgent, renderer: "WebGL " + engine.webGLVersion,
+      browser: navigator.userAgent, renderer: engine instanceof Engine ? "WebGL " + engine.webGLVersion : "WebGPU",
       cameraStart: cameraState(), diagnosticsStart: diagnostics(), warmupSeconds: 15, measurementSeconds: 60,
     };
     lastGpuCount = gpuCounter.count;

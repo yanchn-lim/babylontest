@@ -1,3 +1,4 @@
+import { imageProcessingPixelShaderWGSL } from "@babylonjs/core/ShadersWGSL/imageProcessing.fragment.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NullEngine, Scene, FrameGraph, FrameGraphBloomTask, Constants } from "@babylonjs/core";
@@ -71,4 +72,17 @@ test("fused bloom avoids allocating an unused full-resolution HDR output", async
     } finally { graph.dispose(); scene.dispose(); engine.dispose(); }
   }
   assert.equal(await allocation(false) - await allocation(true), width * height * 8);
+});
+
+test("WebGPU bloom is added before native image processing", () => {
+  const original = imageProcessingPixelShaderWGSL.shader;
+  const fused = addBloomToImageProcessing("fragment", original, true);
+  assert.ok(fused.includes("var bloomBlur: texture_2d<f32>;"));
+  assert.ok(fused.includes("uniform bloomWeight: f32;"));
+  assert.ok(fused.includes("if(uniforms.bloomWeight>0.)"));
+  assert.ok(fused.includes("result=vec4f(quantizeToF16(result.rgb+"));
+  assert.ok(fused.indexOf("result.rgb+textureSample(bloomBlur") < fused.indexOf("result=vec4f(max"));
+  assert.ok(fused.includes("result=applyImageProcessing(result);"));
+  assert.equal(addBloomToImageProcessing("vertex", original, true), original);
+  assert.throws(() => addBloomToImageProcessing("fragment", "changed shader", true), /needs review/);
 });

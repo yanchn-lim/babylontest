@@ -5,4 +5,5 @@ const revision = process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HE
 export default defineConfig({
   base: "./",
   define: { __APP_REVISION__: JSON.stringify(revision) },
+  build: { rollupOptions: { input: { main: "index.html", lighting: "lighting.html" } } },
 });

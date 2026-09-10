@@ -1,5 +1,5 @@
 import {
-  MaterialPluginBase, type PBRMaterial, type Texture, type BaseTexture,
+  MaterialPluginBase, ShaderLanguage, type PBRMaterial, type Texture, type BaseTexture,
   type UniformBuffer, type Scene, type AbstractEngine, type SubMesh,
 } from "@babylonjs/core";
 const directionalLightmapCode = `
@@ -28,19 +28,21 @@ export class DirectionalLightmapPlugin extends MaterialPluginBase {
     this.doNotSerialize = true;
   }
 
+  isCompatible() { return true; }
+
   getClassName() { return "DirectionalLightmapPlugin"; }
   isReadyForSubMesh() { return this.texture.isReady(); }
   getSamplers(samplers: string[]) { samplers.push("directionalLightmapSampler"); }
   getActiveTextures(textures: BaseTexture[]) { textures.push(this.texture); }
   hasTexture(texture: BaseTexture) { return texture === this.texture; }
 
-  getUniforms() {
+  getUniforms(language?: ShaderLanguage) {
     return {
       ubo: [
         { name: "directionalLightmapStrength", size: 1, type: "float" },
         { name: "directionalLightmapWorld", size: 16, type: "mat4" },
       ],
-      fragment: `#ifndef UNIFORMBUFFERS
+      fragment: language === ShaderLanguage.WGSL ? "" : `#ifndef UNIFORMBUFFERS
         uniform float directionalLightmapStrength;
         uniform mat4 directionalLightmapWorld;
       #endif`,
@@ -53,8 +55,17 @@ export class DirectionalLightmapPlugin extends MaterialPluginBase {
     buffer.setTexture("directionalLightmapSampler", this.texture);
   }
 
-  getCustomCode(shaderType: string) {
+  getCustomCode(shaderType: string, language?: ShaderLanguage) {
     if (shaderType !== "fragment") return null;
+    if (language === ShaderLanguage.WGSL) return {
+      CUSTOM_FRAGMENT_DEFINITIONS: "var directionalLightmapSampler: texture_2d<f32>; var directionalLightmapSamplerSampler: sampler;",
+      CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: directionalLightmapCode
+        .replace(/vec3 /g, "var ").replace(/float /g, "var ")
+        .replace("texture2D(directionalLightmapSampler, vLightmapUV)", "textureSample(directionalLightmapSampler, directionalLightmapSamplerSampler, fragmentInputs.vLightmapUV)")
+        .replace(/directionalLightmapStrength/g, "uniforms.directionalLightmapStrength")
+        .replace(/directionalLightmapWorld/g, "uniforms.directionalLightmapWorld")
+        .replace("vec4(", "vec4f("),
+    };
     return {
       CUSTOM_FRAGMENT_DEFINITIONS: "uniform sampler2D directionalLightmapSampler;",
       CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: directionalLightmapCode,

@@ -37,17 +37,18 @@
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <div class="panel-header">
 <div>
-<span class="eyebrow">BABYLON / SCENE LAB</span>
-<h2 id="settings-title">Look studio</h2>
+<span class="eyebrow">APARTMENT / DESIGN PREVIEW</span>
+<h2 id="settings-title">Scene settings</h2>
 </div>
-<button id="close-settings" type="button" autofocus>Done</button>
+<button id="close-settings" type="button" autofocus aria-label="Close settings">Close</button>
 </div>
     <nav class="panel-nav" aria-label="Settings sections">
 <button type="button" data-section="lighting" aria-pressed="true">Lighting</button>
+<button type="button" data-section="fixtures" aria-pressed="false">Fixtures</button>
 <button type="button" data-section="materials" aria-pressed="false">Materials</button>
-<button type="button" data-section="effects" aria-pressed="false">Effects</button>
+<button type="button" data-section="effects" aria-pressed="false">Image</button>
 <button type="button" data-section="quality" aria-pressed="false">Quality</button>
-<button type="button" data-section="scene" aria-pressed="false">Scene</button>
+<button type="button" data-section="scene" aria-pressed="false">Camera</button>
 </nav>
     <div class="panel-body">
       <fieldset id="controls" disabled>
@@ -55,7 +56,7 @@
 <section data-panel="lighting" aria-label="Shape the light">
 <div class="section-intro">
 <h3>Shape the light</h3>
-<p>Balance sunlight, baked illumination and surface shadows.</p>
+<p>Choose your lighting method, then shape the daylight.</p>
 </div>
 <details class="settings-group" open>
 <summary>Day / night</summary>
@@ -101,7 +102,7 @@
 <label>Indirect lighting
 <select id="gi-mode" aria-describedby="gi-status">
 <option value="baked" selected>Baked</option>
-<option value="realtime">Real-time GI (experimental)</option>
+<option value="realtime">Real-time probe GI (experimental)</option>
 </select>
 </label>
 <p class="help" id="gi-status" role="status">Baked indirect lighting. No real-time GI rendering cost.</p>
@@ -159,6 +160,7 @@
 </div>
         </details>
 </section>
+<section data-panel="fixtures" aria-label="Interior fixtures" hidden><div class="section-intro"><h3>Interior fixtures</h3><p>Place a light. Set its brightness, warmth, and direction.</p></div></section>
 <section data-panel="materials" aria-label="Refine each surface" hidden>
 <div class="section-intro">
 <h3>Refine each surface</h3>
@@ -274,13 +276,12 @@
 <section data-panel="scene" aria-label="Explore the space" hidden>
 <div class="section-intro">
 <h3>Explore the space</h3>
-<p>Choose your scene and how you move through it.</p>
+<p>Choose how you move through the apartment.</p>
 </div>
 <details class="settings-group" open>
           <summary>Scene &amp; camera</summary>
           <div class="group-body">
             <label>Scene<select id="scene-select">
-<option value="sponza">Sponza</option>
 <option value="bukit-merah">Bukit Merah Ridge · 4-room</option>
 </select>
 </label>
@@ -293,7 +294,7 @@
         </details>
 </section>        <button id="reset-graphics" type="button">Reset all graphics</button>
       </fieldset>
-      <p class="save-note">Changes save automatically on this device.</p>
+      <p class="save-note">Graphics preferences save on this device. Fixtures are session-only.</p>
       <p class="hint desktop-hint">WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse</p>
       <p class="hint mobile-hint">Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.</p>
       <a id="model-source" href="%BASE_URL%models/sponza/SOURCE.md" target="_blank" rel="noreferrer">Model source and attribution ↗</a>

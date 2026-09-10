@@ -27,12 +27,13 @@ export function validPreference(control: Control, value: unknown): boolean {
 }
 
 export function attachGraphicsPreferences() {
+  const defaults = { ...graphicsDefaults };
   const controls = Object.keys(graphicsDefaults).map(id => document.getElementById(id) as Control);
   const snapshot = () => Object.fromEntries(controls.map(control =>
     [control.id, control.type === "checkbox" ? (control as HTMLInputElement).checked : control.value]));
-  function apply(values: Record<string, unknown>, notify: boolean) {
-    for (const control of controls) {
-      const value = validPreference(control, values[control.id]) ? values[control.id] : graphicsDefaults[control.id];
+  function apply(values: Record<string, unknown>, notify: boolean, targets: Control[] = controls) {
+    for (const control of targets) {
+      const value = validPreference(control, values[control.id]) ? values[control.id] : defaults[control.id];
       const previous = control.type === "checkbox" ? (control as HTMLInputElement).checked : control.value;
       if (control.type === "checkbox") (control as HTMLInputElement).checked = value as boolean;
       else control.value = value as string;
@@ -49,7 +50,16 @@ export function attachGraphicsPreferences() {
   for (const control of controls) control.addEventListener("change", save);
   return {
     snapshot,
-    reset() { apply(graphicsDefaults, true); save(); },
+    register(additions: Record<string, string | boolean>) {
+      const added = Object.keys(additions).map(id => document.getElementById(id) as Control);
+      if (added.some(control => !control || controls.some(existing => existing.id === control.id)))
+        throw new Error("Preference control is missing or already registered");
+      Object.assign(defaults, additions);
+      controls.push(...added);
+      apply(saved, true, added);
+      for (const control of added) control.addEventListener("change", save);
+    },
+    reset() { apply(defaults, true); save(); },
     balanceLighting() { apply({ ...snapshot(), ...balancedLighting }, true); save(); },
     dispose() { for (const control of controls) control.removeEventListener("change", save); },
   };

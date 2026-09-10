@@ -1,5 +1,6 @@
+import { enableTwoSidedShadows } from "./two-sided-shadows";
 import {
-  Color3, Color4, Constants, VertexBuffer, CubeTexture, DirectionalLight, Engine, FrameGraph,
+  Color3, Color4, Constants, WebGPUEngine, Mesh, VertexBuffer, CubeTexture, DirectionalLight, Engine, FrameGraph,
   FrameGraphClearTextureTask, FrameGraphObjectRendererTask, FrameGraphShadowGeneratorTask,
   FrameGraphLightingVolumeTask, FrameGraphVolumetricLightingTask,
   FrameGraphBloomTask, FrameGraphImageProcessingTask, FrameGraphFXAATask, backbufferColorTextureHandle, Matrix,
@@ -12,7 +13,7 @@ import "@babylonjs/core/Debug/debugLayer";
 import "./style.css";
 import { attachFlyControls } from "./fly-controls";
 import { ShadowCache, createRebuildQueue } from "./performance";
-import { attachRealtimeGI } from "./real-time-gi";
+import { attachProbeLighting } from "./interior-lighting/probe-studio";
 import { attachDayNight } from "./day-night";
 import { attachMaterialControls } from "./material-controls";
 import { attachGraphicsPreferences } from "./graphics-settings";
@@ -20,20 +21,15 @@ import { attachBenchmark } from "./benchmark";
 import { DirectionalLightmapPlugin } from "./directional-lightmap";
 import { BloomToneMappingTask } from "./bloom-tone-mapping";
 import { bindSurfaceShadow, trackShadowCasters } from "./shadow-binding";
+import { arrangeSettings } from "./settings-layout";
 const preferences = attachGraphicsPreferences();
+arrangeSettings();
 
-const apartment = new URLSearchParams(location.search).get("scene") === "bukit-merah";
+const apartment = true;
 const optimizedRenderer = new URLSearchParams(location.search).get("renderer") !== "baseline";
-const sceneSelect = document.querySelector<HTMLSelectElement>("#scene-select")!;
-sceneSelect.value = apartment ? "bukit-merah" : "sponza";
-sceneSelect.addEventListener("change", () => {
-  const url = new URL(location.href);
-  url.searchParams.set("scene", sceneSelect.value);
-  location.assign(url.href);
-});
-const sceneName = apartment ? "Bukit Merah Ridge · 4-room" : "Sponza";
+const sceneName = apartment ? "Bukit Merah Ridge Â· 4-room" : "Sponza";
 document.querySelector("h1")!.textContent = sceneName;
-document.title = sceneName + " · Babylon.js Lab";
+document.title = sceneName + " Â· Babylon.js Lab";
 const sourceLink = document.querySelector<HTMLAnchorElement>("#model-source")!;
 sourceLink.href = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/SOURCE.md" : "models/sponza/SOURCE.md");
 
@@ -55,8 +51,8 @@ document.querySelector<HTMLButtonElement>("#open-settings")!.addEventListener("c
   settingsDialog.show();
 });
 document.querySelector<HTMLButtonElement>("#close-settings")!.addEventListener("click", () => settingsDialog.close());
-settingsDialog.addEventListener("keydown", event => {
-  if (event.key === "Escape") { event.preventDefault(); settingsDialog.close(); }
+window.addEventListener("keydown", event => {
+  if (event.key === "Escape" && settingsDialog.open) { event.preventDefault(); settingsDialog.close(); }
 });
 settingsDialog.addEventListener("close", () => canvas.focus());
 for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-section]"))) {
@@ -73,7 +69,7 @@ const scale = document.querySelector<HTMLSelectElement>("#scale")!;
 const fxaa = document.querySelector<HTMLInputElement>("#fxaa")!;
 const inspector = document.querySelector<HTMLButtonElement>("#inspector")!;
 
-let engine: Engine | undefined;
+let engine: Engine | WebGPUEngine | undefined;
 let scene: Scene | undefined;
 let statistics: ReturnType<typeof setInterval> | undefined;
 
@@ -98,7 +94,13 @@ window.addEventListener("unhandledrejection", event => {
 });
 
 async function start() {
-  engine = new Engine(canvas, false, { stencil: true });
+  if (await WebGPUEngine.IsSupportedAsync) {
+    const gpu = new WebGPUEngine(canvas, { antialias: false, enableAllFeatures: true,
+      deviceDescriptor: { requiredLimits: { maxSampledTexturesPerShaderStage: 32 } } });
+    try { await gpu.initAsync(); engine = gpu; gpu.enableGPUTimingMeasurements = true; }
+    catch (error) { gpu.dispose(); console.warn("WebGPU unavailable; retaining baked WebGL renderer", error); }
+  }
+  engine ??= new Engine(canvas, false, { stencil: true });
   scene = new Scene(engine);
   const activeEngine = engine;
   const activeScene = scene;
@@ -173,11 +175,24 @@ async function start() {
     "", "", "data:" + JSON.stringify(model),
     activeScene, undefined, ".gltf",
   );
+  if (apartment) {
+    for (const mesh of result.meshes) {
+      if (!["Bare floor | neutral screed", "Wet area | neutral porcelain"].includes(mesh.material?.name ?? "")) continue;
+      const uv = mesh.getVerticesData(VertexBuffer.UVKind);
+      if (!uv) continue;
+      for (let i = 0; i < uv.length; i += 2) {
+        const u = uv[i], v = uv[i + 1];
+        uv[i] = (u - v) * Math.SQRT1_2;
+        uv[i + 1] = (u + v) * Math.SQRT1_2;
+      }
+      mesh.setVerticesData(VertexBuffer.UVKind, uv);
+    }
+  }
   // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
   const aoUrl = new URL(apartment ? "../baked/ao.png" : "ao.png", new URL(bakedUrl, document.baseURI));
   const ao = new Texture(aoUrl.href, activeScene, {
     noMipmap: true, invertY: false,
-    format: optimizedRenderer && activeEngine.webGLVersion > 1 ? Constants.TEXTUREFORMAT_RED : Constants.TEXTUREFORMAT_RGBA,
+    format: optimizedRenderer && (activeEngine instanceof WebGPUEngine || activeEngine.webGLVersion > 1) ? Constants.TEXTUREFORMAT_RED : Constants.TEXTUREFORMAT_RGBA,
   });
   const indirect = new Texture(bakedUrl + "indirect.png?v=" + lighting.sha256["indirect.png"], activeScene, true, false);
   for (const texture of [ao, indirect]) {
@@ -256,11 +271,11 @@ async function start() {
     camera.checkCollisions = walking;
     document.querySelector<HTMLElement>(".height-controls")!.hidden = walking;
     document.querySelector<HTMLElement>(".desktop-hint")!.innerHTML = walking
-      ? "WASD / arrows: walk<br>Shift: faster · Drag: look · Esc: release mouse"
-      : "WASD / arrows: fly · E / Q: up / down<br>Shift: faster · Drag: look · Esc: release mouse";
+      ? "WASD / arrows: walk<br>Shift: faster Â· Drag: look Â· Esc: release mouse"
+      : "WASD / arrows: fly Â· E / Q: up / down<br>Shift: faster Â· Drag: look Â· Esc: release mouse";
     document.querySelector<HTMLElement>(".mobile-hint")!.innerHTML = walking
-      ? "Left stick: walk · Drag scene: look"
-      : "Left stick: fly · Drag scene: look<br>Hold Up / Down to change height.";
+      ? "Left stick: walk Â· Drag scene: look"
+      : "Left stick: fly Â· Drag scene: look<br>Hold Up / Down to change height.";
     canvas.setAttribute("aria-label", walking
       ? "Apartment walking camera. Drag to look; use keyboard or touch controls to walk."
       : "Fly camera. Drag to look; use keyboard or touch controls to move.");
@@ -386,14 +401,15 @@ async function start() {
   bloom.disabled = !bloomEnabled.checked;
   bloom.sourceTexture = shafts.outputTexture;
   // The fused tone task disables bloom's merge and copy passes.
-  if (optimizedRenderer) bloom.targetTexture = shafts.outputTexture;
+  const fusedBloom = optimizedRenderer;
+  if (fusedBloom) bloom.targetTexture = shafts.outputTexture;
   frameGraph.addTask(bloom);
 
-  const imageProcessing = optimizedRenderer
+  const imageProcessing = fusedBloom
     ? new BloomToneMappingTask("tone-mapping", frameGraph, bloom)
     : new FrameGraphImageProcessingTask("tone-mapping", frameGraph);
   imageProcessing.postProcess.imageProcessingConfiguration = activeScene.imageProcessingConfiguration;
-  imageProcessing.sourceTexture = optimizedRenderer ? shafts.outputTexture : bloom.outputTexture;
+  imageProcessing.sourceTexture = fusedBloom ? shafts.outputTexture : bloom.outputTexture;
   if (optimizedRenderer) imageProcessing.targetTexture = target("display-color", Constants.TEXTUREFORMAT_RGBA, Constants.TEXTURETYPE_UNSIGNED_BYTE);
   frameGraph.addTask(imageProcessing);
   const antialiasing = new FrameGraphFXAATask("fxaa", frameGraph);
@@ -422,6 +438,8 @@ async function start() {
       await frameGraph.buildAsync();
       graphBuildCount++;
       bindSurfaceShadow(sun, camera, shadowTask.shadowGenerator!);
+      enableTwoSidedShadows(shadowTask.shadowGenerator!);
+      enableTwoSidedShadows(volumeShadowTask.shadowGenerator!);
       shadowTask.shadowGenerator!.contactHardeningLightSizeUVRatio = Number(shadowSoftness.value);
       shadowCache.invalidate();
       volume.lightingVolume.frequency = 0;
@@ -429,7 +447,7 @@ async function start() {
       resolveFirstBuild();
       retryGraphics.hidden = true;
       status.classList.remove("error");
-      status.textContent = "Ready · " + meshes.length + " meshes";
+      status.textContent = "Ready Â· " + meshes.length + " meshes";
       frameGraph.pausedExecution = false;
     } catch (error) {
       graphFailed = true;
@@ -593,7 +611,7 @@ async function start() {
   document.querySelector<HTMLButtonElement>("#balance-lighting")!.addEventListener("click", () => preferences.balanceLighting());
   document.querySelector<HTMLOutputElement>("#shadow-softness-value")!.value = Number(shadowSoftness.value).toFixed(3);
   document.querySelector<HTMLOutputElement>("#exposure-value")!.value = Number(exposure.value).toFixed(1);
-  const realtimeGI = attachRealtimeGI(activeScene, activeEngine, sun, meshes, baked => {
+  const realtimeGI = attachProbeLighting(activeScene, activeEngine, sun, meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh), camera, baked => {
     bakedLighting = baked;
     for (const material of new Set(meshes.map(mesh => mesh.material))) {
       if (material instanceof PBRMaterial) material.lightmapTexture = baked ? indirect : null;
@@ -602,7 +620,8 @@ async function start() {
     document.querySelector<HTMLInputElement>("#baked-intensity")!.disabled = !baked;
     directionalControl.dispatchEvent(new Event("change"));
     applyDaylight();
-  });
+  }, renderTask);
+  preferences.register({ "probe-strength": "1", "probe-quality": "64" });
   resetView();
   updateShadows();
   resize();
@@ -619,13 +638,13 @@ async function start() {
       surfaceBindingCorrect: sun.getShadowGenerator(camera) === shadowTask.shadowGenerator }));
   activeScene.onDisposeObservable.add(disposeBenchmark);
   controls.disabled = false;
-  if (import.meta.env.DEV && new URLSearchParams(location.search).has("gi-test")) {
+  if (activeEngine instanceof Engine && import.meta.env.DEV && new URLSearchParams(location.search).has("gi-test")) {
     void import("../tests/real-time-gi.browser").then(module => module.verifyRealtimeGI(activeScene, activeEngine));
   }
   document.querySelector<HTMLElement>("#flight-controls")!.hidden = false;
   document.querySelector<HTMLButtonElement>("#capture-mouse")!.disabled = false;
   status.textContent = "Ready \u00b7 " + meshes.length + " meshes";
-  document.querySelector("#renderer")!.textContent = "WebGL " + activeEngine.webGLVersion;
+  document.querySelector("#renderer")!.textContent = activeEngine instanceof WebGPUEngine ? "WebGPU" : "WebGL " + activeEngine.webGLVersion;
   statistics = setInterval(() => {
     document.querySelector("#fps")!.textContent = activeEngine.getFps().toFixed(0) + " fps";
     document.querySelector("#frame")!.textContent = activeEngine.getDeltaTime().toFixed(1) + " ms";
