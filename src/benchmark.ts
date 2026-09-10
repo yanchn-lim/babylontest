@@ -72,6 +72,7 @@ export function attachBenchmark(engine: Engine | WebGPUEngine, scene: Scene, cam
     copy.disabled = false;
     if (engine instanceof Engine) instrumentation.captureGPUFrameTime = false;
     run = undefined;
+    document.getElementById("benchmark-active")!.hidden = true;
     start.disabled = false;
     stop.disabled = true;
     mode.disabled = false;
@@ -114,6 +115,7 @@ export function attachBenchmark(engine: Engine | WebGPUEngine, scene: Scene, cam
     mode.disabled = true;
     copy.disabled = true;
     output.hidden = true;
+    document.getElementById("benchmark-active")!.hidden = false;
     announce(run.phase(performance.now()));
     dialog.close();
   }, options);

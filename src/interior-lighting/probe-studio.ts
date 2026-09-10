@@ -81,7 +81,7 @@ ${[["lumens","Output (lm, uncalibrated)",0,2000,10],["kelvin","Color temperature
   }
   async function select(){
     const baked=mode.value!=="realtime";setBaked(baked);if(gi)gi.enabled=!baked;
-    if(baked){message.textContent="Baked reference · does not update for fixture or finish edits.";return;}
+    if(baked){message.textContent="Baked lighting · fixed reference";return;}
     try{if(!gi){pending??=prepare();await pending;}if(disposed)return;if(gi)gi.enabled=mode.value==="realtime";}
     catch(e){error=String(e);mode.value="baked";setBaked(true);message.textContent=error;}
     finally{pending=undefined;}
@@ -94,7 +94,7 @@ ${[["lumens","Output (lm, uncalibrated)",0,2000,10],["kelvin","Color temperature
     if(gi){const state=JSON.stringify([sun.direction.asArray(),sun.intensity,sun.diffuse.asArray(),controller.fixtures]);if(state!==lastLighting){gi.setLights(sun.direction.scale(-1).normalize().asArray() as Vec3,sun.intensity,sun.diffuse.asArray() as Vec3,controller.fixtures);lastLighting=state;}
       const mat=JSON.stringify(materials.map(m=>[m.albedoColor.asArray(),m.metallic,m.roughness,m.alpha,m.needAlphaBlending()]));if(mat!==lastMaterials){gi.setMaterials(materials);lastMaterials=mat;}gi.enabled=mode.value==="realtime";gi.tick();
       controller.status={phase:gi.phase,preparationProgress:gi.preparationProgress,inactiveProbes:gi.inactiveProbes,converged:gi.progress===1,progress:gi.progress,gpuMs:gi.gpuMs,error:gi.error};
-      if(gi.enabled)message.textContent=error||gi.error||(gi.warmingFixtures?"Preparing light shaders…":gi.phase==="preparing"?`Preparing lighting · ${Math.round(gi.preparationProgress*100)}%`:gi.phase==="refining"?`Lighting updating · ${Math.round(gi.progress*100)}%`:`Lighting settled · ${(gi.elapsedMs/1000).toFixed(2)} s · experimental coverage gaps remain`);
+      if(gi.enabled)message.textContent=error||gi.error||(gi.warmingFixtures?"Preparing light shaders…":gi.phase==="preparing"?`Preparing lighting · ${Math.round(gi.preparationProgress*100)}%`:gi.phase==="refining"?`Lighting updating · ${Math.round(gi.progress*100)}%`:"Lighting settled · experimental GI");
     }
     const indirect=mode.value==="realtime"&&control("probe-view").value==="indirect";
     if(indirect!==inspecting){for(const m of materials){if(indirect){saved.set(m,[m.directIntensity,m.specularIntensity,m.environmentIntensity]);m.directIntensity=m.specularIntensity=m.environmentIntensity=0;}else{const values=saved.get(m)!;[m.directIntensity,m.specularIntensity,m.environmentIntensity]=values;}}scene.getMeshByName("sky")?.setEnabled(!indirect);inspecting=indirect;}

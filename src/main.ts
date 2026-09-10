@@ -23,7 +23,7 @@ import { BloomToneMappingTask } from "./bloom-tone-mapping";
 import { bindSurfaceShadow, trackShadowCasters } from "./shadow-binding";
 import { arrangeSettings } from "./settings-layout";
 const preferences = attachGraphicsPreferences();
-arrangeSettings();
+const ui = arrangeSettings();
 
 const apartment = true;
 const optimizedRenderer = new URLSearchParams(location.search).get("renderer") !== "baseline";
@@ -46,22 +46,6 @@ const shadowMethod = document.querySelector<HTMLSelectElement>("#shadow-method")
 const shadowSoftness = document.querySelector<HTMLInputElement>("#shadow-softness")!;
 const bloomEnabled = document.querySelector<HTMLInputElement>("#bloom-enabled")!;
 const settingsDialog = document.querySelector<HTMLDialogElement>("#settings-dialog")!;
-document.querySelector<HTMLButtonElement>("#open-settings")!.addEventListener("click", () => {
-  if (document.pointerLockElement) document.exitPointerLock();
-  settingsDialog.show();
-});
-document.querySelector<HTMLButtonElement>("#close-settings")!.addEventListener("click", () => settingsDialog.close());
-window.addEventListener("keydown", event => {
-  if (event.key === "Escape" && settingsDialog.open) { event.preventDefault(); settingsDialog.close(); }
-});
-settingsDialog.addEventListener("close", () => canvas.focus());
-for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-section]"))) {
-  button.addEventListener("click", () => {
-    for (const panel of Array.from(document.querySelectorAll<HTMLElement>("[data-panel]"))) panel.hidden = panel.dataset.panel !== button.dataset.section;
-    for (const item of Array.from(document.querySelectorAll<HTMLElement>("[data-section]"))) item.setAttribute("aria-pressed", String(item === button));
-    document.querySelector(".panel-body")!.scrollTop = 0;
-  });
-}
 const sunAzimuth = document.querySelector<HTMLInputElement>("#sun-azimuth")!;
 const sunElevation = document.querySelector<HTMLInputElement>("#sun-elevation")!;
 const exposure = document.querySelector<HTMLInputElement>("#exposure")!;
@@ -75,6 +59,7 @@ let statistics: ReturnType<typeof setInterval> | undefined;
 
 function fail(error: unknown) {
   console.error(error);
+  status.hidden = false;
   status.classList.add("error");
   status.textContent = error instanceof Error
     ? `${error.name}: ${error.message}`
@@ -266,6 +251,8 @@ async function start() {
   const width = maximum.x - minimum.x;
   const eye = minimum.y + 1.7;
   const resetFlight = attachFlyControls(camera, canvas, () => apartment && navigation.value === "walk");
+  ui.connect({ resetInput: resetFlight, closeInspector: () => { activeScene.debugLayer.hide(); inspector.textContent = "Open inspector"; } });
+  activeScene.onDisposeObservable.add(() => { ui.dispose(); clearInterval(statistics); });
   function updateNavigation() {
     const walking = apartment && navigation.value === "walk";
     camera.checkCollisions = walking;
@@ -448,6 +435,7 @@ async function start() {
       retryGraphics.hidden = true;
       status.classList.remove("error");
       status.textContent = "Ready · " + meshes.length + " meshes";
+      status.hidden = true;
       frameGraph.pausedExecution = false;
     } catch (error) {
       graphFailed = true;
@@ -595,15 +583,18 @@ async function start() {
   window.addEventListener("resize", resize);
   activeScene.onDisposeObservable.add(() => window.removeEventListener("resize", resize));
   inspector.addEventListener("click", async () => {
+    if (!ui.debugging) return;
     inspector.disabled = true;
     try {
       settingsDialog.close();
       await import("@babylonjs/inspector");
       if (activeScene.debugLayer.isVisible()) activeScene.debugLayer.hide();
-      else await activeScene.debugLayer.show({ embedMode: true });
+      else await activeScene.debugLayer.show({ embedMode: true, overlay: true, handleResize: false });
+      if (!ui.debugging) activeScene.debugLayer.hide();
       inspector.textContent = activeScene.debugLayer.isVisible() ? "Close inspector" : "Open inspector";
     } catch (error) {
       console.error(error);
+      status.hidden = false;
       status.textContent = "Inspector could not open. See the console for details.";
     } finally { inspector.disabled = false; }
   });
@@ -630,12 +621,13 @@ async function start() {
   await activeScene.whenReadyAsync();
   updateEnvironmentDiffuse(Number(document.querySelector<HTMLInputElement>("#environment-diffuse")!.value));
   shadowCache.invalidate();
-  const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, () => ({ ...preferences.snapshot(), materials: materialControls.snapshot(), cyclePlaying: dayNight.playing }),
-    () => frameGraph.pausedExecution || graphFailed,
-    () => ({ ...realtimeGI.diagnostics(), rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
+  const readDiagnostics = () => ({ ...realtimeGI.diagnostics(), rendererProfile: optimizedRenderer ? "optimized" : "baseline-7052765",
       shadowMapRenders: shadowRenders, graphBuilds: graphBuildCount,
       surfaceMapSize: shadowTask.shadowGenerator!.mapSize,
-      surfaceBindingCorrect: sun.getShadowGenerator(camera) === shadowTask.shadowGenerator }));
+      surfaceBindingCorrect: sun.getShadowGenerator(camera) === shadowTask.shadowGenerator });
+  const disposeBenchmark = attachBenchmark(activeEngine, activeScene, camera, () => ({ ...preferences.snapshot(), materials: materialControls.snapshot(), cyclePlaying: dayNight.playing }),
+    () => frameGraph.pausedExecution || graphFailed,
+    readDiagnostics);
   activeScene.onDisposeObservable.add(disposeBenchmark);
   controls.disabled = false;
   if (activeEngine instanceof Engine && import.meta.env.DEV && new URLSearchParams(location.search).has("gi-test")) {
@@ -644,11 +636,12 @@ async function start() {
   document.querySelector<HTMLElement>("#flight-controls")!.hidden = false;
   document.querySelector<HTMLButtonElement>("#capture-mouse")!.disabled = false;
   status.textContent = "Ready \u00b7 " + meshes.length + " meshes";
+  status.hidden = true;
   document.querySelector("#renderer")!.textContent = activeEngine instanceof WebGPUEngine ? "WebGPU" : "WebGL " + activeEngine.webGLVersion;
   statistics = setInterval(() => {
-    document.querySelector("#fps")!.textContent = activeEngine.getFps().toFixed(0) + " fps";
-    document.querySelector("#frame")!.textContent = activeEngine.getDeltaTime().toFixed(1) + " ms";
-    document.querySelector("#resolution")!.textContent = activeEngine.getRenderWidth() + " \u00d7 " + activeEngine.getRenderHeight();
+    ui.updateDiagnostics({ ...readDiagnostics(), fps: activeEngine.getFps(), frameMs: activeEngine.getDeltaTime(),
+      width: activeEngine.getRenderWidth(), height: activeEngine.getRenderHeight(),
+      renderer: activeEngine instanceof WebGPUEngine ? "WebGPU" : "WebGL " + activeEngine.webGLVersion });
   }, 500);
 }
 
