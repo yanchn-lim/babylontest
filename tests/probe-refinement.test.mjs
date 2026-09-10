@@ -18,7 +18,7 @@ registerHooks({
 const { ProbeGI } = await import('../src/interior-lighting/probe-gi.ts');
 function scheduler() {
   const visits = new Uint32Array(462), clears = [];
-  const g = Object.create(ProbeGI.prototype);
+  const g = Object.assign(Object.create(ProbeGI.prototype), { plugins: [] });
   Object.assign(g, { count: visits.length, enabled: true, error: '', disposed: false, prepPass: 6, prepCursor: 0, cursor: 0, processed: 0, epoch: 1, updates: 64,
     params: { updateFloat4() {}, update() {} }, history: { update() {} }, irradiance: { update(values) { clears.push(values); } },
     shader: { dispatch(count) { for (let i = g.cursor; i < g.cursor + count; i++) visits[i % g.count]++; return true; } },

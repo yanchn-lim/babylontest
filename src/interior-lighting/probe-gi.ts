@@ -17,12 +17,13 @@ export type ProbeDiagnostic = "off" | "contributors" | "weight" | "visibility" |
 const diagnostics:ProbeDiagnostic[]=["off","contributors","weight","visibility","inactive","world-x","world-y","world-z","surface-u","surface-v","surface-id","normal-x","normal-y","normal-z","support"];
 class ProbeMaterial extends MaterialPluginBase {
   constructor(material: PBRMaterial, private probes: ProbeGI) {
-    super(material, "SceneProbeGI", 210, {}, false, false);
+    super(material, "SceneProbeGI", 210, { SCENE_PROBE_GI: true }, false, false);
     // Hooks read probes, so register after the subclass fields are initialized.
     this._pluginManager._addPlugin(this);this._enable(true);
     this.doNotSerialize = true;
   }
   isCompatible(language: ShaderLanguage) { return language === ShaderLanguage.WGSL; }
+  prepareDefines(defines:Record<string,unknown>){defines.SCENE_PROBE_GI=this.probes.enabled;}
   getAttributes(names:string[]){if(this.probes.surfaceCache)names.push("probeSurface");}
   getSamplers(names: string[]) { if(this.probes.surfaceCache)names.push("probeSurfaceSampler","probeChartSampler");names.push("probeIrradianceSampler", "probeVisibilitySampler", "probePlacementSampler", "probeGeometrySampler"); }
   getUniforms() { return { ubo: [{ name: "probeGrid", size: 4, type: "vec4" }, { name: "probeDimensions", size: 4, type: "vec4" }, { name: "probeEnabled", size: 1, type: "float" }, {name:"probeDiagnostic",size:1,type:"float"}, {name:"probeBypass",size:2,type:"vec2"}, {name:"probeSurfaceEnabled",size:1,type:"float"}, {name:"probeStrength",size:1,type:"float"}] }; }
@@ -43,7 +44,7 @@ class ProbeMaterial extends MaterialPluginBase {
   getCustomCode(type: string):Record<string,string>|null {
     if(type==="vertex"&&this.probes.surfaceCache)return{CUSTOM_VERTEX_DEFINITIONS:"attribute probeSurface:vec3f;\nvarying vProbeSurface:vec3f;",CUSTOM_VERTEX_MAIN_END:"vertexOutputs.vProbeSurface=vertexInputs.probeSurface;"};
     if(type!=="fragment") return null;
-    return { CUSTOM_FRAGMENT_DEFINITIONS: guardCode+pluginCode+(this.probes.surfaceCache?surfaceSampling:""), CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: `
+    const code = { CUSTOM_FRAGMENT_DEFINITIONS: guardCode+pluginCode+(this.probes.surfaceCache?surfaceSampling:""), CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: `
 var probeResult=ProbeResult(vec3f(0),0,0,0,0,0,0u);
 if(uniforms.probeEnabled>0.5){
   ${this.probes.surfaceCache?"if(uniforms.probeSurfaceEnabled>.5){probeResult=surfaceLight(fragmentInputs.vProbeSurface,fragmentInputs.vPositionW,geometricNormalW,normalW);}else":""}
@@ -70,6 +71,7 @@ if(uniforms.probeDiagnostic>.5){
     finalColor=vec4f(f32(bits&255u),f32((bits>>8u)&255u),f32((bits>>16u)&255u),f32(bits>>24u));
   }
 }` };
+    return Object.fromEntries(Object.entries(code).map(([point, source]) => [point, "\n#ifdef SCENE_PROBE_GI\n" + source + "\n#endif\n"]));
   }
 }
 export class ProbeGI {
@@ -85,7 +87,14 @@ export class ProbeGI {
   private geometryTriangles:Triangle[];
   private transmitting:boolean[]=[];
   epoch=1;
-  enabled=true;
+  private enabledValue=true;
+  private plugins:ProbeMaterial[]=[];
+  get enabled(){return this.enabledValue;}
+  set enabled(value:boolean){
+    if(value===this.enabledValue)return;
+    this.enabledValue=value;
+    for(const plugin of this.plugins)plugin.markAllDefinesAsDirty();
+  }
   private strengthValue=1;
   get strength(){return this.strengthValue;}
   set strength(value:number){
@@ -151,7 +160,7 @@ export class ProbeGI {
     this.shader.setStorageBuffer("lights",this.lightBuffer);this.shader.setStorageBuffer("history",this.history);this.shader.setTexture("albedos",this.atlas);this.shader.setUniformBuffer("params",this.params);this.shader.setStorageTexture("irradiance",this.irradiance);
     this.prepareShader.setUniformBuffer("params",this.prepParams);this.prepareShader.setStorageTexture("visibility",this.visibility);this.prepareShader.setStorageTexture("placement",this.placement);
     if(surfaceLayout)this.surfaceCache=new SurfaceCache(scene,engine,surfaceLayout,grid,this.irradiance,this.visibility,this.placement);
-    this.setMaterials(materials);for(const material of materials)new ProbeMaterial(material,this);
+    this.setMaterials(materials);this.plugins=materials.map(material=>new ProbeMaterial(material,this));
   }
   private buffer(data:ArrayBufferView){const result=new StorageBuffer(this.engine,data.byteLength);result.update(data);this.buffers.push(result);return result;}
   setMaterials(materials:PBRMaterial[]){
