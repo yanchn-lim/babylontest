@@ -6,7 +6,7 @@ const output = process.env.UI_OUTPUT || path.join(require('node:os').tmpdir(), '
 fs.mkdirSync(output, { recursive: true });
 
 (async () => {
-  const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--enable-unsafe-webgpu'] });
+  const browser = await chromium.launch({ channel: 'msedge', headless: true });
   const report = { errors: [], gpuErrors: [], switches: [] };
   try {
     const page = await browser.newPage({ viewport: { width: 1914, height: 941 } });
@@ -51,6 +51,15 @@ fs.mkdirSync(output, { recursive: true });
         control.dispatchEvent(new Event('change', { bubbles: true }));
       }, mode);
       await page.waitForTimeout(1500);
+      const pixels = await page.evaluate(() => new Promise((resolve, reject) => {
+        const engine = lighting.scene.getEngine();
+        lighting.scene.onAfterRenderObservable.addOnce(() => {
+          engine.readPixels(Math.floor(engine.getRenderWidth() / 2),
+            Math.floor(engine.getRenderHeight() / 2), 4, 4, true, true)
+            .then(data => resolve(Array.from(data))).catch(reject);
+        });
+      }));
+      assert.ok(pixels.some(value => value !== 0), 'The canvas must contain a rendered image');
       const state = await page.evaluate(() => ({
         enabled: lighting.gi.enabled, epoch: lighting.gi.epoch,
         fixtures: lighting.controller.fixtures.filter(fixture => fixture.enabled).length,

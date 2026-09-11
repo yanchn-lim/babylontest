@@ -60,6 +60,9 @@ export class DirectionalLightmapPlugin extends MaterialPluginBase {
     if (language === ShaderLanguage.WGSL) return {
       CUSTOM_FRAGMENT_DEFINITIONS: "var directionalLightmapSampler: texture_2d<f32>; var directionalLightmapSamplerSampler: sampler;",
       CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: directionalLightmapCode
+        .replace(
+          "lightmapColor.rgb *= mix(1.0, response, directionality * directionalLightmapStrength);",
+          "lightmapColor = vec4f(lightmapColor.rgb * mix(1.0, response, directionality * directionalLightmapStrength), lightmapColor.a);")
         .replace(/vec3 /g, "var ").replace(/float /g, "var ")
         .replace("texture2D(directionalLightmapSampler, vLightmapUV)", "textureSample(directionalLightmapSampler, directionalLightmapSamplerSampler, fragmentInputs.vLightmapUV)")
         .replace(/directionalLightmapStrength/g, "uniforms.directionalLightmapStrength")
