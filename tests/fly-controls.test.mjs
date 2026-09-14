@@ -19,7 +19,7 @@ test("touch walking continues when a settings field gains focus, and release sto
   } finally { f.close(); }
 });
 
-function fixture(walking = false) {
+function fixture(walking = false, walkingSpeed = () => 1.8, eyeHeight = () => 1.65) {
   const engine = new NullEngine();
   const scene = new Scene(engine);
   const camera = new UniversalCamera("test", Vector3.Zero(), scene);
@@ -52,7 +52,7 @@ function fixture(walking = false) {
   document.pointerLockElement = null;
   globalThis.document = document;
   globalThis.window = new EventTarget();
-  const reset = attachFlyControls(camera, canvas, () => walking);
+  const reset = attachFlyControls(camera, canvas, () => walking, walkingSpeed, eyeHeight);
   canvas.focus();
   function send(target, type, data = {}) {
     const event = new Event(type, { cancelable: true });
@@ -223,5 +223,42 @@ test("mobile walking supports simultaneous movement and look without vertical fl
     const position = f.camera.position.clone();
     f.frame();
     assert.ok(f.camera.position.equals(position));
+  } finally { f.close(); }
+});
+
+test("walking speed changes take effect at 30 and 60 fps", () => {
+  let speed = 1.2;
+  const f = fixture(true, () => speed);
+  try {
+    f.camera.position.set(0, 1.65, 0);
+    f.send(f.canvas, "keydown", { code: "KeyW" });
+    for (let i = 0; i < 60; i++) f.frame();
+    assert.ok(Math.abs(f.camera.position.z - 1.2) < 1e-5);
+    speed = 0.8;
+    for (let i = 0; i < 30; i++) f.frame(1000 / 30);
+    assert.ok(Math.abs(f.camera.position.z - 2) < 1e-5);
+    assert.ok(Math.abs(f.camera.position.y - 1.65) < 1e-5);
+  } finally { f.close(); }
+});
+
+test("eye height changes preserve floor clearance and wall collisions", () => {
+  let height = 1.5;
+  const f = fixture(true, () => 1.8, () => height);
+  try {
+    const floor = MeshBuilder.CreateBox("floor", { width: 10, height: 0.2, depth: 10 }, f.scene);
+    floor.position.y = -0.1;
+    const wall = MeshBuilder.CreateBox("wall", { width: 4, height: 3, depth: 0.1 }, f.scene);
+    wall.position.set(0, 1.5, 1.5);
+    for (const mesh of [floor, wall]) {
+      mesh.checkCollisions = true;
+      mesh.computeWorldMatrix(true);
+    }
+    f.send(f.canvas, "keydown", { code: "KeyW" });
+    for (height of [1.2, 1.5, 1.8]) {
+      f.camera.position.set(0, height, 0);
+      for (let i = 0; i < 120; i++) f.frame();
+      assert.ok(Math.abs(f.camera.position.y - height) < 1e-5);
+      assert.ok(f.camera.position.z > 1.15 && f.camera.position.z < 1.3);
+    }
   } finally { f.close(); }
 });

@@ -62,7 +62,7 @@ Use the material reset for one material, or **Camera → Session** for the globa
 ## Navigation
 
 - Click or drag the scene to look. Use WASD or arrow keys to move; Shift moves faster.
-- Apartment **Walk** mode keeps a 1.65 m eye height and uses wall and door collisions.
+- Apartment **Walk** mode uses adjustable eye height (1.5 m by default) and wall and door collisions.
   It assumes a level floor and does not simulate stairs or gravity.
 - **Fly** follows the camera direction without collisions. E rises and Q descends.
 - On touch screens, use the movement stick and drag the scene to look. Fly mode

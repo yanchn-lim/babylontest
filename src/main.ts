@@ -117,6 +117,8 @@ async function start() {
   camera.maxZ = 250;
   camera.inputs.clear();
   camera.inertia = 0;
+  let walkingSpeed = Number(document.querySelector<HTMLInputElement>("#walk-speed")!.value);
+  let eyeHeight = Number(document.querySelector<HTMLInputElement>("#eye-height")!.value);
   camera.ellipsoid.set(0.2, 0.75, 0.2);
   camera.ellipsoidOffset.set(0, -0.14, 0);
 
@@ -250,7 +252,7 @@ async function start() {
   const center = minimum.add(maximum).scale(0.5);
   const width = maximum.x - minimum.x;
   const eye = minimum.y + 1.7;
-  const resetFlight = attachFlyControls(camera, canvas, () => apartment && navigation.value === "walk");
+  const resetFlight = attachFlyControls(camera, canvas, () => apartment && navigation.value === "walk", () => walkingSpeed, () => eyeHeight);
   ui.connect({ resetInput: resetFlight, closeInspector: () => { activeScene.debugLayer.hide(); inspector.textContent = "Open inspector"; } });
   activeScene.onDisposeObservable.add(() => { ui.dispose(); clearInterval(statistics); });
   function updateNavigation() {
@@ -275,10 +277,10 @@ async function start() {
     camera.cameraDirection.setAll(0);
     camera.cameraRotation.setAll(0);
     camera.position.copyFrom(apartment
-      ? new Vector3(-10.5, 1.65, -5.8)
+      ? new Vector3(-10.5, eyeHeight, -4.8)
       : new Vector3(minimum.x + width * 0.16, eye, center.z));
     const target = apartment
-      ? new Vector3(-10.5, 1.65, -8.4)
+      ? new Vector3(-10.5, eyeHeight - 0.3, -7.0)
       : new Vector3(center.x, eye + 0.5, center.z);
     camera.setTarget(target);
   }
@@ -554,6 +556,9 @@ async function start() {
     const wantShafts = shaftsEnabled.checked && (daylight?.sun ?? 1) > 0;
     if (wantShafts !== !volume.disabled) updateShadows();
   }
+  bindSlider("camera-fov", 0, value => { camera.fov = value * Math.PI / 180; });
+  bindSlider("walk-speed", 1, value => { walkingSpeed = value; });
+  bindSlider("eye-height", 2, value => { eyeHeight = value; });
   bindSlider("sun-warmth", 2, applyDaylight);
   bindSlider("directional-strength", 2, value => { for (const plugin of directionalPlugins) plugin.strength = bakedLighting && directionalControl.checked ? value : 0; });
   bindSlider("shadow-bias", 4, value => { shadowTask.bias = value; shadowCache.invalidate(); });

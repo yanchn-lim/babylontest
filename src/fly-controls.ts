@@ -1,7 +1,7 @@
 import { Vector3 } from "@babylonjs/core";
 import type { UniversalCamera } from "@babylonjs/core";
 
-export function attachFlyControls(camera: UniversalCamera, canvas: HTMLCanvasElement, isWalking = () => false) {
+export function attachFlyControls(camera: UniversalCamera, canvas: HTMLCanvasElement, isWalking = () => false, walkingSpeed = () => 1.8, eyeHeight = () => 1.65) {
   const scene = camera.getScene();
   const abort = new AbortController();
   const options = { signal: abort.signal };
@@ -151,12 +151,14 @@ export function attachFlyControls(camera: UniversalCamera, canvas: HTMLCanvasEle
       forward.y = right.y = 0;
       forward.normalize();
       right.normalize();
-      camera.position.y = 1.65;
+      camera.position.y = eyeHeight();
+      // Keep the collision body 1 cm above the level floor.
+      camera.ellipsoidOffset.y = 2 * camera.ellipsoid.y + 0.01 - camera.position.y;
     }
     const direction = forward.scale(z).add(right.scale(x)).add(new Vector3(0, walking ? 0 : y, 0));
     const length = direction.length();
     if (length > 1) direction.scaleInPlace(1 / length);
-    const speed = walking ? (pressed("ShiftLeft", "ShiftRight") ? 3.2 : 1.8)
+    const speed = walking ? (pressed("ShiftLeft", "ShiftRight") ? 3.2 : walkingSpeed())
       : (pressed("ShiftLeft", "ShiftRight") ? 9 : 3);
     const seconds = Math.min(scene.getEngine().getDeltaTime(), 50) / 1000;
     if (walking) camera.cameraDirection.copyFrom(direction.scale(speed * seconds));
