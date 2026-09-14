@@ -1,7 +1,16 @@
 :root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #e9ede9; background: #111714; font-synthesis: none; --panel: #19211e; --raised: #202b25; --border: #35443a; --muted: #dce5dc; --accent: #d2e5b9; }
 * { box-sizing: border-box; }
 body { margin: 0; overflow: hidden; }
-#scene { display: block; width: 100vw; height: 100dvh; touch-action: none; outline: none; }
+#scene {
+  display: block;
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(100vw, 177.777778dvh);
+  height: min(100dvh, 56.25vw);
+  touch-action: none;
+  outline: none;
+}
 [hidden] { display: none !important; }
 button, select, input, textarea { font: inherit; }
 button, select { color: inherit; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); min-height: 44px; padding: 9px 12px; font-size: .8rem; }
