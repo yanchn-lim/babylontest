@@ -13,12 +13,12 @@
   "bases": [
     {
       "name": "sky",
-      "maximum": 0.5514329671859741,
+      "maximum": 0.5513427257537842,
       "clipped": false
     },
     {
       "name": "fixtures",
-      "maximum": 1.1876604557037354,
+      "maximum": 1.183450698852539,
       "clipped": false
     },
     {
@@ -28,17 +28,17 @@
     },
     {
       "name": "sun-9",
-      "maximum": 0.20582199096679688,
+      "maximum": 0.17954552173614502,
       "clipped": false
     },
     {
       "name": "sun-12",
-      "maximum": 0.2414764165878296,
+      "maximum": 0.21768808364868164,
       "clipped": false
     },
     {
       "name": "sun-15",
-      "maximum": 0.20281779766082764,
+      "maximum": 0.17903518676757812,
       "clipped": false
     },
     {
@@ -76,8 +76,8 @@
       "sha256": "3a2d517cb1a7b5ef6cf9ab15d537b8526c3b4a931e4fbef5cb7b48e555228841"
     },
     "fixtures.png": {
-      "bytes": 201138,
-      "sha256": "04f896d755ee213c54806aa750e2261947b8e4fb4b7e2846f1b0de296b0edd66"
+      "bytes": 173623,
+      "sha256": "ffb116e077d06a5de7a97ac5f3a85a0892617e662ebf80bd1d091aa17e6dbc57"
     },
     "room-12-off.png": {
       "bytes": 95913,
@@ -108,16 +108,16 @@
       "sha256": "40624446ae36ac9133c8ee60ffb56ab637d7e6ac71793c8d0d9f235065c72868"
     },
     "sky.png": {
-      "bytes": 194199,
-      "sha256": "350f63531c80f9e5458de2bbec5391355f9c25147876264181c4b5f5f4a19a68"
+      "bytes": 135609,
+      "sha256": "4afe101e2156dddfc28f3e009b2a44c239dbfdb19e8927cde551aa913a1be7d6"
     },
     "sun-12.png": {
-      "bytes": 137787,
-      "sha256": "a528765a72a6ce15bc460f33f11acd49e63ab3050213b79db58fce4736aae0fe"
+      "bytes": 87004,
+      "sha256": "397be890dd30de2a41a7f989896a0fe2444ce943f5fb4252ce949cc85ed58e93"
     },
     "sun-15.png": {
-      "bytes": 134250,
-      "sha256": "6d60ff133ebbac446a6819f679b057bbea0adb94acfc7ea05530addd2352715f"
+      "bytes": 83610,
+      "sha256": "9a7cf2788fd9a37917873e4c30d951fb588ac2ae78d10673f14fe31c216267ab"
     },
     "sun-18.png": {
       "bytes": 2324,
@@ -128,8 +128,14 @@
       "sha256": "8e09b656461fa006d3398bc1326c14c2a3dad0ab5c1bcded7d658756720117c4"
     },
     "sun-9.png": {
-      "bytes": 141023,
-      "sha256": "1a141deaaaaf971494a0016d9c577003e6b6933539f3f96a10f1610231877b4b"
+      "bytes": 92858,
+      "sha256": "c5bed0d8ae4127dc0a4a853eba1f901dc3dde1b8bb021c4df634900508c5ee28"
     }
+  },
+  "bakeSamples": 4096,
+  "bakeAdaptiveSampling": false,
+  "lightmapRefinement": {
+    "scriptSha256": "f7cb79c51fab7278c1548fdc8b4d8023496f6731e36879b62a1a20a7d5333095",
+    "references": "Original reference images and scene preserved; only lightmaps rebaked."
   }
 }

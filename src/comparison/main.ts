@@ -99,8 +99,8 @@ async function start() {
   sun.autoUpdateExtends = false; sun.shadowFrustumSize = 14;
   const sunShadow = new ShadowGenerator(2048, sun);
   sunShadow.usePercentageCloserFiltering = true;
-  sunShadow.filteringQuality = ShadowGenerator.QUALITY_LOW;
-  sunShadow.bias = .0002; sunShadow.normalBias = .005;
+  sunShadow.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+  sunShadow.bias = .0005; sunShadow.normalBias = .005;
   for (const mesh of meshes) sunShadow.addShadowCaster(mesh);
   sunShadow.getShadowMap()!.refreshRate = 0;
   const fixtures = data.fixtures.map((source, index) => {
@@ -109,7 +109,8 @@ async function start() {
     light.intensityMode = Light.INTENSITYMODE_LUMINOUSINTENSITY;
     light.falloffType = Light.FALLOFF_GLTF;
     light.shadowMinZ = .05; light.shadowMaxZ = 15;
-    const shadow = new ShadowGenerator(512, light);
+    const shadow = new ShadowGenerator(1024, light);
+    shadow.usePoissonSampling = true;
     shadow.bias = .004; shadow.normalBias = .002;
     for (const mesh of meshes) shadow.addShadowCaster(mesh);
     shadow.getShadowMap()!.refreshRate = 0;

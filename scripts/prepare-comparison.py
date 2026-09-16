@@ -96,10 +96,11 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
-    scene.cycles.samples = SAMPLES
+    # Small lightmap texels need more samples than the denoised camera images.
+    scene.cycles.samples = SAMPLES * 4
     scene.cycles.seed = 731
     scene.cycles.use_denoising = False
-    scene.cycles.use_adaptive_sampling = True
+    scene.cycles.use_adaptive_sampling = False
     scene.cycles.adaptive_threshold = .02
     scene.cycles.max_bounces = 8
     scene.cycles.diffuse_bounces = 8
@@ -260,6 +261,8 @@ def main():
     camera_data.sensor_fit = 'VERTICAL'
     camera_data.lens = camera_data.sensor_height / (2 * math.tan(.85 / 2))
     camera_data.clip_start = .05
+    scene.cycles.samples = SAMPLES
+    scene.cycles.use_adaptive_sampling = True
     scene.cycles.use_denoising = True
     references = []
     for view_name, view in VIEWS.items():
@@ -280,7 +283,8 @@ def main():
             'fixtures': [{'position': convert(p), 'color': [1, .72, .45], 'intensity': 90 / (4 * math.pi)} for p in [[0, -.7, 2.65], [4, .6, 2.65]]],
             'references': references, 'atlasSize': SIZE, 'rgbmRange': 16}
     (OUT / 'scene.json').write_text(json.dumps(data, separators=(',', ':')), encoding='utf-8')
-    report = {'blender': bpy.app.version_string, 'device': device, 'samples': SAMPLES, 'seed': 731,
+    report = {'blender': bpy.app.version_string, 'device': device, 'samples': SAMPLES,
+              'bakeSamples': SAMPLES * 4, 'bakeAdaptiveSampling': False, 'seed': 731,
               'denoising': {'references': 'Cycles offline denoising', 'bases': 'OIDN RTLightmap per UV island', 'runtime': False},
               'bounces': 8, 'atlasSize': SIZE, 'bases': bases,
               'referenceCount': len(references), 'seconds': time.time() - start,

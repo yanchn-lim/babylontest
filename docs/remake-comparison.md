@@ -2,6 +2,9 @@
 
 [Open the published comparison](https://yanchn-lim.github.io/babylontest/comparison.html).
 
+The user-approved visual checkpoint is commit `5a0ea1d`, saved as tag
+[`checkpoint/comparison-2026-09-17`](https://github.com/yanchn-lim/babylontest/tree/checkpoint/comparison-2026-09-17).
+
 The first remake study is at `comparison.html`. It provides one fixed test room,
 a window, a doorway into a dark side room, simple material examples, and two
 fixed interior lights. This is a reviewable lighting candidate, not an accepted
@@ -63,6 +66,10 @@ are deferred until this first result is reviewed. Coarse probes, angular
 sampling, UV resolution and interpolation still produce bands and can leak
 bounced light. The lamp depth bias removes the dotted ceiling self-shadows
 in the tested views; shadow-map resolution still limits edge quality.
+The shadow refinement uses 1,024-pixel lamp cube maps with Babylon's four-sample
+Poisson filter, and medium-quality PCF for the sun with a matching depth bias.
+Lamp map texel count is four
+times the checkpoint's; the fixed lamp maps are still rendered only once.
 
 Preparation and lighting updates run independently of camera motion. Lighting
 updates use five dispatches over five rendered frames; the previous finished
@@ -118,8 +125,10 @@ indirect-light approximation.
 Blender generates the actual triangle geometry, normals, UVs, material values,
 camera parameters, and light values used by Babylon. Both outputs use the same
 ACES fit, exact sRGB transfer, and fixed exposure. Cycles references use 1,024
-samples, up to eight bounces, and offline denoising. Lightmaps use 1,024 samples
-and OIDN RTLightmap filtering on isolated UV islands. Raw bake arrays and EXRs
+samples, up to eight bounces, and offline denoising. Lightmaps use 4,096 fixed
+samples, with adaptive sampling disabled, and OIDN RTLightmap filtering on
+isolated UV islands. The higher-sample bake reduces the noisy source data
+without adding a runtime blur. Raw bake arrays and EXRs
 are retained under `.tools/comparison` for inspection. The baked mode has no
 runtime ray tracing. The cascade mode traces visibility during preparation and
 sun rays during lighting updates. Neither mode uses temporal accumulation or
@@ -134,8 +143,9 @@ not accepted differences. The fixed exposure also leaves the daylight interior
 quite dark; any later exposure change must remain identical in both renderers.
 
 Visual inspection shows matching geometry and broadly similar light placement,
-especially in the night view. It does not establish numerical parity or visual
-approval. No phone-performance result is claimed.
+especially in the night view. The user-approved checkpoint is preserved above;
+the shadow and noise refinements can be compared with it. Numerical parity and
+phone performance are not established.
 
 ## Files and regeneration
 
@@ -171,6 +181,10 @@ function; the matching function in `lighting.ts` must change with it.
   and narrow touch layout. These are focused browser checks, not a full suite.
 - Browser errors: zero. Daylight, night, doorway and overlay captures were
   visually inspected. Evidence is under `.tools/comparison`.
+- The shadow/noise refinement also checks morning and afternoon sun shadows,
+  night lamp shadows, and the baked WebGL fallback. The rebake preserves the
+  scene and all 12 reference images byte for byte; all maps remain finite and
+  within the RGBM range. Captures are in `.tools/comparison/refinement-final`.
 - The initial capture used reversed back-face culling. The current import
   explicitly selects counter-clockwise winding. All 1,152 exported triangle
   normals agree with their winding. Comparing the current room with culling
