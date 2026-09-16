@@ -16,6 +16,7 @@ interface Level { dimensions: Vec3; spacing: number; start: number; end: number;
 // The exported UVs are shared by the reference, baked baseline and cascade output.
 function geometry(data: SceneData) {
   const surfaces = new Float32Array(SIZE * SIZE * 12);
+  const distances = new Float32Array(SIZE * SIZE).fill(Infinity);
   const triangles: Triangle[] = [];
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const mesh of data.meshes) {
@@ -32,31 +33,37 @@ function geometry(data: SceneData) {
       const [a, b, c] = uv.map(v => v.map(n => n * SIZE));
       const area = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
       if (Math.abs(area) < 1e-8) continue;
-      const lo = [0, 1].map(k => Math.max(0, Math.floor(Math.min(a[k], b[k], c[k]))));
-      const hi = [0, 1].map(k => Math.min(SIZE - 1, Math.ceil(Math.max(a[k], b[k], c[k]))));
+      const lo = [0, 1].map(k => Math.max(0, Math.floor(Math.min(a[k], b[k], c[k]) - 2)));
+      const hi = [0, 1].map(k => Math.min(SIZE - 1, Math.ceil(Math.max(a[k], b[k], c[k]) + 2)));
       for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) {
         const u = ((b[1] - c[1]) * (x + .5 - c[0]) + (c[0] - b[0]) * (y + .5 - c[1])) / area;
         const v = ((c[1] - a[1]) * (x + .5 - c[0]) + (a[0] - c[0]) * (y + .5 - c[1])) / area;
         const weights = [u, v, 1 - u - v];
-        if (Math.min(...weights) < -1e-5) continue;
-        const offset = (y * SIZE + x) * 12;
+        let positionWeights = weights;
+        let distance = 0;
+        if (Math.min(...weights) < 0) {
+          distance = Infinity;
+          const corners = [a, b, c];
+          for (let edge = 0; edge < 3; edge++) {
+            const next = (edge + 1) % 3, p = corners[edge], q = corners[next];
+            const dx = q[0] - p[0], dy = q[1] - p[1];
+            const t = Math.max(0, Math.min(1, ((x + .5 - p[0]) * dx + (y + .5 - p[1]) * dy) / (dx * dx + dy * dy)));
+            const squared = (x + .5 - p[0] - t * dx) ** 2 + (y + .5 - p[1] - t * dy) ** 2;
+            if (squared >= distance) continue;
+            distance = squared;
+            positionWeights = [0, 0, 0]; positionWeights[edge] = 1 - t; positionWeights[next] = t;
+          }
+        }
+        const index = y * SIZE + x;
+        if (distance > 4 || distance >= distances[index]) continue;
+        distances[index] = distance;
+        const offset = index * 12;
+        // Extend smooth normals into padding, but keep ray origins on the mesh.
         const normal = [0, 1, 2].map(k => ids.reduce((sum, id, j) => sum + mesh.normals[id * 3 + k] * weights[j], 0));
         const length = Math.hypot(...normal);
-        surfaces.set([...[0, 1, 2].map(k => points.reduce((sum, p, j) => sum + p[k] * weights[j], 0)), 1,
+        surfaces.set([...[0, 1, 2].map(k => points.reduce((sum, p, j) => sum + p[k] * positionWeights[j], 0)), 1,
           ...normal.map(n => n / length), 0, ...data.materials[mesh.material].color, 0], offset);
       }
-    }
-  }
-  // Two texels of padding prevent black UV seams under bilinear sampling.
-  for (let pass = 0; pass < 2; pass++) {
-    const previous = surfaces.slice();
-    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
-      const index = y * SIZE + x;
-      if (previous[index * 12 + 3]) continue;
-      const neighbors = [x > 0 ? index - 1 : -1, x + 1 < SIZE ? index + 1 : -1,
-        y > 0 ? index - SIZE : -1, y + 1 < SIZE ? index + SIZE : -1];
-      const neighbor = neighbors.find(i => i >= 0 && previous[i * 12 + 3]);
-      if (neighbor !== undefined) surfaces.set(previous.subarray(neighbor * 12, neighbor * 12 + 12), index * 12);
     }
   }
   return { surfaces, min, max, ...packBvh(buildBvh(triangles)) };

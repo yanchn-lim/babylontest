@@ -37,6 +37,9 @@ The implementation does the following:
 
 1. Rasterizes the existing UVs into a 256 × 256 surface atlas. Geometry and
    material inputs come from the same exported scene as the Cycles references.
+   Padding uses the closest triangle edge and extends smooth normals across
+   UV seams. Ray origins remain on the mesh. Copying neighbouring texels had
+   produced large discontinuities on the sphere's small UV islands.
 2. Prepares static ray hits once on the GPU, in batches. Each surface uses 64
    fixed cosine-weighted gather directions, plus 1,024 sky directions prepared
    once to reduce sky banding. It caches sky and lamp visibility and the
@@ -58,7 +61,8 @@ The result has **one indirect diffuse bounce**, plus direct sky illumination.
 Cycles has up to eight bounces and includes glossy reflections. Further bounces
 are deferred until this first result is reviewed. Coarse probes, angular
 sampling, UV resolution and interpolation still produce bands and can leak
-bounced light. The night ceiling's direct-shadow artifacts also remain.
+bounced light. The lamp depth bias removes the dotted ceiling self-shadows
+in the tested views; shadow-map resolution still limits edge quality.
 
 Preparation and lighting updates run independently of camera motion. Lighting
 updates use five dispatches over five rendered frames; the previous finished

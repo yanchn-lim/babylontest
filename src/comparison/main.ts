@@ -110,7 +110,7 @@ async function start() {
     light.falloffType = Light.FALLOFF_GLTF;
     light.shadowMinZ = .05; light.shadowMaxZ = 15;
     const shadow = new ShadowGenerator(512, light);
-    shadow.bias = .001; shadow.normalBias = .002;
+    shadow.bias = .004; shadow.normalBias = .002;
     for (const mesh of meshes) shadow.addShadowCaster(mesh);
     shadow.getShadowMap()!.refreshRate = 0;
     return light;
