@@ -5,7 +5,7 @@ import {
 import { geometry } from './radiance-cascades';
 import type { SceneData } from './main';
 import type { lighting } from './lighting';
-import { decodeTransfer, transferBindings, transferFields, transferShader,
+import { decodeTransfer, fixedLightData, transferBindings, transferFields, transferSourceFor,
   TRANSFER_SIZE, TRANSFER_PIXELS, TRANSFER_RAYS } from './transfer-data';
 
 type Vec3 = [number, number, number];
@@ -41,7 +41,7 @@ export class CachedTransfer {
     this.params = new UniformBuffer(engine);
     transferFields.forEach(name => this.params.addUniform(name, 4)); this.params.create();
     this.params.updateFloat4('sky', 0, 0, 0, TRANSFER_SIZE);
-    data.fixtures.forEach((lamp, i) => {
+    data.fixtures.slice(0, 2).forEach((lamp, i) => {
       this.params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity);
       this.params.updateFloat4('lampColor' + i, ...lamp.color, 0);
     });
@@ -73,14 +73,15 @@ export class CachedTransfer {
     buffer('nodes', mesh.nodes); buffer('triangles', mesh.triangles); buffer('surfaces', mesh.surfaces);
     buffer('surfaceLight', surfaceLight); buffer('bounceLight', TRANSFER_PIXELS * 32);
     buffer('transfer', cache.entries); buffer('offsets', cache.offsets);
+    if (data.fixtures.length !== 2) buffer('fixedLights', fixedLightData(data));
     this.entryCount = cache.entries.length;
     const entries = {
-      shade: ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight'],
+      shade: ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', ...(data.fixtures.length !== 2 ? ['fixedLights'] : [])],
       gatherTransfer: ['surfaces', 'params', 'surfaceLight', 'output', 'bounceLight', 'transfer', 'offsets'],
       advance: ['params', 'surfaceLight', 'bounceLight'],
     };
     for (const [entryPoint, names] of Object.entries(entries)) {
-      const shader = new ComputeShader('Cached diffuse ' + entryPoint, this.engine, { computeSource: transferShader }, {
+      const shader = new ComputeShader('Cached diffuse ' + entryPoint, this.engine, { computeSource: transferSourceFor(data) }, {
         entryPoint, bindingsMapping: Object.fromEntries(names.map(name => [name, { group: 0, binding: transferBindings.indexOf(name) }])),
       });
       for (const name of names) {

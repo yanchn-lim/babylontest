@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>Babylon · Apartment lighting</title></head>
+<body>
+  <header><div><p class="eyebrow">BABYLON / APARTMENT STUDY</p><h1>Walk through the light.</h1><p>The apartment, with the comparison scene’s diffuse lighting.</p></div><nav><a href="./comparison.html">Lighting comparison ↗</a><br><a href="./index.html">Original apartment viewer ↗</a></nav></header>
+  <main>
+    <section class="toolbar" aria-label="Lighting controls">
+      <label class="time">Time of day <output id="time-label">09:00</output><input id="time" type="range" min="0" max="24" step="0.1" value="9"></label>
+      <label>Interior lights<select id="lights"><option value="auto">Auto</option><option value="on">On</option><option value="off">Off</option></select></label>
+      <label>Diffuse bounces<select id="bounces"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select></label>
+      <label>View<select id="view"><option value="living">Living room</option><option value="hall">Hall & kitchen</option><option value="bedroom">Bedroom</option></select></label>
+      <button id="reset">Reset camera</button>
+    </section>
+    <section class="checkpoints" aria-label="Time presets"><span>TIME OF DAY</span><button data-hour="9">Morning</button><button data-hour="12">Noon</button><button data-hour="15">Afternoon</button><button data-hour="21">Night</button></section>
+    <figure><figcaption><strong>Bukit Merah apartment</strong><span>Real-time raster · cached diffuse</span></figcaption><div class="frame apartment-frame"><canvas id="scene" tabindex="0" aria-label="Interactive apartment"></canvas><div id="move-stick" aria-label="Drag to walk"><span id="stick-thumb"></span></div></div></figure>
+    <footer><p id="status" role="status">Loading the apartment…</p><p>Drag to look · W A S D to walk · touch pad to move.<br>Auto lights: on before 07:00 and from 18:00.</p></footer>
+    <details><summary>About this lighting study</summary><p>Four diffuse bounces use the same 1,024-ray transfer method as the comparison scene. Time and light changes update the lighting; walking does not restart it. Seven fixed room lights can be switched automatically or manually. The original textured materials are retained.</p><p>This is a first apartment prototype. Glass passes light without tint or refraction in the diffuse calculation. Glossy indirect reflections are not included. The older baked skylight is the loading and WebGL fallback; it cannot reproduce changing indirect sun or lamp light. Mobile performance is not yet measured.</p></details>
+  </main>
+  <script type="module" src="/src/apartment/main.ts"></script>
+</body>
+</html>

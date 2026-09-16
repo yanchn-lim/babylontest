@@ -20,6 +20,8 @@ export function geometry(data: SceneData) {
   const triangles: Triangle[] = [];
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const mesh of data.meshes) {
+    const material = data.materials[mesh.material];
+    if (material.transmitting) continue;
     const position = (i: number) => mesh.positions.slice(i * 3, i * 3 + 3) as Vec3;
     for (let face = 0; face < mesh.indices.length; face += 3) {
       const ids = mesh.indices.slice(face, face + 3);
@@ -61,8 +63,16 @@ export function geometry(data: SceneData) {
         // Extend smooth normals into padding, but keep ray origins on the mesh.
         const normal = [0, 1, 2].map(k => ids.reduce((sum, id, j) => sum + mesh.normals[id * 3 + k] * weights[j], 0));
         const length = Math.hypot(...normal);
+        let color = material.color;
+        if (material.diffuseTexture && mesh.albedoUvs) {
+          const { size, pixels } = material.diffuseTexture;
+          const uv = [0, 1].map(k => ids.reduce((sum, id, j) => sum + mesh.albedoUvs![id * 2 + k] * positionWeights[j], 0));
+          const texel = uv.map(v => Math.floor((v - Math.floor(v)) * size));
+          const sample = (texel[1] * size + texel[0]) * 4;
+          color = color.map((v, k) => v * pixels[sample + k] / 255) as Vec3;
+        }
         surfaces.set([...[0, 1, 2].map(k => points.reduce((sum, p, j) => sum + p[k] * positionWeights[j], 0)), 1,
-          ...normal.map(n => n / length), 0, ...data.materials[mesh.material].color, 0], offset);
+          ...normal.map(n => n / length), 0, ...color, 0], offset);
       }
     }
   }

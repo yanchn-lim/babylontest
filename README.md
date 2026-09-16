@@ -5,6 +5,11 @@ Built with standard Babylon.js 9.25.0 and a custom FrameGraph renderer.
 
 [Open the apartment](https://yanchn-lim.github.io/babylontest/?scene=bukit-merah)
 
+[Open the apartment lighting study](https://yanchn-lim.github.io/babylontest/apartment.html)
+for the comparison renderer applied to the fixed apartment: cached diffuse lighting,
+four bounces, walking, time of day and fixed Auto / On / Off room lights. The
+original viewer stays available. See the [apartment study guide](docs/apartment-transfer.md).
+
 [Open the lighting comparison](https://yanchn-lim.github.io/babylontest/comparison.html)
 to compare the small Babylon scene against matched offline Cycles references.
 Select cached dense diffuse lighting, radiance cascades or the baked baseline, change time and interior

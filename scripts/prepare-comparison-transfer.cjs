@@ -7,7 +7,9 @@ const { finished } = require('node:stream/promises');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'C:/Users/yc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const url = new URL(process.env.COMPARISON_URL || 'http://127.0.0.1:4185/comparison.html');
 url.searchParams.set('prepareTransfer', '1');
-const out = path.resolve('public/comparison/transfer.bin.gz');
+const directory = path.resolve(process.env.TRANSFER_OUTPUT_DIR || 'public/comparison');
+fs.mkdirSync(directory, { recursive: true });
+const out = path.join(directory, 'transfer.bin.gz');
 
 (async () => {
   const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--enable-unsafe-webgpu'] });
@@ -28,6 +30,8 @@ const out = path.resolve('public/comparison/transfer.bin.gz');
       return preparedTransfer.stats;
     });
     if (errors.length) throw Error(errors.join('\n'));
+    const sceneData = await page.evaluate(() => preparedTransfer.sceneData);
+    if (sceneData) fs.writeFileSync(path.join(directory, 'scene.json'), JSON.stringify(sceneData));
     if (!stats.entries || stats.entries * 4 > 128 * 1024 * 1024) throw Error('Transfer exceeds the prototype budget.');
     const temporary = out + '.tmp';
     const compressed = zlib.createGzip({ level: 9 }), file = fs.createWriteStream(temporary);
@@ -52,7 +56,7 @@ const out = path.resolve('public/comparison/transfer.bin.gz');
     const payload = fs.readFileSync(out);
     const report = { ...stats, compressedBytes: payload.length,
       sha256: crypto.createHash('sha256').update(payload).digest('hex'), errors };
-    fs.writeFileSync(path.resolve('public/comparison/transfer-report.json'), JSON.stringify(report, null, 2) + '\n');
+    fs.writeFileSync(path.join(directory, 'transfer-report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify(report, null, 2));
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -4,7 +4,7 @@ import {
   UniversalCamera, Vector3, VertexData, WebGPUEngine,
 } from '@babylonjs/core';
 import { ComparisonLightmaps, type LightmapState } from './lightmaps';
-import { lighting, sunInterval, type SwitchMode } from './lighting';
+import { lighting, skyDisplay, sunInterval, type SwitchMode } from './lighting';
 import { navigation } from './navigation';
 import { RadianceCascades } from './radiance-cascades';
 import { CachedTransfer } from './cached-transfer';
@@ -12,8 +12,9 @@ import './style.css';
 
 type Vec3 = [number, number, number];
 export interface SceneData {
-  materials: { name: string; color: Vec3; roughness: number }[];
-  meshes: { material: number; positions: number[]; normals: number[]; uvs: number[]; indices: number[] }[];
+  materials: { name: string; color: Vec3; roughness: number; transmitting?: boolean;
+    diffuseTexture?: { size: number; pixels: number[] } }[];
+  meshes: { material: number; positions: number[]; normals: number[]; uvs: number[]; indices: number[]; albedoUvs?: number[] }[];
   fixtures: { position: Vec3; color: Vec3; intensity: number }[];
   views: Record<string, { position: Vec3; target: Vec3; fov: number }>;
   sunHours: number[];
@@ -238,14 +239,6 @@ async function start() {
     });
   }
   window.addEventListener('pagehide', () => { observer.disconnect(); cascades?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
-}
-
-function skyDisplay(rgb: Vec3): Vec3 {
-  const [r, g, b] = rgb.map(value => value / .6);
-  const input = [.59719 * r + .35458 * g + .04823 * b, .076 * r + .90834 * g + .01566 * b, .0284 * r + .13383 * g + .83777 * b];
-  const [x, y, z] = input.map(v => (v * (v + .0245786) - .000090537) / (v * (.983729 * v + .432951) + .238081));
-  return [1.60475 * x - .53108 * y - .07367 * z, -.10208 * x + 1.10813 * y - .00605 * z, -.00327 * x - .07276 * y + 1.07602 * z]
-    .map(v => { const value = Math.min(1, Math.max(0, v)); return value <= .0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - .055; }) as Vec3;
 }
 
 start().catch(error => { console.error(error); status.textContent = String(error); });

@@ -1,6 +1,7 @@
 import type { SceneData } from './main';
 import source from './radiance-cascades.wgsl?raw';
 import transferSource from './cached-transfer.wgsl?raw';
+import fixedLightsSource from './transfer-lights.wgsl?raw';
 
 export const TRANSFER_SIZE = 256;
 export const TRANSFER_RAYS = 1024;
@@ -9,11 +10,23 @@ export const transferShader = source + '\n' + transferSource;
 export const transferFields = ['sun', 'sunColor', 'sky', 'lamp0', 'lampColor0', 'lamp1', 'lampColor1',
   'origin', 'dimensions', 'range', 'nextDimensions', 'nextRange', 'update', 'bounce'];
 export const transferBindings = ['nodes', 'triangles', 'surfaces', 'params', 'hits', 'surfaceLight',
-  'cascades', 'output', 'bounceLight', 'transfer', 'offsets'];
+  'cascades', 'output', 'bounceLight', 'transfer', 'offsets', 'fixedLights'];
+
+// Keep the two-light comparison shader and its prepared cache unchanged.
+export function transferSourceFor(data: SceneData) {
+  if (data.fixtures.length > 8) throw Error('Cached diffuse supports up to eight fixed lights.');
+  return data.fixtures.length === 2 ? transferShader : transferShader
+    .replace('fn prepareTransfer(', 'fn prepareTransferTwoLights(')
+    .replace('fn shade(', 'fn shadeTwoLights(') + '\n' + fixedLightsSource;
+}
+
+export function fixedLightData(data: SceneData) {
+  return new Float32Array(data.fixtures.flatMap(light => [...light.position, light.intensity, ...light.color, 0]));
+}
 
 export async function transferFingerprint(data: SceneData) {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
-    JSON.stringify(data) + transferShader.replace(/\r\n/g, '\n') + `|atlas=${TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1`)));
+    JSON.stringify(data) + transferSourceFor(data).replace(/\r\n/g, '\n') + `|atlas=${TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1`)));
 }
 
 export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
@@ -40,6 +53,7 @@ export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
     }
     if (hits > TRANSFER_RAYS) throw Error('Diffuse transfer exceeds sample energy.');
   }
-  if (!visibility.every(v => Number.isFinite(v) && v >= 0 && v <= 1)) throw Error('Invalid cached visibility.');
+  if (!visibility.every((v, i) => Number.isFinite(v) && v >= 0 && v <=
+    (i % 4 === 3 && data.fixtures.length !== 2 ? 255 : 1))) throw Error('Invalid cached visibility.');
   return { offsets, visibility, entries };
 }

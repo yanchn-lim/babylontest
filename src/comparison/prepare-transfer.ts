@@ -1,7 +1,7 @@
 import { ComputeShader, StorageBuffer, UniformBuffer, type WebGPUEngine } from '@babylonjs/core';
 import { geometry } from './radiance-cascades';
 import type { SceneData } from './main';
-import { transferBindings, transferFields, transferFingerprint, transferShader,
+import { fixedLightData, transferBindings, transferFields, transferFingerprint, transferSourceFor,
   TRANSFER_SIZE, TRANSFER_PIXELS, TRANSFER_RAYS } from './transfer-data';
 
 /** Offline tool entry point; ordinary viewers only download the prepared data. */
@@ -21,9 +21,10 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     buffer('surfaceLight', TRANSFER_PIXELS * 32); buffer('transfer', batch * TRANSFER_RAYS * 4);
     transferFields.forEach(name => params.addUniform(name, 4)); params.create();
     params.updateFloat4('sky', 0, 0, 0, TRANSFER_SIZE);
-    data.fixtures.forEach((lamp, i) => params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity));
+    data.fixtures.slice(0, 2).forEach((lamp, i) => params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity));
     const names = ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', 'transfer'];
-    const shader = new ComputeShader('Prepare diffuse transfer', engine, { computeSource: transferShader }, {
+    if (data.fixtures.length !== 2) { buffer('fixedLights', fixedLightData(data)); names.push('fixedLights'); }
+    const shader = new ComputeShader('Prepare diffuse transfer', engine, { computeSource: transferSourceFor(data) }, {
       entryPoint: 'prepareTransfer',
       bindingsMapping: Object.fromEntries(names.map(name => [name, { group: 0, binding: transferBindings.indexOf(name) }])),
     });

@@ -22,3 +22,11 @@ export function sunInterval(hour: number, hours: number[]) {
   const lower = Math.max(0, upper - 1);
   return { lower, upper, blend: lower === upper ? 0 : (clamped - hours[lower]) / (hours[upper] - hours[lower]) };
 }
+
+export function skyDisplay(rgb: [number, number, number]): [number, number, number] {
+  const [r, g, b] = rgb.map(value => value / .6);
+  const input = [.59719 * r + .35458 * g + .04823 * b, .076 * r + .90834 * g + .01566 * b, .0284 * r + .13383 * g + .83777 * b];
+  const [x, y, z] = input.map(v => (v * (v + .0245786) - .000090537) / (v * (.983729 * v + .432951) + .238081));
+  return [1.60475 * x - .53108 * y - .07367 * z, -.10208 * x + 1.10813 * y - .00605 * z, -.00327 * x - .07276 * y + 1.07602 * z]
+    .map(v => { const value = Math.min(1, Math.max(0, v)); return value <= .0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - .055; }) as [number, number, number];
+}

@@ -279,9 +279,10 @@ function; the matching function in `lighting.ts` must change with it.
 & .\.tools\node-v24.19.0-win-x64\node.exe scripts/check-comparison-bounces.cjs
 ```
 
-Next decision: review the cascade result against the baked baseline and Cycles
-in both saved views at 1–4 bounces before expanding to the apartment. Phone
-performance and asset-budget decisions follow acceptable small-scene visuals.
+The cached dense diffuse method is also available in the fixed apartment at
+`/apartment.html`. See [the apartment study guide](apartment-transfer.md).
+The small scene remains the matched Cycles comparison. Phone performance and
+asset-budget decisions remain open.
 
 ## Primary references
 

@@ -1,0 +1,2 @@
+.apartment-frame{aspect-ratio:16/9;max-height:75vh}header nav{line-height:2}
+@media(max-width:760px){.apartment-frame{aspect-ratio:4/3}header nav{max-width:135px}}
