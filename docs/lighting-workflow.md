@@ -141,7 +141,7 @@ Open the local viewer with `?scene=bukit-merah`. Review the result before commit
 
 ## 6. Balance the lighting in Babylon
 
-**Directional baked lighting** is enabled by default for the apartment. Its toggle is saved with the other graphics settings. Sponza retains its original lightmap path.
+**Directional baked lighting** is enabled by default for the apartment. Its toggle is saved with the other graphics settings.
 
 Babylon's standard PBR lightmap is additive. The material plugin adjusts that contribution using the ratio between the perturbed-normal and reference-normal cosine responses to the baked direction. It transforms directions with the mesh world matrix, preserving glTF handedness. The reference normal produces a multiplier of 1. Near-zero moments fall back to the original lightmap; grazing responses are bounded. Reflections still use Babylon's existing PBR environment path.
 

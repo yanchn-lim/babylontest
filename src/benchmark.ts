@@ -101,7 +101,7 @@ export function attachBenchmark(engine: Engine | WebGPUEngine, scene: Scene, cam
     previousRotation.copyFrom(camera.rotation);
     metadata = {
       version: 1, revision: __APP_REVISION__, startedAt: new Date().toISOString(),
-      mode: mode.value, scene: new URLSearchParams(location.search).get("scene") || "sponza",
+      mode: mode.value, scene: new URLSearchParams(location.search).get("scene") || "bukit-merah",
       walkingRoute: automatedWalk ? WALK_ROUTE : undefined,
       navigation: navigation.value,
       settings: snapshot, dimensions: dimensions(), devicePixelRatio: window.devicePixelRatio,

@@ -1,7 +1,7 @@
 # Babylon.js apartment lighting lab
 
-An interactive TypeScript and Vite viewer for the Bukit Merah Ridge apartment and
-Sponza. Built with standard Babylon.js 9.25.0 and a custom FrameGraph renderer.
+An interactive TypeScript and Vite viewer for the Bukit Merah Ridge apartment.
+Built with standard Babylon.js 9.25.0 and a custom FrameGraph renderer.
 
 [Open the apartment](https://yanchn-lim.github.io/babylontest/?scene=bukit-merah)
 
@@ -21,7 +21,7 @@ From the repository root in PowerShell:
 
 The launcher downloads a SHA-256-checked Node.js 24.19.0 runtime into the ignored
 `.tools` directory without replacing your system Node installation. Setup installs
-pinned dependencies and downloads the Sponza assets and environment lighting.
+pinned dependencies and downloads the environment lighting.
 Open the address printed by Vite. Stop the server with Ctrl+C.
 
 With your own Node installation, use Node 24 to match CI:
@@ -159,21 +159,9 @@ That guide describes the baked path, not runtime probe GI. Review staged outputs
 before replacing public assets. Material changes require a rebake for the baked path;
 changing direct sun direction does not.
 
-To reproduce the Sponza bake with Blender 4.5:
-
-```powershell
-blender --background --factory-startup --python-exit-code 1 --python scripts/bake-lighting.py
-```
-
-Review `.tools/baked-lighting` before copying outputs to `public/models/sponza/baked`.
-Its two 4096 × 4096 RGB light/AO maps use about 96 MiB uncompressed. They have no
-mipmaps to avoid mixing UV gutters; distant surfaces can alias.
-
 Asset sources and licenses:
 
-- [Sponza source](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/723ffc6706725b618b8c14ceb82e3e6904b08a76/Models/Sponza)
 - [Environment source](https://github.com/BabylonJS/Assets/tree/8be9384c7f8728cb45d27975ac92a412f97a98dd/environments)
-- [Sponza attribution](public/models/sponza/SOURCE.md)
 - [Supplied licenses](public/LICENSES)
 - [Asset revisions](public/ASSET-SOURCES.json)
 - [Apartment material sources and hashes](public/models/bukit-merah/pbr/sources.json)

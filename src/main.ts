@@ -25,20 +25,19 @@ import { arrangeSettings } from "./settings-layout";
 const preferences = attachGraphicsPreferences();
 const ui = arrangeSettings();
 
-const apartment = true;
 const optimizedRenderer = new URLSearchParams(location.search).get("renderer") !== "baseline";
-const sceneName = apartment ? "Bukit Merah Ridge · 4-room" : "Sponza";
+const sceneName = "Bukit Merah Ridge · 4-room";
 document.querySelector("h1")!.textContent = sceneName;
 document.title = sceneName + " · Babylon.js Lab";
 const sourceLink = document.querySelector<HTMLAnchorElement>("#model-source")!;
-sourceLink.href = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/SOURCE.md" : "models/sponza/SOURCE.md");
+sourceLink.href = import.meta.env.BASE_URL + "models/bukit-merah/SOURCE.md";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const controls = document.querySelector<HTMLFieldSetElement>("#controls")!;
 const navigation = document.querySelector<HTMLSelectElement>("#navigation")!;
-navigation.value = apartment ? "walk" : "fly";
-document.querySelector<HTMLElement>("#navigation-setting")!.hidden = !apartment;
+navigation.value = "walk";
+document.querySelector<HTMLElement>("#navigation-setting")!.hidden = false;
 const shadows = document.querySelector<HTMLSelectElement>("#shadows")!;
 const shadowFilter = document.querySelector<HTMLSelectElement>("#shadow-filter")!;
 const shaftsEnabled = document.querySelector<HTMLInputElement>("#shafts")!;
@@ -138,15 +137,15 @@ async function start() {
   sky.setVerticesData(VertexBuffer.ColorKind, skyColors, true);
 
   activeEngine.runRenderLoop(() => activeScene.render());
-  const bakedUrl = import.meta.env.BASE_URL + (apartment ? "models/bukit-merah/pbr/" : "models/sponza/baked/");
+  const bakedUrl = import.meta.env.BASE_URL + "models/bukit-merah/pbr/";
   const response = await fetch(bakedUrl + "lighting.json", { cache: "no-cache" });
   if (!response.ok) throw new Error("Could not load baked lighting metadata.");
   const lighting = await response.json();
   if (!Number.isFinite(lighting.lightmapScale) || lighting.lightmapScale <= 0) {
     throw new Error("Invalid baked lightmap scale.");
   }
-  const modelUrl = new URL(bakedUrl + (apartment ? "Apartment.gltf" : "Sponza.gltf"), document.baseURI);
-  modelUrl.searchParams.set("v", lighting.sha256[apartment ? "Apartment.gltf" : "Sponza.gltf"]);
+  const modelUrl = new URL(bakedUrl + "Apartment.gltf", document.baseURI);
+  modelUrl.searchParams.set("v", lighting.sha256["Apartment.gltf"]);
   const modelResponse = await fetch(modelUrl);
   if (!modelResponse.ok) throw new Error("Could not load baked model.");
   const model = await modelResponse.json();
@@ -162,21 +161,19 @@ async function start() {
     "", "", "data:" + JSON.stringify(model),
     activeScene, undefined, ".gltf",
   );
-  if (apartment) {
-    for (const mesh of result.meshes) {
-      if (!["Bare floor | neutral screed", "Wet area | neutral porcelain"].includes(mesh.material?.name ?? "")) continue;
-      const uv = mesh.getVerticesData(VertexBuffer.UVKind);
-      if (!uv) continue;
-      for (let i = 0; i < uv.length; i += 2) {
-        const u = uv[i], v = uv[i + 1];
-        uv[i] = (u - v) * Math.SQRT1_2;
-        uv[i + 1] = (u + v) * Math.SQRT1_2;
-      }
-      mesh.setVerticesData(VertexBuffer.UVKind, uv);
+  for (const mesh of result.meshes) {
+    if (!["Bare floor | neutral screed", "Wet area | neutral porcelain"].includes(mesh.material?.name ?? "")) continue;
+    const uv = mesh.getVerticesData(VertexBuffer.UVKind);
+    if (!uv) continue;
+    for (let i = 0; i < uv.length; i += 2) {
+      const u = uv[i], v = uv[i + 1];
+      uv[i] = (u - v) * Math.SQRT1_2;
+      uv[i + 1] = (u + v) * Math.SQRT1_2;
     }
+    mesh.setVerticesData(VertexBuffer.UVKind, uv);
   }
   // UV1 has a one-pixel gutter; avoid mipmaps that mix neighboring islands.
-  const aoUrl = new URL(apartment ? "../baked/ao.png" : "ao.png", new URL(bakedUrl, document.baseURI));
+  const aoUrl = new URL("../baked/ao.png", new URL(bakedUrl, document.baseURI));
   const ao = new Texture(aoUrl.href, activeScene, {
     noMipmap: true, invertY: false,
     format: optimizedRenderer && (activeEngine instanceof WebGPUEngine || activeEngine.webGLVersion > 1) ? Constants.TEXTUREFORMAT_RED : Constants.TEXTUREFORMAT_RGBA,
@@ -190,11 +187,11 @@ async function start() {
   indirect.gammaSpace = true;
   indirect.level = lighting.lightmapScale;
   const directionalControl = document.querySelector<HTMLInputElement>("#directional-lightmaps")!;
-  document.querySelector<HTMLElement>("#directional-lightmaps-setting")!.hidden = !apartment;
+  document.querySelector<HTMLElement>("#directional-lightmaps-setting")!.hidden = false;
   let direction: Texture | undefined;
   const directionalPlugins: DirectionalLightmapPlugin[] = [];
   let bakedLighting = true;
-  if (apartment && lighting.directional) {
+  if (lighting.directional) {
     if (lighting.directional.version !== 1 || lighting.directional.space !== "glTF model"
       || lighting.directional.file !== "direction.png" || !/^[a-f0-9]{64}$/.test(lighting.sha256["direction.png"] ?? "")
       || lighting.directional.referenceLightmapSha256 !== lighting.sha256["indirect.png"]) {
@@ -236,7 +233,7 @@ async function start() {
     sync();
   }
   const meshes = result.meshes.filter(mesh => mesh.getTotalVertices() > 0);
-  const materialControls = attachMaterialControls(meshes, apartment ? "bukit-merah" : "sponza");
+  const materialControls = attachMaterialControls(meshes, "bukit-merah");
   if (!meshes.length) throw new Error(sceneName + " contains no renderable meshes.");
   let minimum = new Vector3(Infinity, Infinity, Infinity);
   let maximum = new Vector3(-Infinity, -Infinity, -Infinity);
@@ -244,19 +241,17 @@ async function start() {
     mesh.computeWorldMatrix(true);
     if (optimizedRenderer) mesh.freezeWorldMatrix();
     mesh.receiveShadows = true;
-    mesh.checkCollisions = apartment;
+    mesh.checkCollisions = true;
     const bounds = mesh.getBoundingInfo().boundingBox;
     minimum = Vector3.Minimize(minimum, bounds.minimumWorld);
     maximum = Vector3.Maximize(maximum, bounds.maximumWorld);
   }
   const center = minimum.add(maximum).scale(0.5);
-  const width = maximum.x - minimum.x;
-  const eye = minimum.y + 1.7;
-  const resetFlight = attachFlyControls(camera, canvas, () => apartment && navigation.value === "walk", () => walkingSpeed, () => eyeHeight);
+  const resetFlight = attachFlyControls(camera, canvas, () => navigation.value === "walk", () => walkingSpeed, () => eyeHeight);
   ui.connect({ resetInput: resetFlight, closeInspector: () => { activeScene.debugLayer.hide(); inspector.textContent = "Open inspector"; } });
   activeScene.onDisposeObservable.add(() => { ui.dispose(); clearInterval(statistics); });
   function updateNavigation() {
-    const walking = apartment && navigation.value === "walk";
+    const walking = navigation.value === "walk";
     camera.checkCollisions = walking;
     document.querySelector<HTMLElement>(".height-controls")!.hidden = walking;
     document.querySelector<HTMLElement>(".desktop-hint")!.innerHTML = walking
@@ -276,12 +271,8 @@ async function start() {
     resetFlight();
     camera.cameraDirection.setAll(0);
     camera.cameraRotation.setAll(0);
-    camera.position.copyFrom(apartment
-      ? new Vector3(-10.5, eyeHeight, -4.8)
-      : new Vector3(minimum.x + width * 0.16, eye, center.z));
-    const target = apartment
-      ? new Vector3(-10.5, eyeHeight - 0.3, -7.0)
-      : new Vector3(center.x, eye + 0.5, center.z);
+    camera.position.copyFrom(new Vector3(-10.5, eyeHeight, -4.8));
+    const target = new Vector3(-10.5, eyeHeight - 0.3, -7.0);
     camera.setTarget(target);
   }
   function updateSunDirection() {
