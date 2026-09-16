@@ -5,6 +5,13 @@ Built with standard Babylon.js 9.25.0 and a custom FrameGraph renderer.
 
 [Open the apartment](https://yanchn-lim.github.io/babylontest/?scene=bukit-merah)
 
+[Open the lighting comparison](https://yanchn-lim.github.io/babylontest/comparison.html)
+to compare the small Babylon scene against matched offline Cycles references.
+Select WebGPU radiance cascades or the baked baseline, change time and interior
+lights, and compare saved views side by side or with an overlay. WebGL uses the
+baked fallback. See the [comparison guide](docs/remake-comparison.md) for controls,
+implementation limits and asset preparation.
+
 The viewer includes PBR materials, movable sunlight, shadows, bloom, light shafts,
 and an artistic day/night cycle. The apartment supports baked lighting and
 experimental WebGPU probe global illumination (GI). WebGPU is preferred when

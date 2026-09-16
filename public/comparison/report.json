@@ -1,0 +1,135 @@
+{
+  "blender": "4.5.3 LTS",
+  "device": "HIP",
+  "samples": 1024,
+  "seed": 731,
+  "denoising": {
+    "references": "Cycles offline denoising",
+    "bases": "OIDN RTLightmap per UV island",
+    "runtime": false
+  },
+  "bounces": 8,
+  "atlasSize": 512,
+  "bases": [
+    {
+      "name": "sky",
+      "maximum": 0.5514329671859741,
+      "clipped": false
+    },
+    {
+      "name": "fixtures",
+      "maximum": 1.1876604557037354,
+      "clipped": false
+    },
+    {
+      "name": "sun-6",
+      "maximum": 0.0,
+      "clipped": false
+    },
+    {
+      "name": "sun-9",
+      "maximum": 0.20582199096679688,
+      "clipped": false
+    },
+    {
+      "name": "sun-12",
+      "maximum": 0.2414764165878296,
+      "clipped": false
+    },
+    {
+      "name": "sun-15",
+      "maximum": 0.20281779766082764,
+      "clipped": false
+    },
+    {
+      "name": "sun-18",
+      "maximum": 0.0,
+      "clipped": false
+    }
+  ],
+  "referenceCount": 12,
+  "seconds": 126.96860384941101,
+  "scriptSha256": "39a575e3d020dee4a82cbcf0994e0143f429c807382170ae5541d87f69fa34ce",
+  "files": {
+    "doorway-12-off.png": {
+      "bytes": 53178,
+      "sha256": "d71e92b357a9825e7edc6c8967b5cd38b51d318b6a62c406d2b63af19ab308db"
+    },
+    "doorway-12-on.png": {
+      "bytes": 157116,
+      "sha256": "7a143592d0b6ca9876e8efa0d8206b7a565ae879ae423d7efdca94d5566fdbd3"
+    },
+    "doorway-15-off.png": {
+      "bytes": 48167,
+      "sha256": "a3bcab2840076952373a9d302d0a430aa440a43f5584c3cc7f287f4175894066"
+    },
+    "doorway-21-off.png": {
+      "bytes": 972,
+      "sha256": "441da7236f6ffdd8fb4cdfa2d9ce7b8d8df8cf2f7a8e82c530714d92266ce613"
+    },
+    "doorway-21-on.png": {
+      "bytes": 152248,
+      "sha256": "1252f4d0ac311646c12a1cae80beb0e404642befb9455c98d39f11503a32f070"
+    },
+    "doorway-9-off.png": {
+      "bytes": 45854,
+      "sha256": "3a2d517cb1a7b5ef6cf9ab15d537b8526c3b4a931e4fbef5cb7b48e555228841"
+    },
+    "fixtures.png": {
+      "bytes": 201138,
+      "sha256": "04f896d755ee213c54806aa750e2261947b8e4fb4b7e2846f1b0de296b0edd66"
+    },
+    "room-12-off.png": {
+      "bytes": 95913,
+      "sha256": "cfe4ad448fe513b062bb35e55f19147457ac630d588f6d71e1d545bf5c776796"
+    },
+    "room-12-on.png": {
+      "bytes": 180693,
+      "sha256": "628851f84e3121014e0090a8515968a47f2f701109039bd54e2dfb12a35b54e4"
+    },
+    "room-15-off.png": {
+      "bytes": 86597,
+      "sha256": "363cf0d975d5a5a0830436ee9acfd41c799e008b34b5a0f4841f7eb3cfac4f52"
+    },
+    "room-21-off.png": {
+      "bytes": 3859,
+      "sha256": "6aa5bdde142a6b745a228fd47b67cffb02315e94dfa056eae75e4910567b1649"
+    },
+    "room-21-on.png": {
+      "bytes": 164552,
+      "sha256": "6ef4e9d67fc1de5e88e2a82f808bec2b6ddfac7afc5e2303feafab69be547bb1"
+    },
+    "room-9-off.png": {
+      "bytes": 97503,
+      "sha256": "20f4474f1e3821dd2d79a79a601343b6cd569fe1639d687b18e564b989c9a67d"
+    },
+    "scene.json": {
+      "bytes": 516165,
+      "sha256": "40624446ae36ac9133c8ee60ffb56ab637d7e6ac71793c8d0d9f235065c72868"
+    },
+    "sky.png": {
+      "bytes": 194199,
+      "sha256": "350f63531c80f9e5458de2bbec5391355f9c25147876264181c4b5f5f4a19a68"
+    },
+    "sun-12.png": {
+      "bytes": 137787,
+      "sha256": "a528765a72a6ce15bc460f33f11acd49e63ab3050213b79db58fce4736aae0fe"
+    },
+    "sun-15.png": {
+      "bytes": 134250,
+      "sha256": "6d60ff133ebbac446a6819f679b057bbea0adb94acfc7ea05530addd2352715f"
+    },
+    "sun-18.png": {
+      "bytes": 2324,
+      "sha256": "8e09b656461fa006d3398bc1326c14c2a3dad0ab5c1bcded7d658756720117c4"
+    },
+    "sun-6.png": {
+      "bytes": 2324,
+      "sha256": "8e09b656461fa006d3398bc1326c14c2a3dad0ab5c1bcded7d658756720117c4"
+    },
+    "sun-9.png": {
+      "bytes": 141023,
+      "sha256": "1a141deaaaaf971494a0016d9c577003e6b6933539f3f96a10f1610231877b4b"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>Babylon · Lighting comparison</title></head>
+<body>
+  <header><div><p class="eyebrow">BABYLON / REMAKE STUDY 01</p><h1>A room, two renderers.</h1><p>Fixed geometry. Changing daylight. A shared reference.</p></div><a href="./index.html">Apartment viewer ↗</a></header>
+  <main>
+    <section class="toolbar" aria-label="Lighting controls">
+      <label class="time">Time of day <output id="time-label">12:00</output><input id="time" type="range" min="0" max="24" step="0.1" value="12"></label>
+      <label>Interior lights<select id="lights"><option value="auto">Auto</option><option value="on">On</option><option value="off">Off</option></select></label>
+      <label>Global illumination<select id="gi"><option value="cascades">Radiance cascades</option><option value="baked">Baked baseline</option></select></label>
+      <label>View<select id="view"><option value="room">Window & objects</option><option value="doorway">Doorway & dark room</option></select></label>
+      <label>Comparison<select id="layout"><option value="split">Side by side</option><option value="overlay">Overlay</option></select></label>
+      <label id="blend-control" hidden>Reference opacity<input id="blend" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+      <button id="reset">Reset camera</button>
+    </section>
+    <section class="checkpoints" aria-label="Reference checkpoints"><span>REFERENCE TIMES</span><button data-hour="9" data-on="false">Morning</button><button data-hour="12" data-on="false">Noon</button><button data-hour="15" data-on="false">Afternoon</button><button data-hour="21" data-on="true">Night · lights on</button><button data-hour="12" data-on="true">Noon · lights on</button><button data-hour="21" data-on="false">Night · lights off</button></section>
+    <section id="comparison" class="split">
+      <figure class="realtime"><figcaption><strong>Babylon</strong><span>Real-time raster</span></figcaption><div class="frame"><canvas id="scene" tabindex="0" aria-label="Interactive room"></canvas><div id="move-stick" aria-label="Drag to walk"><span id="stick-thumb"></span></div></div></figure>
+      <figure class="reference"><figcaption><strong>Cycles</strong><span>Offline path trace</span></figcaption><div class="frame"><img id="reference" alt="Matched Cycles reference"><p id="reference-note"></p></div></figure>
+    </section>
+    <footer><p id="status" role="status">Loading the comparison scene…</p><p>Drag to look · W A S D to walk · touch pad to move. Reset the camera to compare.<br>Auto lights: on before 07:00 and from 18:00. The sun path is a controlled test, not a location simulation.</p></footer>
+    <details><summary>What this experiment measures</summary><p>Radiance cascades compute sky lighting and one diffuse bounce from the full scene. Lighting updates when time or lamps change and stays fixed while walking. The baked baseline blends offline lighting maps between three-hour checkpoints. Both use live direct sun and lamp shadows and the same Cycles references, exposure and display curve. Baked lighting remains visible while cascades prepare and is the WebGL fallback.</p><p>This is an initial visual study, not accepted renderer parity. The cascade study has finite spatial and directional resolution; Cycles includes more bounces and glossy reflections. Local glossy reflections are not implemented in Babylon. Mobile performance has not been established.</p></details>
+  </main>
+  <script type="module" src="/src/comparison/main.ts"></script>
+</body>
+</html>
