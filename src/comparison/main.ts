@@ -25,6 +25,7 @@ const status = element('status');
 const time = element<HTMLInputElement>('time');
 const lights = element<HTMLSelectElement>('lights');
 const gi = element<HTMLSelectElement>('gi');
+const bounces = element<HTMLSelectElement>('bounces');
 const view = element<HTMLSelectElement>('view');
 const reference = element<HTMLImageElement>('reference');
 const note = element('reference-note');
@@ -130,6 +131,7 @@ async function start() {
     gi.querySelector<HTMLOptionElement>('[value="cascades"]')!.disabled = true;
   }
   function updateStatus() {
+    bounces.disabled = gi.value !== 'cascades' || !cascades || !!cascades.error;
     const state = lighting(Number(time.value), lights.value as SwitchMode);
     basis.useCascades = gi.value === 'cascades' && !!cascades?.ready && !cascades.error;
     const method = gi.value === 'cascades' ? cascades!.status : 'Baked GI';
@@ -158,7 +160,7 @@ async function start() {
   function applyLighting() {
     const hour = Number(time.value);
     const state = lighting(hour, lights.value as SwitchMode);
-    cascades?.setLighting(state, data.sky);
+    cascades?.setLighting(state, data.sky, Number(bounces.value));
     const interval = sunInterval(hour, data.sunHours);
     basis.sky = state.sky; basis.fixtures = Number(state.on); basis.blend = interval.blend;
     basis.lower = sunMaps[interval.lower]; basis.upper = sunMaps[interval.upper];
@@ -179,6 +181,7 @@ async function start() {
   time.addEventListener('input', applyLighting);
   lights.addEventListener('change', applyLighting);
   gi.addEventListener('change', updateStatus);
+  bounces.addEventListener('change', applyLighting);
   view.addEventListener('change', resetView);
   element('reset').addEventListener('click', resetView);
   document.querySelectorAll<HTMLButtonElement>('[data-hour]').forEach(button => button.addEventListener('click', () => {
@@ -210,7 +213,7 @@ async function start() {
   Object.assign(window, { comparison: {
     scene, camera, engine, ready: true,
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
-      gi: gi.value, activeGi: basis.useCascades ? 'cascades' : 'baked', cascades: cascades?.diagnostics(),
+      gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? 'cascades' : 'baked', cascades: cascades?.diagnostics(),
       cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
   } });
   window.addEventListener('pagehide', () => { observer.disconnect(); cascades?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });

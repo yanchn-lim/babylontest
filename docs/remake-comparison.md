@@ -2,7 +2,9 @@
 
 [Open the published comparison](https://yanchn-lim.github.io/babylontest/comparison.html).
 
-The user-approved visual checkpoint is commit `5a0ea1d`, saved as tag
+The latest user-approved visual checkpoint is commit `d2b7a18`, saved as tag
+[`checkpoint/comparison-shadows-noise-2026-09-17`](https://github.com/yanchn-lim/babylontest/tree/checkpoint/comparison-shadows-noise-2026-09-17).
+The earlier checkpoint `5a0ea1d` remains available as
 [`checkpoint/comparison-2026-09-17`](https://github.com/yanchn-lim/babylontest/tree/checkpoint/comparison-2026-09-17).
 
 The first remake study is at `comparison.html`. It provides one fixed test room,
@@ -17,6 +19,8 @@ apartment renderer. The original apartment viewer is the other supported impleme
 - Auto turns the lights on before 07:00 and from 18:00. On and Off override it.
 - Global illumination selects Radiance cascades or Baked baseline. WebGPU starts
   with cascades; WebGL uses the baked baseline and disables the cascade option.
+- Diffuse bounces selects 1–4 indirect bounces for cascades. It defaults to the
+  one-bounce checkpoint and is disabled for the baked baseline and WebGL.
 - Six checkpoints cover morning, noon, afternoon, night with lights on, noon
   with lights on, and night with lights off.
 - Two saved cameras provide 12 Cycles references. Compare side by side or with
@@ -57,35 +61,44 @@ The implementation does the following:
 5. Merges distant intervals into nearer intervals, then gathers bounced light
    at the surfaces. Cached direct sky visibility supplies the sky contribution
    separately, so coarse probe interpolation cannot leak direct sky light.
-6. Adds the resulting linear diffuse radiance to Babylon's live direct sun and
+6. For each additional bounce, propagates only the previous bounce's radiance
+   through the same intervals and gather. A separate buffer holds this increment
+   and the running total. Direct sky is added once; direct sun and lamp light
+   are not re-added on later bounces. Each input change starts a fresh series.
+7. Adds the resulting linear diffuse radiance to Babylon's live direct sun and
    lamp shading. Surface colour is already included. Exposure is unchanged.
 
-The result has **one indirect diffuse bounce**, plus direct sky illumination.
-Cycles has up to eight bounces and includes glossy reflections. Further bounces
-are deferred until this first result is reviewed. Coarse probes, angular
+The result has **one to four indirect diffuse bounces**, plus direct sky illumination.
+Cycles has up to eight bounces and includes glossy reflections. Coarse probes, angular
 sampling, UV resolution and interpolation still produce bands and can leak
 bounced light. The lamp depth bias removes the dotted ceiling self-shadows
 in the tested views; shadow-map resolution still limits edge quality.
 The shadow refinement uses 1,024-pixel lamp cube maps with Babylon's four-sample
 Poisson filter, and medium-quality PCF for the sun with a matching depth bias.
-Lamp map texel count is four
-times the checkpoint's; the fixed lamp maps are still rendered only once.
+Lamp map texel count is four times the earlier `5a0ea1d` checkpoint's; the
+fixed lamp maps are still rendered only once.
 
 Preparation and lighting updates run independently of camera motion. Lighting
-updates use five dispatches over five rendered frames; the previous finished
-texture stays visible until the new result is written. During first preparation,
+updates use five dispatches per bounce, over 5/10/15/20 rendered frames for
+1/2/3/4 bounces. Shader readiness can add frames. The previous finished texture
+stays visible until the entire new series is written. During first preparation,
 the baked baseline remains visible. The status identifies preparation, updating,
 and the finished cascade result. A shader compilation failure keeps baked GI.
-Continuous slider input queues the latest time while the current update finishes;
+Continuous input queues the latest time, lamp state and bounce count while the current update finishes;
 it does not restart the cascade merge on every input event.
 
-For this scene, cascade buffers and the output texture allocate 80,699,344 bytes
-(about 77 MiB), excluding Babylon's scene and shadow resources. Static visibility
+For this scene, cascade buffers and the output texture allocate 82,796,496 bytes
+(about 79 MiB), excluding Babylon's scene and shadow resources. The additional
+2 MiB is fixed for all bounce settings. Static visibility
 is prepared at load time; no new download or offline asset is needed. This first
 implementation has not been measured on the target iPhone.
 
 `window.comparison.state().cascades` exposes readiness, lighting revision,
-allocation size and optional GPU timings. Timings describe the last dispatch
+requested/completed bounce counts, allocation size and optional GPU timings.
+`lastUpdateDispatches` counts the completed series. `lastUpdateWallMilliseconds`
+spans CPU scheduling from the first pass to submission of the final pass,
+including frame spacing; it is not a GPU-only duration or a phone benchmark.
+GPU timings describe the last dispatch
 of each shader, **not** a full update or frame. In particular, `merge` reports the
 last cascade level, and preparation timings report the last batch. Unsupported
 GPU timers return `null`. Timing support is optional.
@@ -179,6 +192,12 @@ function; the matching function in `lighting.ts` must change with it.
 - `scripts/check-comparison.cjs` checks lighting updates, saved views, navigation,
   cascade/baked switching, no GI recalculation while walking, WebGL fallback
   and narrow touch layout. These are focused browser checks, not a full suite.
+- `scripts/check-comparison-bounces.cjs` checks all four counts at noon and night,
+  nonnegative added radiance, exact restoration of one bounce, queued changes,
+  and retention of the last finished result. One-bounce GI texture hashes match
+  the published `d2b7a18` checkpoint at both times. Four-bounce walking reuses GI.
+  One warmed desktop run scheduled the 1/2/3/4-bounce updates in approximately
+  33/75/116/158 ms. These include frame spacing, not just GPU execution.
 - Browser errors: zero. Daylight, night, doorway and overlay captures were
   visually inspected. Evidence is under `.tools/comparison`.
 - The shadow/noise refinement also checks morning and afternoon sun shadows,
@@ -198,10 +217,11 @@ function; the matching function in `lighting.ts` must change with it.
 & .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js build
 # Defaults to the built preview at http://127.0.0.1:4185/comparison.html.
 & .\.tools\node-v24.19.0-win-x64\node.exe scripts/check-comparison.cjs
+& .\.tools\node-v24.19.0-win-x64\node.exe scripts/check-comparison-bounces.cjs
 ```
 
 Next decision: review the cascade result against the baked baseline and Cycles
-in both saved views before adding bounces or expanding to the apartment. Phone
+in both saved views at 1–4 bounces before expanding to the apartment. Phone
 performance and asset-budget decisions follow acceptable small-scene visuals.
 
 ## Primary references

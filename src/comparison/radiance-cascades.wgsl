@@ -3,10 +3,11 @@ struct Node { lo:vec3f, left:u32, hi:vec3f, right:u32, first:u32, count:u32, esc
 struct Triangle { a:vec4f, b:vec4f, c:vec4f, material:vec4u, uv0:vec4f, uv1:vec4f }
 struct Surface { position:vec4f, normal:vec4f, color:vec4f }
 struct SurfaceLight { radiance:vec4f, visibility:vec4f }
+struct BounceLight { radiance:vec4f, total:vec4f }
 struct Params {
   sun:vec4f, sunColor:vec4f, sky:vec4f,
   lamp0:vec4f, lampColor0:vec4f, lamp1:vec4f, lampColor1:vec4f,
-  origin:vec4f, dimensions:vec4f, range:vec4f, nextDimensions:vec4f, nextRange:vec4f, update:vec4f,
+  origin:vec4f, dimensions:vec4f, range:vec4f, nextDimensions:vec4f, nextRange:vec4f, update:vec4f, bounce:vec4f,
 }
 struct Hit { distance:f32, pixel:u32, facing:f32 }
 @group(0) @binding(0) var<storage,read> nodes:array<Node>;
@@ -17,6 +18,7 @@ struct Hit { distance:f32, pixel:u32, facing:f32 }
 @group(0) @binding(5) var<storage,read_write> surfaceLight:array<SurfaceLight>;
 @group(0) @binding(6) var<storage,read_write> cascades:array<vec4f>;
 @group(0) @binding(7) var output:texture_storage_2d<rgba16float,write>;
+@group(0) @binding(8) var<storage,read_write> bounceLight:array<BounceLight>;
 const PI:f32 = 3.14159265359;
 const RAYS:u32 = 64u;
 const SKY_RAYS:u32 = 1024u;
@@ -198,8 +200,23 @@ fn gather(@builtin(global_invocation_id) id:vec3u) {
       }else{radiance+=hitLight(hit);}
     }
     radiance*=surface.color.rgb/f32(RAYS);
-    radiance+=surface.color.rgb*params.sky.rgb*surfaceLight[id.x].visibility.x;
   }
-  let size=u32(params.sky.w);
-  textureStore(output,vec2u(id.x%size,id.x/size),vec4f(radiance,1));
+  // Propagate only this bounce. Add direct sky once, outside the bounce series.
+  bounceLight[id.x].radiance=vec4f(radiance,1);
+  var total=radiance;
+  if(params.bounce.x==0.0) {
+    total+=surface.color.rgb*params.sky.rgb*surfaceLight[id.x].visibility.x;
+  }else{total+=bounceLight[id.x].total.rgb;}
+  bounceLight[id.x].total=vec4f(total,1);
+  if(params.bounce.y>.5) {
+    let size=u32(params.sky.w);
+    textureStore(output,vec2u(id.x%size,id.x/size),vec4f(total,1));
+  }
+}
+
+@compute @workgroup_size(64)
+fn advance(@builtin(global_invocation_id) id:vec3u) {
+  if(id.x>=u32(params.update.y)){return;}
+  // Separate dispatch: gathers must finish reading the previous source first.
+  surfaceLight[id.x].radiance=bounceLight[id.x].radiance;
 }

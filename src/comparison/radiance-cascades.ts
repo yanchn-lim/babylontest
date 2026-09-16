@@ -80,8 +80,13 @@ export class RadianceCascades {
   private cursor = 0;
   private preparationLevel = -1;
   private stage = 0;
+  private bounce = 0;
+  private activeBounces = 1;
+  private completedBounces = 0;
+  private updateStarted = 0;
+  private lastUpdateWallMilliseconds = 0;
   private dirty = true;
-  private pending?: { state: ReturnType<typeof lighting>; sky: Vec3 };
+  private pending?: { state: ReturnType<typeof lighting>; sky: Vec3; bounces: number };
   private buffers: StorageBuffer[] = [];
   private levels: Level[] = [];
   private shaders: Record<string, ComputeShader> = {};
@@ -112,6 +117,7 @@ export class RadianceCascades {
     buffer('nodes', mesh.nodes); buffer('triangles', mesh.triangles); buffer('surfaces', mesh.surfaces);
     buffer('hits', (this.intervalCount + SIZE * SIZE * RAYS) * 16);
     buffer('surfaceLight', SIZE * SIZE * 32);
+    buffer('bounceLight', SIZE * SIZE * 32);
     buffer('cascades', this.intervalCount * 16);
     this.memoryBytes = bytes;
     this.texture = new RawTexture(null, SIZE, SIZE, Constants.TEXTUREFORMAT_RGBA, scene, false, false,
@@ -120,7 +126,7 @@ export class RadianceCascades {
     this.texture.wrapU = this.texture.wrapV = Texture.CLAMP_ADDRESSMODE;
     this.params = new UniformBuffer(engine);
     const fields = ['sun', 'sunColor', 'sky', 'lamp0', 'lampColor0', 'lamp1', 'lampColor1',
-      'origin', 'dimensions', 'range', 'nextDimensions', 'nextRange', 'update'];
+      'origin', 'dimensions', 'range', 'nextDimensions', 'nextRange', 'update', 'bounce'];
     fields.forEach(name => this.params.addUniform(name, 4)); this.params.create();
     this.params.updateFloat4('origin', ...origin, NEAR);
     this.params.updateFloat4('sky', 0, 0, 0, SIZE);
@@ -128,13 +134,14 @@ export class RadianceCascades {
       this.params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity);
       this.params.updateFloat4('lampColor' + i, ...lamp.color, 0);
     });
-    const bindings = ['nodes', 'triangles', 'surfaces', 'params', 'hits', 'surfaceLight', 'cascades', 'output'];
+    const bindings = ['nodes', 'triangles', 'surfaces', 'params', 'hits', 'surfaceLight', 'cascades', 'output', 'bounceLight'];
     const entries: Record<string, string[]> = {
       prepareSurfaces: ['nodes', 'triangles', 'surfaces', 'params', 'hits', 'surfaceLight'],
       prepareIntervals: ['nodes', 'triangles', 'params', 'hits'],
       shade: ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight'],
       merge: ['params', 'hits', 'surfaceLight', 'cascades'],
-      gather: ['surfaces', 'params', 'hits', 'surfaceLight', 'cascades', 'output'],
+      gather: ['surfaces', 'params', 'hits', 'surfaceLight', 'cascades', 'output', 'bounceLight'],
+      advance: ['params', 'surfaceLight', 'bounceLight'],
     };
     for (const [entryPoint, names] of Object.entries(entries)) {
       const shader = new ComputeShader('Comparison RC ' + entryPoint, engine, { computeSource: source }, {
@@ -150,8 +157,8 @@ export class RadianceCascades {
     }
   }
 
-  setLighting(state: ReturnType<typeof lighting>, sky: Vec3) {
-    this.pending = { state, sky };
+  setLighting(state: ReturnType<typeof lighting>, sky: Vec3, bounces = 1) {
+    this.pending = { state, sky, bounces: Math.max(1, Math.min(4, Math.round(bounces))) };
     this.dirty = true;
   }
 
@@ -179,31 +186,44 @@ export class RadianceCascades {
       return;
     }
     // Complete each snapshot while a dragged slider queues only its latest value.
-    if (this.stage === 0 && this.pending) {
-      const { state, sky } = this.pending;
+    if (this.stage === 0 && this.bounce === 0 && this.pending) {
+      const { state, sky, bounces } = this.pending;
       this.params.updateFloat4('sun', ...state.direction as Vec3, state.sun);
       this.params.updateFloat4('sunColor', ...state.color as Vec3, Number(state.on));
       this.params.updateFloat4('sky', ...sky.map(v => v * state.sky) as Vec3, SIZE);
+      this.activeBounces = bounces;
+      this.updateStarted = performance.now();
       this.pending = undefined;
     }
     if (this.stage > 0 && this.stage < 4) this.level(3 - this.stage);
     if (this.stage === 4) this.level(0);
     this.params.updateFloat4('update', 0, SIZE * SIZE, this.intervalCount, this.stage === 1 ? 1 : 0);
+    this.params.updateFloat4('bounce', this.bounce, Number(this.bounce + 1 === this.activeBounces), 0, 0);
     this.params.update();
-    const name = this.stage === 0 ? 'shade' : this.stage === 4 ? 'gather' : 'merge';
+    const name = this.stage === 0 ? (this.bounce === 0 ? 'shade' : 'advance') : this.stage === 4 ? 'gather' : 'merge';
     const count = name === 'merge' ? this.levels[3 - this.stage].count : SIZE * SIZE;
     if (!this.shaders[name].dispatch(Math.ceil(count / 64))) return;
-    if (++this.stage === 5) { this.ready = true; this.dirty = !!this.pending; this.stage = 0; this.revision++; }
+    if (++this.stage === 5) {
+      this.stage = 0;
+      if (++this.bounce < this.activeBounces) return;
+      this.bounce = 0;
+      this.completedBounces = this.activeBounces;
+      this.lastUpdateWallMilliseconds = performance.now() - this.updateStarted;
+      this.ready = true; this.dirty = !!this.pending; this.revision++;
+    }
   }
 
   get status() {
     if (this.error) return 'Radiance cascades unavailable · baked fallback';
     if (!this.prepared) return 'Preparing cascade visibility';
-    return this.dirty ? 'Updating radiance cascades' : 'Radiance cascades · 1 diffuse bounce';
+    return this.dirty ? 'Updating radiance cascades'
+      : `Radiance cascades · ${this.completedBounces} diffuse bounce${this.completedBounces === 1 ? '' : 's'}`;
   }
 
   diagnostics() {
     return { ready: this.ready, updating: this.dirty, revision: this.revision, error: this.error,
+      requestedBounces: this.pending?.bounces ?? this.activeBounces, completedBounces: this.completedBounces,
+      lastUpdateDispatches: this.completedBounces * 5, lastUpdateWallMilliseconds: this.lastUpdateWallMilliseconds,
       atlasSize: SIZE, surfaceRays: RAYS, intervalRays: this.intervalCount, memoryBytes: this.memoryBytes,
       lastDispatchGpuMilliseconds: Object.fromEntries(Object.entries(this.shaders).map(([name, shader]) =>
         [name, shader.gpuTimeInFrame ? shader.gpuTimeInFrame.counter.current / 1e6 : null])) };

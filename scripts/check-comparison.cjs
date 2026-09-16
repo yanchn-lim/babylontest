@@ -114,6 +114,7 @@ fs.mkdirSync(out, { recursive: true });
     await fallback.waitForFunction(() => window.comparison?.ready, {}, { timeout: 60000 });
     assert.match(await fallback.locator('#status').innerText(), /WebGL/);
     assert.equal(await fallback.locator('#gi').inputValue(), 'baked');
+    assert.ok(await fallback.locator('#bounces').isDisabled());
     assert.ok(await fallback.locator('#gi option[value="cascades"]').evaluate(option => option.disabled));
     assert.ok(await fallback.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await fallback.screenshot({ path: path.join(out, 'narrow-webgl.png'), fullPage: true });
