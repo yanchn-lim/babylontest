@@ -7,6 +7,7 @@ import { ComparisonLightmaps, type LightmapState } from './lightmaps';
 import { lighting, sunInterval, type SwitchMode } from './lighting';
 import { navigation } from './navigation';
 import { RadianceCascades } from './radiance-cascades';
+import { CachedTransfer } from './cached-transfer';
 import './style.css';
 
 type Vec3 = [number, number, number];
@@ -117,26 +118,36 @@ async function start() {
     shadow.getShadowMap()!.refreshRate = 0;
     return light;
   });
-  let cascades: RadianceCascades | undefined;
+  const preparingTransfer = new URLSearchParams(location.search).has('prepareTransfer');
+  if (preparingTransfer) gi.value = 'baked';
+  let cascades: RadianceCascades | CachedTransfer | undefined;
+  let method = '';
   let cascadeError = '';
-  if (engine instanceof WebGPUEngine) {
+  function selectGi() {
+    if (!(engine instanceof WebGPUEngine) || gi.value === 'baked' || method === gi.value) { updateStatus(); return; }
+    basis.useCascades = false; basis.cascadeMap = skyMap;
+    cascades?.dispose(); cascades = undefined; cascadeError = ''; method = gi.value;
     try {
       engine.enableGPUTimingMeasurements = !!engine.getCaps().timerQuery;
-      cascades = new RadianceCascades(scene, engine, data);
+      cascades = method === 'transfer' ? new CachedTransfer(scene, engine, data, base + 'transfer.bin.gz')
+        : new RadianceCascades(scene, engine, data);
       basis.cascadeMap = cascades.texture;
-    } catch (error) { cascadeError = String(error); console.warn('Radiance cascades unavailable.', error); }
+      cascades.setLighting(lighting(Number(time.value), lights.value as SwitchMode), data.sky, Number(bounces.value));
+    } catch (error) { cascadeError = String(error); console.warn('Computed GI unavailable.', error); }
+    updateStatus();
   }
-  if (!cascades) {
+  if (!(engine instanceof WebGPUEngine)) {
     gi.value = 'baked';
     gi.querySelector<HTMLOptionElement>('[value="cascades"]')!.disabled = true;
+    gi.querySelector<HTMLOptionElement>('[value="transfer"]')!.disabled = true;
   }
   function updateStatus() {
-    bounces.disabled = gi.value !== 'cascades' || !cascades || !!cascades.error;
+    bounces.disabled = gi.value === 'baked' || !cascades || !!cascades.error;
     const state = lighting(Number(time.value), lights.value as SwitchMode);
-    basis.useCascades = gi.value === 'cascades' && !!cascades?.ready && !cascades.error;
-    const method = gi.value === 'cascades' ? cascades!.status : 'Baked GI';
-    const fallback = !cascades ? (cascadeError ? ' · Cascade initialization failed' : ' · Cascades require WebGPU') : '';
-    const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${state.on ? 'on' : 'off'} (${lights.value}) · ${method}${fallback}`;
+    basis.useCascades = gi.value !== 'baked' && !!cascades?.ready && !cascades.error;
+    const label = gi.value === 'baked' ? 'Baked GI' : cascades?.status || 'Computed GI unavailable · baked fallback';
+    const fallback = cascadeError ? ' · GI initialization failed' : '';
+    const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${state.on ? 'on' : 'off'} (${lights.value}) · ${label}${fallback}`;
     if (status.textContent !== text) status.textContent = text;
   }
   function updateReference() {
@@ -180,7 +191,7 @@ async function start() {
   }
   time.addEventListener('input', applyLighting);
   lights.addEventListener('change', applyLighting);
-  gi.addEventListener('change', updateStatus);
+  gi.addEventListener('change', selectGi);
   bounces.addEventListener('change', applyLighting);
   view.addEventListener('change', resetView);
   element('reset').addEventListener('click', resetView);
@@ -203,19 +214,29 @@ async function start() {
   navigation(camera, canvas, () => { if (cameraMatches) { cameraMatches = false; updateReference(); } });
   const observer = new ResizeObserver(resize); observer.observe(canvas);
   window.addEventListener('resize', resize);
-  resetView(); applyLighting();
+  selectGi(); resetView(); applyLighting();
   await scene.whenReadyAsync();
   engine.runRenderLoop(() => {
-    if (gi.value === 'cascades') cascades?.tick();
+    if (gi.value !== 'baked') cascades?.tick();
     updateStatus();
     scene.render();
   });
   Object.assign(window, { comparison: {
     scene, camera, engine, ready: true,
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
-      gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? 'cascades' : 'baked', cascades: cascades?.diagnostics(),
+      gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? method : 'baked', cascades: method === 'cascades' ? cascades?.diagnostics() : undefined,
+      transfer: method === 'transfer' ? cascades?.diagnostics() : undefined,
       cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
   } });
+  if (preparingTransfer && engine instanceof WebGPUEngine) {
+    const gpu = engine;
+    Object.assign((window as unknown as { comparison: object }).comparison, {
+      prepareTransfer: async () => {
+        const { prepareTransfer } = await import('./prepare-transfer');
+        return prepareTransfer(data, gpu, fraction => { status.textContent = `Preparing offline transfer · ${Math.round(fraction * 100)}%`; });
+      },
+    });
+  }
   window.addEventListener('pagehide', () => { observer.disconnect(); cascades?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
 }
 

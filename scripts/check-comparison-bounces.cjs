@@ -16,6 +16,8 @@ fs.mkdirSync(out, { recursive: true });
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     await page.goto(target);
     await page.waitForFunction(() => window.comparison?.ready, {}, { timeout: 60000 });
+    await page.selectOption('#gi', 'cascades');
+    await page.selectOption('#bounces', '1');
     return page;
   };
   const settle = page => page.waitForFunction(() => comparison.state().activeGi === 'cascades' && !comparison.state().cascades.updating, {}, { timeout: 90000 });

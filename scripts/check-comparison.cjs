@@ -21,6 +21,8 @@ fs.mkdirSync(out, { recursive: true });
     watch(page);
     await page.goto(url);
     await page.waitForFunction(() => window.comparison?.ready, {}, { timeout: 60000 });
+    await page.selectOption('#gi', 'cascades');
+    await page.selectOption('#bounces', '1');
     const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const state = () => page.evaluate(() => comparison.state());
     const settleGI = async () => {

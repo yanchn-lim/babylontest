@@ -7,7 +7,7 @@ Built with standard Babylon.js 9.25.0 and a custom FrameGraph renderer.
 
 [Open the lighting comparison](https://yanchn-lim.github.io/babylontest/comparison.html)
 to compare the small Babylon scene against matched offline Cycles references.
-Select WebGPU radiance cascades or the baked baseline, change time and interior
+Select cached dense diffuse lighting, radiance cascades or the baked baseline, change time and interior
 lights, and compare saved views side by side or with an overlay. WebGL uses the
 baked fallback. See the [comparison guide](docs/remake-comparison.md) for controls,
 implementation limits and asset preparation.

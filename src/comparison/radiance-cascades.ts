@@ -14,7 +14,7 @@ const NEAR = .75;
 interface Level { dimensions: Vec3; spacing: number; start: number; end: number; directions: number; offset: number; count: number }
 
 // The exported UVs are shared by the reference, baked baseline and cascade output.
-function geometry(data: SceneData) {
+export function geometry(data: SceneData) {
   const surfaces = new Float32Array(SIZE * SIZE * 12);
   const distances = new Float32Array(SIZE * SIZE).fill(Infinity);
   const triangles: Triangle[] = [];

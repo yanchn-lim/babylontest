@@ -17,10 +17,11 @@ apartment renderer. The original apartment viewer is the other supported impleme
 - Walk with W/A/S/D, arrow keys, or the touch pad. Drag the scene to look.
 - Time of day ranges from 00:00 to 24:00.
 - Auto turns the lights on before 07:00 and from 18:00. On and Off override it.
-- Global illumination selects Radiance cascades or Baked baseline. WebGPU starts
-  with cascades; WebGL uses the baked baseline and disables the cascade option.
-- Diffuse bounces selects 1–4 indirect bounces for cascades. It defaults to the
-  one-bounce checkpoint and is disabled for the baked baseline and WebGL.
+- Global illumination selects Cached diffuse, Radiance cascades or Baked baseline.
+  WebGPU starts with cached diffuse; WebGL uses baked lighting and disables both
+  computed methods. Switching computed methods releases the old GPU cache.
+- Diffuse bounces selects 1–4 indirect bounces and defaults to four. It is disabled
+  for baked lighting and WebGL. Cascades plus one bounce reproduces the earlier GI checkpoint.
 - Six checkpoints cover morning, noon, afternoon, night with lights on, noon
   with lights on, and night with lights off.
 - Two saved cameras provide 12 Cycles references. Compare side by side or with
@@ -30,6 +31,64 @@ apartment renderer. The original apartment viewer is the other supported impleme
 
 The sun path is a controlled experiment, not a Singapore solar-position model.
 The window is an open aperture; glass is not part of this first scene.
+
+## Cached dense diffuse prototype
+
+The user preferred the dense full-scene ray diagnostic's broad colour bounce.
+This candidate preserves that sampling, rather than approximating it with probe
+intervals. It uses the same 256 × 256 surface atlas, geometry, ray origins,
+1,024 cosine-weighted directions, material colours and direct-light shader.
+
+The offline preparation traces each surface's rays once. Repeated hits on the
+same atlas point become one connection with an integer hit count. Misses and
+back faces contribute zero bounced radiance. A separate visibility vector stores
+the sky fraction and both fixed lamps' visibility. No valid hits are discarded,
+weights are not quantized, and rows are still divided by 1,024, including misses.
+
+At runtime, direct surface lighting is updated for the current sun and lamps.
+Each bounce sums the connected surfaces' previous radiance times their hit
+counts, then multiplies by the receiving colour and divides by 1,024. Sky is added
+once to the output. Separate source and destination buffers avoid feedback within
+a bounce; only the completed series becomes visible. Updates use two dispatches
+per bounce, and camera movement reuses the completed texture.
+
+For this scene:
+
+- 56,910 active atlas points; 23,644,981 front-face ray hits combined into
+  19,064,066 weighted connections.
+- Prepared data: 77,567,052 bytes; gzip download approximately 39.3 MB.
+- Runtime GPU buffers and output texture: 84,530,140 bytes (80.6 MiB), excluding
+  engine overhead, direct shadow maps and temporary CPU/decompression memory.
+- Offline preparation took approximately 16 seconds on this desktop. Four-bounce
+  runtime update scheduling took approximately 58 ms in a warmed run, compared
+  with 59–61 seconds for the batched uncached diagnostic. These timings include
+  scheduling and are not isolated GPU measurements or phone performance claims.
+
+In the 09:00 and 21:00 comparisons, the output matches the dense diagnostic apart
+from floating-point summation order. Only 41 and 31 RGB components, respectively,
+of the 65,536-texel half-float output changed. Mean absolute linear error was below
+1.2e-8. This establishes agreement with that diagnostic, not Cycles parity.
+
+`scripts/check-comparison-transfer.cjs` checks those references when their local
+diagnostic files are present, saved views, stable walking, bounce reset and queued
+changes, backend switching, WebGL and invalid-cache fallback. The comparison fails
+closed to baked lighting if the cache is missing, stale or malformed. A scene and
+shader fingerprint prevents using a cache with changed inputs. Bump the atlas
+padding version in `transfer-data.ts` if its rasterization rules change.
+
+Generate the cache from the built local preview:
+
+```powershell
+& .\.tools\node-v24.19.0-win-x64\node.exe scripts/prepare-comparison-transfer.cjs
+# Rebuild after generation to copy the new public assets into dist.
+& .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js build
+& .\.tools\node-v24.19.0-win-x64\node.exe scripts/check-comparison-transfer.cjs
+```
+
+Preparation writes `public/comparison/transfer.bin.gz` and `transfer-report.json`.
+It is an offline tool, not work repeated by ordinary visitors. The download is
+substantial; phone performance, download budget and apartment scaling remain open.
+The original apartment renderer and the existing reference images are unchanged.
 
 ## Radiance-cascade experiment
 
