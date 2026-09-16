@@ -284,6 +284,15 @@ The cached dense diffuse method is also available in the fixed apartment at
 The small scene remains the matched Cycles comparison. Phone performance and
 asset-budget decisions remain open.
 
+Local reflections now add a filtered HDR room capture to the PBR materials.
+The capture updates after lighting changes and is reused while walking. Its
+diffuse contribution is zero, preserving the GI cache. Select **Reflections →
+Off** for the diffuse-only state preserved at
+`checkpoint/apartment-diffuse-2026-09-17` (`37c34f2`). The probe uses box correction
+for the main room and excludes the sphere from capture to avoid self-reflection.
+Side-room reflection placement is approximate. See the apartment guide for the
+shared implementation and its limitations.
+
 ## Primary references
 
 - [Blender Cycles baking](https://docs.blender.org/manual/en/5.0/render/cycles/baking.html): separate direct, indirect and colour passes.

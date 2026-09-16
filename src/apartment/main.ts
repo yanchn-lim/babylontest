@@ -8,6 +8,8 @@ import { lighting, skyDisplay, type SwitchMode } from '../comparison/lighting';
 import { navigation } from '../comparison/navigation';
 import type { SceneData } from '../comparison/main';
 import { ApartmentLightmap, type ApartmentLightmapState } from './lightmap';
+import { RoomReflections, type ReflectionRoom } from '../comparison/reflections';
+import { apartmentReflectionRooms } from './reflection-rooms';
 import '../comparison/style.css';
 import './style.css';
 
@@ -29,6 +31,7 @@ const settings: Pick<SceneData, 'fixtures' | 'views' | 'sky'> = {
 };
 
 async function start() {
+  const preparing = new URLSearchParams(location.search).has('prepareTransfer');
   let engine: Engine | WebGPUEngine | undefined;
   if (await WebGPUEngine.IsSupportedAsync) {
     const gpu = new WebGPUEngine(canvas, { antialias: true, useExactSrgbConversions: true });
@@ -44,7 +47,7 @@ async function start() {
   const camera = new UniversalCamera('Apartment camera', Vector3.Zero(), scene);
   camera.inputs.clear(); camera.inertia = 0; camera.minZ = .05; camera.maxZ = 60;
   camera.checkCollisions = true; camera.ellipsoid.set(.18, .75, .18); camera.ellipsoidOffset.set(0, -.09, 0);
-  const { meshes, materials } = await loadApartment(scene);
+  let { meshes, materials } = await loadApartment(scene);
   const atlasResponse = await fetch(base + 'apartment-transfer/atlas.json');
   if (!atlasResponse.ok) throw Error('Apartment lighting atlas is missing.');
   const atlas: number[][] = await atlasResponse.json();
@@ -53,6 +56,8 @@ async function start() {
     if (atlas[index]?.length !== mesh.getTotalVertices() * 2) throw Error('Apartment lighting atlas does not match the model.');
     mesh.setVerticesData('uv3', atlas[index]);
   });
+  let rooms: ReflectionRoom[] = [];
+  if (!preparing) ({ meshes, materials, rooms } = apartmentReflectionRooms(meshes, materials));
   const baked = new Texture(base + 'models/bukit-merah/pbr/indirect.png', scene, false, false);
   baked.coordinatesIndex = 1; baked.gammaSpace = true; baked.level = 2;
   const basis: ApartmentLightmapState = { texture: baked, ready: false, sky: 1 };
@@ -81,7 +86,10 @@ async function start() {
     opaque.forEach(mesh => shadow.addShadowCaster(mesh)); shadow.getShadowMap()!.refreshRate = 0;
     return light;
   });
-  const preparing = new URLSearchParams(location.search).has('prepareTransfer');
+  const reflections = new RoomReflections(scene, meshes, rooms, materials);
+  const reflectionControl = element<HTMLSelectElement>('reflections');
+  if (preparing) { reflectionControl.value = 'off'; reflections.setEnabled(false); }
+  reflectionControl.addEventListener('change', () => reflections.setEnabled(reflectionControl.value === 'on'));
   let transfer: CachedTransfer | undefined, loadError = '';
   function applyLighting() {
     const hour = Number(time.value), state = lighting(hour, lights.value as SwitchMode);
@@ -107,7 +115,7 @@ async function start() {
     if (preparing) return;
     const on = lighting(Number(time.value), lights.value as SwitchMode).on;
     const label = loadError ? 'Cached diffuse unavailable · baked fallback' : transfer?.status || 'Baked skylight fallback';
-    const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${on ? 'on' : 'off'} (${lights.value}) · ${label}`;
+    const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${on ? 'on' : 'off'} (${lights.value}) · ${label} · ${reflections.status}`;
     if (status.textContent !== text) status.textContent = text;
   };
   time.addEventListener('input', applyLighting); lights.addEventListener('change', applyLighting);
@@ -121,11 +129,19 @@ async function start() {
   const observer = new ResizeObserver(resize); observer.observe(canvas); window.addEventListener('resize', resize);
   resetView(); applyLighting();
   await scene.whenReadyAsync();
-  engine.runRenderLoop(() => { transfer?.tick(); updateStatus(); scene.render(); });
+  engine.runRenderLoop(() => {
+    transfer?.tick(); updateStatus();
+    const state = lighting(Number(time.value), lights.value as SwitchMode);
+    const ready = !(engine instanceof WebGPUEngine) || !!loadError || !!transfer?.error || (!!transfer?.ready && !transfer.diagnostics().updating);
+    reflections.tick(ready ? `${time.value}:${lights.value}:${bounces.value}:${transfer?.revision ?? 0}` : '',
+      settings.sky.map(value => value * state.sky));
+    scene.render();
+  });
   const api = {
     scene, engine, camera, ready: true,
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
-      activeGi: basis.ready ? 'transfer' : 'baked', bounces: Number(bounces.value), transfer: transfer?.diagnostics(), loadError }),
+      activeGi: basis.ready ? 'transfer' : 'baked', bounces: Number(bounces.value), transfer: transfer?.diagnostics(),
+      reflections: reflections.diagnostics(), loadError }),
   };
   Object.assign(window, { apartment: api, ...(preparing ? { comparison: api } : {}) });
   if (engine instanceof WebGPUEngine && preparing) {
@@ -150,7 +166,7 @@ async function start() {
       basis.texture = transfer.texture; applyLighting();
     } catch (error) { loadError = String(error); console.warn(loadError); }
   }
-  window.addEventListener('pagehide', () => { observer.disconnect(); transfer?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
+  window.addEventListener('pagehide', () => { observer.disconnect(); reflections.dispose(); transfer?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
 }
 
 start().catch(error => { console.error(error); status.textContent = String(error); });

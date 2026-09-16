@@ -14,10 +14,38 @@ or use the touch pad. Three saved views cover the living room, hall and bedroom.
 Native glTF materials retain their textures, normal maps, roughness and metalness.
 Diffuse transport samples compact linear albedo maps and removes the metallic
 fraction. Glass is clear to transport and shadow rays; visible glass keeps its
-native material. Tint, refraction and indirect glossy reflections are not solved.
+native material. Local probes approximate glossy reflections. Tint, refraction
+and recursive reflections between reflective surfaces are not solved.
 The live sun and point lights use the comparison's filtered shadow settings,
 MSAA and ACES display transform. Seven lamps plus the sun fit the portable
 eight-light material limit.
+
+## Local reflections
+
+The diffuse-only state is preserved at tag
+`checkpoint/apartment-diffuse-2026-09-17` (`37c34f2`). Select **Reflections → Off**
+to compare its lighting with the new reflection layer.
+
+Nine local probes cover the living room, three bedrooms, two bathrooms, kitchen,
+shelter and hall. Each captures a linear HDR cubemap at 128 pixels per face,
+including the current diffuse GI and direct lights. GGX filtering supplies the
+material roughness levels. A room-sized box corrects reflection placement.
+The maps contribute only specular light: their diffuse spherical coefficients
+are zero. Existing environment reflections are suppressed during capture to
+avoid recursive feedback. The comparison page uses one probe in its main room;
+its sphere is omitted from capture to avoid reflecting itself.
+
+Captures update after the diffuse lighting finishes. The previous complete set
+stays visible until the replacement is ready. Walking and reflection On/Off
+switching reuse the maps. A change during capture discards the stale set.
+WebGL uses the same reflections over its baked diffuse fallback.
+
+Apartment render meshes are clipped at room boundaries to give each piece its
+own material/cubemap. Vertex attributes, UVs and surface area are preserved;
+the source model and prepared GI cache are unchanged. This increases draw calls.
+The probes are approximate, with possible seams between rooms, limited detail
+and inaccurate nearby-object reflections. They are not mirror or ray-traced
+reflections. Physical iPhone performance remains untested.
 
 The original model and its baked UVs are unchanged. The new page expands its
 vertices at load time and applies a separate, padded 256px lighting atlas to UV3.
@@ -69,3 +97,8 @@ selection, stable GI while walking, and the WebGL fallback. It captures the thre
 views for visual review under `.tools/apartment-transfer`. The preparation report
 records cache size, ray counts and errors. Desktop update timings include frame
 scheduling and are not GPU-only or phone measurements.
+
+For reflection changes, `scripts/check-reflections.cjs` checks both pages on
+WebGPU and WebGL, day/night captures, reflection switching, unchanged diffuse
+GI and captures while walking, queued lighting changes, capture disposal, and
+preservation of apartment surface area. Captures are under `.tools/reflections`.

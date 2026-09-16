@@ -8,6 +8,7 @@ import { lighting, skyDisplay, sunInterval, type SwitchMode } from './lighting';
 import { navigation } from './navigation';
 import { RadianceCascades } from './radiance-cascades';
 import { CachedTransfer } from './cached-transfer';
+import { RoomReflections } from './reflections';
 import './style.css';
 
 type Vec3 = [number, number, number];
@@ -120,6 +121,11 @@ async function start() {
     return light;
   });
   const preparingTransfer = new URLSearchParams(location.search).has('prepareTransfer');
+  const reflections = new RoomReflections(scene, meshes.filter(mesh => mesh.material !== materials[0]),
+    [{ name: 'Comparison room', center: [0, 1.5, 0], size: [6, 3, 6], materials }], materials);
+  const reflectionControl = element<HTMLSelectElement>('reflections');
+  if (preparingTransfer) { reflectionControl.value = 'off'; reflections.setEnabled(false); }
+  reflectionControl.addEventListener('change', () => reflections.setEnabled(reflectionControl.value === 'on'));
   if (preparingTransfer) gi.value = 'baked';
   let cascades: RadianceCascades | CachedTransfer | undefined;
   let method = '';
@@ -148,7 +154,7 @@ async function start() {
     basis.useCascades = gi.value !== 'baked' && !!cascades?.ready && !cascades.error;
     const label = gi.value === 'baked' ? 'Baked GI' : cascades?.status || 'Computed GI unavailable · baked fallback';
     const fallback = cascadeError ? ' · GI initialization failed' : '';
-    const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${state.on ? 'on' : 'off'} (${lights.value}) · ${label}${fallback}`;
+    const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${state.on ? 'on' : 'off'} (${lights.value}) · ${label}${fallback} · ${reflections.status}`;
     if (status.textContent !== text) status.textContent = text;
   }
   function updateReference() {
@@ -220,6 +226,10 @@ async function start() {
   engine.runRenderLoop(() => {
     if (gi.value !== 'baked') cascades?.tick();
     updateStatus();
+    const state = lighting(Number(time.value), lights.value as SwitchMode);
+    const ready = gi.value === 'baked' || !cascades || !!cascades.error || (!cascades.diagnostics().updating && cascades.ready);
+    reflections.tick(ready ? `${time.value}:${lights.value}:${gi.value}:${bounces.value}:${cascades?.revision ?? 0}` : '',
+      data.sky.map(value => value * state.sky));
     scene.render();
   });
   Object.assign(window, { comparison: {
@@ -227,7 +237,7 @@ async function start() {
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
       gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? method : 'baked', cascades: method === 'cascades' ? cascades?.diagnostics() : undefined,
       transfer: method === 'transfer' ? cascades?.diagnostics() : undefined,
-      cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
+      reflections: reflections.diagnostics(), cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
   } });
   if (preparingTransfer && engine instanceof WebGPUEngine) {
     const gpu = engine;
@@ -238,7 +248,7 @@ async function start() {
       },
     });
   }
-  window.addEventListener('pagehide', () => { observer.disconnect(); cascades?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
+  window.addEventListener('pagehide', () => { observer.disconnect(); reflections.dispose(); cascades?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
 }
 
 start().catch(error => { console.error(error); status.textContent = String(error); });
