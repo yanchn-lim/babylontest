@@ -5,7 +5,8 @@ import { fixedLightData, transferBindings, transferFields, transferFingerprint, 
   TRANSFER_SIZE, TRANSFER_PIXELS, TRANSFER_RAYS } from './transfer-data';
 
 /** Offline tool entry point; ordinary viewers only download the prepared data. */
-export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, progress: (fraction: number) => void) {
+export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, progress: (fraction: number) => void, signal?: AbortSignal) {
+  signal?.throwIfAborted();
   const started = performance.now(), batch = 256;
   const mesh = geometry(data);
   const buffers: StorageBuffer[] = [];
@@ -37,13 +38,16 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     const offsets = new Uint32Array(TRANSFER_PIXELS + 1), chunks: Uint32Array[] = [];
     let entryCount = 0, representedHits = 0, activeSurfaces = 0;
     for (let start = 0; start < TRANSFER_PIXELS; start += batch) {
+      signal?.throwIfAborted();
       const count = Math.min(batch, TRANSFER_PIXELS - start);
       params.updateFloat4('update', start, count, 0, 0); params.update();
       while (!shader.dispatch(Math.ceil(count / 64))) {
+        signal?.throwIfAborted();
         if (failure) throw Error(failure);
-        await new Promise(requestAnimationFrame);
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
       const raw = await allocations.transfer.read(0, count * TRANSFER_RAYS * 4, undefined, true);
+      signal?.throwIfAborted();
       const hits = new Uint32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
       const packed: number[] = [];
       for (let row = 0; row < count; row++) {

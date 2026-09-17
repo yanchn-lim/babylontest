@@ -18,7 +18,8 @@
     "@babylonjs/core": "9.25.0",
     "@babylonjs/inspector": "9.25.0",
     "@babylonjs/loaders": "9.25.0",
-    "@babylonjs/materials": "9.25.0"
+    "@babylonjs/materials": "9.25.0",
+    "xatlas-wasm": "0.1.3"
   },
   "devDependencies": {
     "typescript": "5.9.3",

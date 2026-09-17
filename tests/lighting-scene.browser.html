@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Shared lighting preparation check</title>
+<h1>Shared lighting preparation check</h1>
+<p>Loads the apartment and original APPLARYD model, then prepares their shared lighting data on WebGPU.</p>
+<button id="run">Run WebGPU preparation</button>
+<pre id="result" role="status">Ready</pre>
+<canvas id="canvas" width="64" height="64"></canvas>
+<script type="module">
+import { WebGPUEngine, Scene, Mesh, PBRMaterial } from '@babylonjs/core';
+import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader.js';
+import '@babylonjs/loaders/glTF';
+import { prepareLightingScene } from '../src/apartment/prepare-lighting-scene';
+import { decodeTransfer } from '../src/comparison/transfer-data';
+
+const button = document.getElementById('run'), status = document.getElementById('result');
+button.onclick = async () => {
+  button.disabled = true;
+  let engine, scene;
+  try {
+    if (!await WebGPUEngine.IsSupportedAsync) throw Error('WebGPU unavailable');
+    engine = new WebGPUEngine(document.getElementById('canvas'));
+    await engine.initAsync(); scene = new Scene(engine); scene.useRightHandedSystem = true;
+    status.textContent = 'Loading apartment and sofa…';
+    const options = { pluginOptions: { gltf: { useSRGBBuffers: false } } };
+    const modelUrl = new URL('/models/bukit-merah/pbr/Apartment.gltf', location.href);
+    const model = await (await fetch(modelUrl)).json();
+    for (const asset of [...model.buffers, ...model.images]) if (asset.uri) asset.uri = new URL(asset.uri, modelUrl).href;
+    const apartment = await ImportMeshAsync('data:' + JSON.stringify(model), scene, { ...options, pluginExtension: '.gltf' });
+    const sofa = await ImportMeshAsync('/comparison/applaryd/applaryd.glb', scene, options);
+    sofa.meshes[0].position.set(7, 0, -5);
+    const eligible = mesh => mesh instanceof Mesh && mesh.getTotalVertices() > 0 && mesh.material instanceof PBRMaterial;
+    const meshes = [...apartment.meshes.filter(eligible), ...sofa.meshes.filter(eligible)];
+    const before = JSON.stringify(meshes.map(mesh => ({ vertices: mesh.getTotalVertices(), indices: Array.from(mesh.getIndices()), uv: Array.from(mesh.getVerticesData('uv') ?? []) })));
+    const settings = await (await fetch('/apartment-transfer/scene.json')).json();
+    const result = await prepareLightingScene({ meshes, furnitureMeshes: new Set(sofa.meshes.filter(eligible)),
+      settings: { fixtures: settings.fixtures, sky: settings.sky, views: settings.views }, engine,
+      onProgress: (stage, fraction) => { status.textContent = `${stage}: ${Math.round(fraction * 100)}%`; },
+    });
+    await decodeTransfer(result.transferBytes.buffer, result.sceneData);
+    const after = JSON.stringify(meshes.map(mesh => ({ vertices: mesh.getTotalVertices(), indices: Array.from(mesh.getIndices()), uv: Array.from(mesh.getVerticesData('uv') ?? []) })));
+    if (before !== after) throw Error('Preparation changed source geometry or native texture coordinates.');
+    if (!result.atlas.every((uv, i) => JSON.stringify(uv) === JSON.stringify(result.sceneData.meshes[i].uvs))) throw Error('Scene and atlas do not match.');
+    const stale = structuredClone(result.sceneData); stale.meshes.at(-1).positions[0] += .1;
+    let rejected = false;
+    try { await decodeTransfer(result.transferBytes.buffer, stale); } catch { rejected = true; }
+    if (!rejected) throw Error('Cache accepted changed geometry.');
+    status.textContent = 'PASS: WebGPU preparation, matching atlas/cache, unchanged source geometry, stale-cache rejection.\n' + JSON.stringify(result.stats, null, 2);
+  } catch (error) { status.textContent = 'FAIL: ' + error.stack; }
+  finally { scene?.dispose(); engine?.dispose(); button.disabled = false; }
+};
+</script>
+</html>
