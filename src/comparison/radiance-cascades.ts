@@ -82,6 +82,18 @@ export function geometry(data: SceneData) {
           const sample = (texel[1] * size + texel[0]) * 4;
           color = color.map((v, k) => v * pixels[sample + k] / 255) as Vec3;
         }
+        if (material.metallicTexture && mesh.metallicUvs) {
+          const { size, pixels, factor, wrapU, wrapV } = material.metallicTexture;
+          const texel = [wrapU, wrapV].map((wrap, k) => {
+            const uv = ids.reduce((sum, id, j) => sum + mesh.metallicUvs![id * 2 + k] * positionWeights[j], 0);
+            const repeat = uv - Math.floor(uv);
+            const coord = wrap === Texture.CLAMP_ADDRESSMODE ? Math.max(0, Math.min(1, uv))
+              : wrap === Texture.MIRROR_ADDRESSMODE && Math.abs(Math.floor(uv) % 2) === 1 ? 1 - repeat : repeat;
+            return Math.min(size - 1, Math.floor(coord * size));
+          });
+          const metallic = factor * pixels[texel[1] * size + texel[0]] / 255;
+          color = color.map(value => value * (1 - metallic)) as Vec3;
+        }
         surfaces.set([...[0, 1, 2].map(k => points.reduce((sum, p, j) => sum + p[k] * positionWeights[j], 0)), 1,
           ...normal.map(n => n / length), 0, ...color, 0], offset);
       }

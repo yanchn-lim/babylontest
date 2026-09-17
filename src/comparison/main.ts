@@ -17,8 +17,9 @@ export interface SceneData {
   surfaceInset?: number;
   adaptiveOffsets?: boolean;
   materials: { name: string; color: Vec3; roughness: number; transmitting?: boolean;
-    diffuseTexture?: { size: number; pixels: number[] } }[];
-  meshes: { material: number; positions: number[]; normals: number[]; uvs: number[]; indices: number[]; albedoUvs?: number[] }[];
+    diffuseTexture?: { size: number; pixels: number[] };
+    metallicTexture?: { size: number; pixels: number[]; factor: number; wrapU: number; wrapV: number } }[];
+  meshes: { material: number; positions: number[]; normals: number[]; uvs: number[]; indices: number[]; albedoUvs?: number[]; metallicUvs?: number[] }[];
   fixtures: { position: Vec3; color: Vec3; intensity: number }[];
   views: Record<string, { position: Vec3; target: Vec3; fov: number }>;
   sunHours: number[];

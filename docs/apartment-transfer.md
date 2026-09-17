@@ -87,6 +87,20 @@ The atlas script validates the current single-mesh glTF layout. `scene.json`
 contains the exact transport geometry, albedo samples and light settings used
 to generate the cache. A fingerprint rejects mismatched scene/shader caches.
 
+The exporter samples metallic textures as linear data at 128px resolution.
+Diffuse colour uses `baseColor * (1 - metallicFactor * metallicTexel)`, with
+the metallic texture's UV set, transform, wrap modes and blue/red channel.
+Materials without a metallic map keep their scalar-only calculation. Existing
+exports made without metallic-texture support must regenerate both `scene.json`
+and the transfer cache; updating the viewer alone cannot repair those exports.
+This does not fix overlapping furniture lightmap charts.
+
+For the focused material check, run a Vite development server on port 4193 and
+run `node scripts/check-metallic-transfer.cjs`. Set `SOFA_MODEL_URL` to a served
+KLIPPAN 49010615 GLB to also check the reported furniture case. This optional
+asset is not included in the repository. The check isolates material handling
+with separate triangle charts; it is not a full-room visual comparison.
+
 With the bundled tools, from the repository root in PowerShell:
 
 ```powershell
