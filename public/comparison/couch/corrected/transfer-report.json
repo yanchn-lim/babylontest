@@ -1,0 +1,12 @@
+{
+  "atlasSize": 256,
+  "rays": 1024,
+  "activeSurfaces": 36089,
+  "representedHits": 27983273,
+  "entries": 12718544,
+  "bytes": 52184964,
+  "preparationMilliseconds": 51558,
+  "compressedBytes": 23478820,
+  "sha256": "0fa8d6672d281ac692409ebcef2bc980b03cff47cab1569f18f6fdb5d67938b6",
+  "errors": []
+}

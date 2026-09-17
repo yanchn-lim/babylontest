@@ -379,3 +379,26 @@ Remove-Item Env:COMPARISON_URL, Env:TRANSFER_OUTPUT_DIR
 
 Screenshots and measurements are written to `.tools/offset-study`. Only the
 selected variant is loaded; each variant's preparation report records its size.
+
+## Couch metallic-texture comparison
+
+Open `comparison.html?study=couch&lights=on`, or select **KLIPPAN couch** in
+the Study menu. **Metallic GI handling** switches between corrected texture
+sampling and the previous scalar-only calculation. The same native IKEA model,
+direct lighting, camera, exposure and lighting atlas are used in both modes.
+**Indirect only** isolates the GI difference. Time, lamp, bounce, reflection
+and walking controls remain available. There is no matched Cycles reference.
+
+The 1,982-triangle KLIPPAN model has a separate, non-overlapping Blender lighting
+unwrap. This isolates the material bug; it does not repair the other site's
+furniture atlas. The two prepared caches each download about 23.5 MB; only the
+selected mode loads. WebGL shows direct lighting with an explicit WebGPU notice.
+Asset provenance is in `public/comparison/couch/SOURCE.md`.
+
+Preparation: run the Vite development server on port 4193, then
+`node scripts/prepare-couch-study.cjs`. Build and serve the static preview on
+port 4194. Run `scripts/prepare-comparison-transfer.cjs` twice, setting
+`COMPARISON_URL` to the couch page with `metallic=corrected` or `metallic=legacy`,
+and `TRANSFER_OUTPUT_DIR` to the matching `public/comparison/couch/<mode>` folder.
+Rebuild to include the generated files. `node scripts/check-couch-study.cjs`
+checks both rendered modes, GI values, night lighting, walking and WebGL fallback.

@@ -10,6 +10,8 @@ import { RadianceCascades } from './radiance-cascades';
 import { CachedTransfer } from './cached-transfer';
 import { RoomReflections } from './reflections';
 import { offsetStudy } from './offset-study';
+import { couchMaterialMode, loadCouch } from './couch-study';
+import { ApartmentLightmap } from '../apartment/lightmap';
 import './style.css';
 
 type Vec3 = [number, number, number];
@@ -39,9 +41,12 @@ const reference = element<HTMLImageElement>('reference');
 const note = element('reference-note');
 const base = import.meta.env.BASE_URL + 'comparison/';
 const query = new URLSearchParams(location.search), testingOffsets = query.get('study') === 'offsets';
+const testingCouch = query.get('study') === 'couch', testingFurniture = testingOffsets || testingCouch;
+const metallicMode = element<HTMLSelectElement>('metallic-mode');
+metallicMode.value = query.get('metallic') === 'legacy' ? 'legacy' : 'corrected';
 const study = element<HTMLSelectElement>('study'), density = element<HTMLSelectElement>('density');
 const offsets = element<HTMLSelectElement>('offset-mode'), lightingView = element<HTMLSelectElement>('lighting-view');
-study.value = testingOffsets ? 'offsets' : 'room';
+study.value = testingCouch ? 'couch' : testingOffsets ? 'offsets' : 'room';
 density.value = query.get('density') === 'coarse' ? 'coarse' : 'dense';
 offsets.value = query.get('offset') === 'fixed' ? 'fixed' : 'adaptive';
 function changeStudy() {
@@ -49,6 +54,7 @@ function changeStudy() {
   url.searchParams.set('study', study.value); url.searchParams.set('density', density.value);
   url.searchParams.set('offset', offsets.value); url.searchParams.set('hour', time.value);
   url.searchParams.set('lights', lights.value); url.searchParams.set('lighting', lightingView.value);
+  url.searchParams.set('metallic', metallicMode.value);
   location.assign(url);
 }
 study.addEventListener('change', changeStudy); density.addEventListener('change', changeStudy);
@@ -57,25 +63,29 @@ async function start() {
   const response = await fetch(base + 'scene.json');
   if (!response.ok) throw new Error('Comparison assets are missing. Run scripts/prepare-comparison.py with Blender.');
   const original: SceneData = await response.json();
-  const data = testingOffsets ? offsetStudy(original, density.value === 'dense') : original;
-  if (testingOffsets) {
-    data.adaptiveOffsets = offsets.value === 'adaptive';
-    for (const id of ['density-control', 'offset-control', 'lighting-control', 'offset-note']) element(id).hidden = false;
+  const couchData: SceneData | undefined = testingCouch ? await (await fetch(base + 'couch/scene.json')).json() : undefined;
+  let data = couchData ? couchMaterialMode(couchData, metallicMode.value === 'corrected') : testingOffsets ? offsetStudy(original, density.value === 'dense') : original;
+  if (testingFurniture) {
+    if (testingOffsets) data.adaptiveOffsets = offsets.value === 'adaptive';
+    for (const id of ['lighting-control', 'offset-note', ...(testingCouch ? ['metallic-control'] : ['density-control', 'offset-control'])]) element(id).hidden = false;
     for (const id of ['sphere-material', 'layout', 'gi']) element(id).parentElement!.hidden = true;
     document.querySelector<HTMLElement>('figure.reference')!.hidden = true;
     document.querySelector<HTMLElement>('details')!.hidden = true;
     element('comparison').style.gridTemplateColumns = '1fr';
     element('comparison').style.maxWidth = '1100px';
-    document.querySelector('h1')!.textContent = 'Dense furniture, controlled offsets.';
+    document.querySelector('h1')!.textContent = testingCouch ? 'KLIPPAN couch, corrected GI.' : 'Dense furniture, controlled offsets.';
     document.querySelector('header p:last-child')!.textContent = 'Same shape, material and lighting. Change one variable at a time.';
     document.querySelector('.checkpoints > span')!.textContent = 'LIGHTING PRESETS';
-    view.options[0].textContent = 'Furniture & room'; view.options[1].textContent = 'Thin parts · close view';
+    view.options[0].textContent = 'Furniture & room'; view.options[1].textContent = testingCouch ? 'Couch · close view' : 'Thin parts · close view';
     const hour = Number(query.get('hour') ?? 12);
     if (Number.isFinite(hour)) time.value = String(Math.max(0, Math.min(24, hour)));
     if (['auto', 'on', 'off'].includes(query.get('lights')!)) lights.value = query.get('lights')!;
+    else if (testingCouch) lights.value = 'on';
     lightingView.value = query.get('lighting') === 'indirect' ? 'indirect' : 'full';
     const count = data.meshes.slice(2).reduce((sum, mesh) => sum + mesh.indices.length / 3, 0);
-    element('offset-note').textContent = `${count.toLocaleString()} furniture triangles. Same shape and lighting UVs at both densities. Use Interior lights → On to inspect the furniture. The small sealed panel tests light leaks. This is an experimental test without a matched Cycles reference.`;
+    element('offset-note').textContent = testingCouch
+      ? 'IKEA KLIPPAN · Vissle grey. Switch Metallic GI handling to compare the fix. Geometry, native materials, lights and exposure stay the same. Indirect only makes the difference easier to see. This test uses separate lighting UVs; it does not fix the walkthrough’s overlapping atlas. No matched Cycles reference.'
+      : `${count.toLocaleString()} furniture triangles. Same shape and lighting UVs at both densities. Use Interior lights → On to inspect the furniture. The small sealed panel tests light leaks. This is an experimental test without a matched Cycles reference.`;
   }
   let engine: Engine | WebGPUEngine | undefined;
   if (await WebGPUEngine.IsSupportedAsync) {
@@ -108,13 +118,13 @@ async function start() {
     texture.gammaSpace = false;
     texture.wrapU = texture.wrapV = Texture.CLAMP_ADDRESSMODE;
   });
-  const empty = testingOffsets ? RawTexture.CreateRGBATexture(new Uint8Array([0, 0, 0, 255]), 1, 1, scene, false, false) : undefined;
+  const empty = testingFurniture ? RawTexture.CreateRGBATexture(new Uint8Array([0, 0, 0, 255]), 1, 1, scene, false, false) : undefined;
   const [skyMap, fixtureMap, ...sunMaps] = empty ? [empty, empty, ...data.sunHours.map(() => empty)] : await Promise.all([
     load('sky'), load('fixtures'), ...data.sunHours.map(hour => load('sun-' + hour)),
   ]);
   const basis: LightmapState = { sky: 1, fixtures: 0, blend: 0, lower: sunMaps[0], upper: sunMaps[0], fixtureMap,
     cascadeMap: skyMap, useCascades: false };
-  const materials = data.materials.map(source => {
+  const materials = (testingCouch ? original.materials : data.materials).map(source => {
     const material = new PBRMaterial(source.name, scene);
     material.albedoColor = new Color3(...source.color);
     material.metallic = 0;
@@ -125,7 +135,7 @@ async function start() {
     new ComparisonLightmaps(material, basis);
     return material;
   });
-  const meshes = data.meshes.map(source => {
+  const meshes = (testingCouch ? data.meshes.slice(0, 2) : data.meshes).map(source => {
     const mesh = new Mesh(materials[source.material].name, scene);
     const vertices = new VertexData();
     vertices.positions = source.positions; vertices.normals = source.normals;
@@ -138,6 +148,23 @@ async function start() {
     mesh.checkCollisions = true;
     return mesh;
   });
+  if (testingCouch) {
+    const couch = await loadCouch(scene);
+    const atlas = await (await fetch(base + 'couch/atlas.json')).json();
+    couch.meshes.forEach((mesh, index) => {
+      if (atlas[index].length !== mesh.getTotalVertices() * 2) throw Error('Couch lighting atlas does not match the model.');
+      mesh.setVerticesData('uv3', atlas[index]);
+    });
+    for (const material of couch.materials) {
+      material.brdf.baseDiffuseModel = Constants.MATERIAL_DIFFUSE_MODEL_LAMBERT;
+      material.maxSimultaneousLights = 3;
+      if (!material.needAlphaBlending()) {
+        material.lightmapTexture = skyMap;
+        new ApartmentLightmap(material, { get texture() { return basis.cascadeMap; }, get ready() { return basis.useCascades; }, sky: 0 });
+      }
+    }
+    materials.push(...couch.materials); meshes.push(...couch.meshes);
+  }
   const sun = new DirectionalLight('Sun', new Vector3(0, -1, 0), scene);
   sun.shadowMinZ = .1; sun.shadowMaxZ = 45;
   sun.autoUpdateExtends = false; sun.shadowFrustumSize = 14;
@@ -165,7 +192,7 @@ async function start() {
   const reflections = new RoomReflections(scene, meshes.filter(mesh => mesh.material !== materials[0]),
     [{ name: 'Comparison room', center: [0, 1.5, 0], size: [6, 3, 6], materials }], materials);
   const reflectionControl = element<HTMLSelectElement>('reflections');
-  if (preparingTransfer || testingOffsets) { reflectionControl.value = 'off'; reflections.setEnabled(false); }
+  if (preparingTransfer || testingFurniture) { reflectionControl.value = 'off'; reflections.setEnabled(false); }
   reflectionControl.addEventListener('change', () => reflections.setEnabled(reflectionControl.value === 'on'));
   if (preparingTransfer) gi.value = 'baked';
   let cascades: RadianceCascades | CachedTransfer | undefined;
@@ -173,13 +200,13 @@ async function start() {
   let selection = '';
   let cascadeError = '';
   function selectGi() {
-    const key = gi.value + ':' + offsets.value;
+    const key = gi.value + ':' + offsets.value + ':' + metallicMode.value;
     if (!(engine instanceof WebGPUEngine) || gi.value === 'baked' || selection === key) { updateStatus(); return; }
     basis.useCascades = false; basis.cascadeMap = skyMap;
     cascades?.dispose(); cascades = undefined; cascadeError = ''; method = gi.value; selection = key;
     try {
       engine.enableGPUTimingMeasurements = !!engine.getCaps().timerQuery;
-      const cache = testingOffsets ? `offset-study/${density.value}-${offsets.value}/transfer.bin.gz` : 'transfer.bin.gz';
+      const cache = testingCouch ? `couch/${metallicMode.value}/transfer.bin.gz` : testingOffsets ? `offset-study/${density.value}-${offsets.value}/transfer.bin.gz` : 'transfer.bin.gz';
       cascades = method === 'transfer' ? new CachedTransfer(scene, engine, data, base + cache)
         : new RadianceCascades(scene, engine, data);
       basis.cascadeMap = cascades.texture;
@@ -199,7 +226,7 @@ async function start() {
     const label = gi.value === 'baked' ? 'Baked GI' : cascades?.status || 'Computed GI unavailable · baked fallback';
     const fallback = cascadeError ? ' · GI initialization failed' : '';
     const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${state.on ? 'on' : 'off'} (${lights.value}) · ${label}${fallback} · ${reflections.status}`;
-    const message = testingOffsets && !(engine instanceof WebGPUEngine) ? 'Offset test requires WebGPU · showing direct lighting only.' : text;
+    const message = testingFurniture && !(engine instanceof WebGPUEngine) ? `${testingCouch ? 'Couch GI' : 'Offset'} test requires WebGPU · showing direct lighting only.` : text;
     if (status.textContent !== message) status.textContent = message;
   }
   function updateReference() {
@@ -241,7 +268,7 @@ async function start() {
     sun.direction.set(...state.direction.map(value => -value) as Vec3);
     sun.position.copyFrom(sun.direction.scale(-18));
     sun.position.y += 1.5;
-    const direct = testingOffsets && lightingView.value === 'indirect' ? 0 : 1;
+    const direct = testingFurniture && lightingView.value === 'indirect' ? 0 : 1;
     sun.intensity = state.sun * direct;
     sun.diffuse.set(...state.color as Vec3); sun.specular.copyFrom(sun.diffuse);
     sunShadow.getShadowMap()!.resetRefreshCounter();
@@ -262,6 +289,12 @@ async function start() {
   offsets.addEventListener('change', () => {
     data.adaptiveOffsets = offsets.value === 'adaptive';
     const url = new URL(location.href); url.searchParams.set('offset', offsets.value); history.replaceState(null, '', url);
+    selectGi(); applyLighting();
+  });
+  metallicMode.addEventListener('change', () => {
+    if (!couchData) return;
+    data = couchMaterialMode(couchData, metallicMode.value === 'corrected');
+    const url = new URL(location.href); url.searchParams.set('metallic', metallicMode.value); history.replaceState(null, '', url);
     selectGi(); applyLighting();
   });
   lightingView.addEventListener('change', applyLighting);
@@ -300,6 +333,7 @@ async function start() {
     scene, camera, engine, ready: true,
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
       offsetStudy: testingOffsets ? { density: density.value, offsets: offsets.value, lighting: lightingView.value } : null,
+      couchStudy: testingCouch ? { metallic: metallicMode.value, lighting: lightingView.value } : null,
       gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? method : 'baked', cascades: method === 'cascades' ? cascades?.diagnostics() : undefined,
       transfer: method === 'transfer' ? cascades?.diagnostics() : undefined,
       reflections: reflections.diagnostics(), sphereMaterial: sphereMaterial.value, cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
