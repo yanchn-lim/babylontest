@@ -30,6 +30,7 @@ const lights = element<HTMLSelectElement>('lights');
 const gi = element<HTMLSelectElement>('gi');
 const bounces = element<HTMLSelectElement>('bounces');
 const view = element<HTMLSelectElement>('view');
+const sphereMaterial = element<HTMLSelectElement>('sphere-material');
 const reference = element<HTMLImageElement>('reference');
 const note = element('reference-note');
 const base = import.meta.env.BASE_URL + 'comparison/';
@@ -121,6 +122,7 @@ async function start() {
     return light;
   });
   const preparingTransfer = new URLSearchParams(location.search).has('prepareTransfer');
+  if (!preparingTransfer && new URLSearchParams(location.search).get('sphere') === 'mirror') sphereMaterial.value = 'mirror';
   const reflections = new RoomReflections(scene, meshes.filter(mesh => mesh.material !== materials[0]),
     [{ name: 'Comparison room', center: [0, 1.5, 0], size: [6, 3, 6], materials }], materials);
   const reflectionControl = element<HTMLSelectElement>('reflections');
@@ -159,11 +161,22 @@ async function start() {
   }
   function updateReference() {
     const state = lighting(Number(time.value), lights.value as SwitchMode);
-    const match = cameraMatches && data.references.find(item => item.view === view.value && item.hour === Number(time.value) && item.on === state.on);
+    const mirror = sphereMaterial.value === 'mirror';
+    const match = !mirror && cameraMatches && data.references.find(item => item.view === view.value && item.hour === Number(time.value) && item.on === state.on);
     reference.hidden = !match;
-    note.textContent = !cameraMatches ? 'Free walk · reset the camera to compare.'
+    note.textContent = mirror ? 'Mirror inspection · select Ceramic for the matched offline reference. Room GI retains the ceramic scene.'
+      : !cameraMatches ? 'Free walk · reset the camera to compare.'
       : !match ? 'No exact reference for this time and light state. Select a reference checkpoint above.' : '';
     if (match && !reference.src.endsWith('/' + match.file)) reference.src = base + match.file;
+  }
+  function applySphereMaterial() {
+    const mirror = sphereMaterial.value === 'mirror', material = materials[0];
+    material.albedoColor.set(...(mirror ? [1, 1, 1] as Vec3 : data.materials[0].color));
+    material.metallic = mirror ? 1 : 0;
+    material.roughness = mirror ? 0 : data.materials[0].roughness;
+    // A mirror has no diffuse contribution, including the precomputed lightmap.
+    material.lightmapTexture = mirror ? null : skyMap;
+    updateReference();
   }
   function resetView() {
     const selected = data.views[view.value];
@@ -201,6 +214,7 @@ async function start() {
   gi.addEventListener('change', selectGi);
   bounces.addEventListener('change', applyLighting);
   view.addEventListener('change', resetView);
+  sphereMaterial.addEventListener('change', applySphereMaterial);
   element('reset').addEventListener('click', resetView);
   document.querySelectorAll<HTMLButtonElement>('[data-hour]').forEach(button => button.addEventListener('click', () => {
     time.value = button.dataset.hour!;
@@ -221,7 +235,7 @@ async function start() {
   navigation(camera, canvas, () => { if (cameraMatches) { cameraMatches = false; updateReference(); } });
   const observer = new ResizeObserver(resize); observer.observe(canvas);
   window.addEventListener('resize', resize);
-  selectGi(); resetView(); applyLighting();
+  selectGi(); applySphereMaterial(); resetView(); applyLighting();
   await scene.whenReadyAsync();
   engine.runRenderLoop(() => {
     if (gi.value !== 'baked') cascades?.tick();
@@ -237,7 +251,7 @@ async function start() {
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
       gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? method : 'baked', cascades: method === 'cascades' ? cascades?.diagnostics() : undefined,
       transfer: method === 'transfer' ? cascades?.diagnostics() : undefined,
-      reflections: reflections.diagnostics(), cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
+      reflections: reflections.diagnostics(), sphereMaterial: sphereMaterial.value, cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
   } });
   if (preparingTransfer && engine instanceof WebGPUEngine) {
     const gpu = engine;

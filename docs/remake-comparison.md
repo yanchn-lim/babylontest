@@ -301,6 +301,12 @@ dark block. The whole-image daytime difference is nearly unchanged; remaining
 diffuse and spatial probe errors are still visible. Material roughness, exposure,
 reflection intensity and capture budgets have not changed.
 
+Use **Sphere material → Mirror** (or `?sphere=mirror`) to inspect the probe with
+a white, fully metallic, zero-roughness sphere. Its diffuse lightmap is disabled.
+Switch back to **Ceramic** to restore the original material and matched Cycles
+reference. Mirror mode is a reflection inspection: room GI still uses the
+prepared ceramic scene, and the ceramic reference is hidden while it is active.
+
 ## Primary references
 
 - [Blender Cycles baking](https://docs.blender.org/manual/en/5.0/render/cycles/baking.html): separate direct, indirect and colour passes.
