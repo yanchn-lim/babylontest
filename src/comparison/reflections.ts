@@ -1,5 +1,6 @@
 import { Color4, HDRFiltering, ReflectionProbe, SphericalPolynomial, Vector3,
   type Mesh, type PBRMaterial, type Scene } from '@babylonjs/core';
+import { LocalReflectionFilter } from './reflection-filter';
 
 export interface ReflectionRoom {
   name: string;
@@ -22,7 +23,9 @@ export class RoomReflections {
   private updateMilliseconds = 0;
 
   constructor(private scene: Scene, private meshes: Mesh[], private rooms: ReflectionRoom[],
-    private materials: PBRMaterial[]) {}
+    private materials: PBRMaterial[]) {
+    materials.forEach(material => new LocalReflectionFilter(material));
+  }
 
   setEnabled(enabled: boolean) {
     this.enabled = enabled;

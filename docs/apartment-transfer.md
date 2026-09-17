@@ -25,6 +25,8 @@ eight-light material limit.
 The diffuse-only state is preserved at tag
 `checkpoint/apartment-diffuse-2026-09-17` (`37c34f2`). Select **Reflections → Off**
 to compare its lighting with the new reflection layer.
+The first reflection version is preserved separately at
+`checkpoint/local-reflections-2026-09-17` (`d730bc5`).
 
 Nine local probes cover the living room, three bedrooms, two bathrooms, kitchen,
 shelter and hall. Each captures a linear HDR cubemap at 128 pixels per face,
@@ -34,6 +36,14 @@ The maps contribute only specular light: their diffuse spherical coefficients
 are zero. Existing environment reflections are suppressed during capture to
 avoid recursive feedback. The comparison page uses one probe in its main room;
 its sphere is omitted from capture to avoid reflecting itself.
+
+The shared `LocalReflectionFilter` adjusts the cubemap lookup toward the dominant
+direction of a rough specular lobe, including its change at grazing angles. It
+uses the [Frostbite/HDRP approximation](https://github.com/Unity-Technologies/Graphics/blob/master/Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl).
+The material's roughness, reflectance, direct-light response and diffuse GI are
+unchanged. This adds shader arithmetic, with no additional texture samples,
+captures or GPU buffers. It improves the reflection approximation but cannot
+recover objects hidden from the probe or reproduce every path-traced highlight.
 
 Captures update after the diffuse lighting finishes. The previous complete set
 stays visible until the replacement is ready. Walking and reflection On/Off

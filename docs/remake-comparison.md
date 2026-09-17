@@ -293,6 +293,14 @@ for the main room and excludes the sphere from capture to avoid self-reflection.
 Side-room reflection placement is approximate. See the apartment guide for the
 shared implementation and its limitations.
 
+The first probe version is saved at `checkpoint/local-reflections-2026-09-17`
+(`d730bc5`). The current lookup accounts for the dominant direction of rough
+reflections, instead of using the perfect-mirror direction at every roughness.
+Matched morning and night images show modest improvements on the sphere and
+dark block. The whole-image daytime difference is nearly unchanged; remaining
+diffuse and spatial probe errors are still visible. Material roughness, exposure,
+reflection intensity and capture budgets have not changed.
+
 ## Primary references
 
 - [Blender Cycles baking](https://docs.blender.org/manual/en/5.0/render/cycles/baking.html): separate direct, indirect and colour passes.
