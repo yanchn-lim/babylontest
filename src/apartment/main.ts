@@ -3,6 +3,7 @@ import {
   PointLight, Scene, ShadowGenerator, Texture, UniversalCamera, Vector3, WebGPUEngine,
 } from '@babylonjs/core';
 import { loadApartment } from '../interior-lighting/apartment';
+import { partitionSurfaceMeshes } from '../interior-lighting/surface-partition';
 import { CachedTransfer } from '../comparison/cached-transfer';
 import { lighting, skyDisplay, type SwitchMode } from '../comparison/lighting';
 import { navigation } from '../comparison/navigation';
@@ -48,6 +49,7 @@ async function start() {
   camera.inputs.clear(); camera.inertia = 0; camera.minZ = .05; camera.maxZ = 60;
   camera.checkCollisions = true; camera.ellipsoid.set(.18, .75, .18); camera.ellipsoidOffset.set(0, -.09, 0);
   let { meshes, materials } = await loadApartment(scene);
+  partitionSurfaceMeshes(meshes);
   const atlasResponse = await fetch(base + 'apartment-transfer/atlas.json');
   if (!atlasResponse.ok) throw Error('Apartment lighting atlas is missing.');
   const atlas: number[][] = await atlasResponse.json();

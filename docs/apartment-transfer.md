@@ -57,22 +57,28 @@ The probes are approximate, with possible seams between rooms, limited detail
 and inaccurate nearby-object reflections. They are not mirror or ray-traced
 reflections. Physical iPhone performance remains untested.
 
-The original model and its baked UVs are unchanged. The new page expands its
-vertices at load time and applies a separate, padded 256px lighting atlas to UV3.
-Coplanar surfaces share lighting charts to reduce seams between wall sections.
+The original model and its baked UVs are unchanged. The new page splits receiver
+triangles where other surfaces intersect them, preserving their shape and material
+UVs. Preparation uses the same splitter. A padded 256px lighting atlas is applied
+to UV3. Connected coplanar sections share a chart unless a wall blocks their join.
+Separate charts prevent filtering exterior lighting across the living-room corners.
+Ray sample positions keep 8 mm of clearance from triangle edges where space allows
+to avoid starting on adjoining walls; the traced geometry itself is unchanged.
 The original baked skylight stays visible while the cache loads and on WebGL.
 That fallback scales with sky brightness; it does not update indirect sun or lamp
 light. It is not a matched reference for the new method.
 
 This is an apartment prototype. The compact atlas can lose lighting detail on
-small surfaces. Remaining light leaks are accepted for this pass; their cause
-has not been isolated. No apartment Cycles match or physical iPhone performance
-result is claimed. Review visuals before choosing a final atlas or memory budget.
+small surfaces. This addresses the confirmed GI filtering leaks at wall joins;
+it does not establish that all model gaps or lighting artifacts are fixed. No
+apartment Cycles match or physical iPhone performance result is claimed. Review
+visuals before choosing a final atlas or memory budget.
 
-The prepared cache downloads 9.5 MB and uses about 29.3 MB for GI buffers and its
-output texture, excluding model textures and shadow maps. The focused desktop
-check scheduled a four-bounce update in about 58 ms, including eight frames of
-dispatch scheduling. This is not a GPU completion or phone timing.
+The prepared cache downloads 8.9 MB and uses about 30.4 MB for GI buffers and its
+output texture, excluding model textures and shadow maps. A four-bounce update
+uses eight dispatch stages. The wall-intersection split increases the apartment
+from 2,160 to 13,784 triangles before the reflection-room split. Desktop timing
+is not a GPU completion or phone measurement.
 
 ## Regenerate the apartment cache
 
@@ -84,7 +90,9 @@ to generate the cache. A fingerprint rejects mismatched scene/shader caches.
 With the bundled tools, from the repository root in PowerShell:
 
 ```powershell
+$env:NODE = (Resolve-Path .\.tools\node-v24.19.0-win-x64\node.exe).Path
 & .\.tools\blender-4.5.3-windows-x64\blender.exe -b -t 4 --python scripts/prepare-apartment-atlas.py
+Remove-Item Env:NODE
 & .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js build
 # Run this preview in another terminal and leave it running:
 & .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4185

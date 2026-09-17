@@ -26,6 +26,14 @@ export function geometry(data: SceneData) {
     for (let face = 0; face < mesh.indices.length; face += 3) {
       const ids = mesh.indices.slice(face, face + 3);
       const points = ids.map(position);
+      const insetWeights = points.map((p, j) => {
+        if (!data.surfaceInset) return 0;
+        const a = points[(j + 1) % 3].map((v, k) => v - p[k]);
+        const b = points[(j + 2) % 3].map((v, k) => v - p[k]);
+        const twiceArea = Math.hypot(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
+        const height = twiceArea / Math.hypot(...a.map((v, k) => v - b[k]));
+        return Math.min(1 / 3, data.surfaceInset / height);
+      });
       const uv = ids.map(i => mesh.uvs.slice(i * 2, i * 2 + 2));
       triangles.push({ a: points[0], b: points[1], c: points[2], material: mesh.material,
         uv: uv.flat() as Triangle['uv'] });
@@ -60,6 +68,9 @@ export function geometry(data: SceneData) {
         if (distance > 4 || distance >= distances[index]) continue;
         distances[index] = distance;
         const offset = index * 12;
+        // Keep corner rays inside their chart instead of exactly on an adjoining wall.
+        const inward = Math.max(0, ...positionWeights.map((w, j) => w < insetWeights[j] ? (insetWeights[j] - w) / (1 / 3 - w) : 0));
+        if (inward > 0) positionWeights = positionWeights.map(w => w * (1 - inward) + inward / 3);
         // Extend smooth normals into padding, but keep ray origins on the mesh.
         const normal = [0, 1, 2].map(k => ids.reduce((sum, id, j) => sum + mesh.normals[id * 3 + k] * weights[j], 0));
         const length = Math.hypot(...normal);

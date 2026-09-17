@@ -5,7 +5,7 @@ import type { SceneData } from '../comparison/main';
 export async function prepareScene(meshes: Mesh[], materials: PBRMaterial[], settings: Pick<SceneData, 'fixtures' | 'views' | 'sky'>): Promise<SceneData> {
   const albedos = await albedoLayers(materials);
   return {
-    ...settings, sunHours: [], references: [],
+    ...settings, sunHours: [], references: [], surfaceInset: .008,
     materials: materials.map((material, index) => ({ name: material.name,
       color: material.albedoColor.scale(1 - (material.metallic ?? 0)).asArray() as [number, number, number],
       roughness: material.roughness ?? 1, transmitting: material.needAlphaBlending(),

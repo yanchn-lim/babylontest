@@ -13,6 +13,7 @@ import './style.css';
 
 type Vec3 = [number, number, number];
 export interface SceneData {
+  surfaceInset?: number;
   materials: { name: string; color: Vec3; roughness: number; transmitting?: boolean;
     diffuseTexture?: { size: number; pixels: number[] } }[];
   meshes: { material: number; positions: number[]; normals: number[]; uvs: number[]; indices: number[]; albedoUvs?: number[] }[];
