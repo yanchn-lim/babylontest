@@ -13,7 +13,7 @@ const url = process.env.COMPARISON_URL || 'http://127.0.0.1:4193/comparison.html
     const report = await page.evaluate(async sofaUrl => {
       const B = await import('/node_modules/.vite/deps/@babylonjs_core.js');
       const { prepareScene } = await import('/src/apartment/prepare-scene.ts');
-      const { geometry } = await import('/src/comparison/radiance-cascades.ts');
+      const { geometry } = await import('/src/comparison/surface-geometry.ts');
       const engine = new B.Engine(document.createElement('canvas'), false);
       const scene = new B.Scene(engine);
       scene.useRightHandedSystem = true;

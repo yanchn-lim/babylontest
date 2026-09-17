@@ -31,7 +31,11 @@ const out = path.join(directory, 'transfer.bin.gz');
     });
     if (errors.length) throw Error(errors.join('\n'));
     const sceneData = await page.evaluate(() => preparedTransfer.sceneData);
-    if (sceneData) fs.writeFileSync(path.join(directory, 'scene.json'), JSON.stringify(sceneData));
+    if (sceneData) {
+      const furniture = ['couch', 'applaryd'].includes(url.searchParams.get('study'));
+      const scenePath = path.join(furniture ? path.dirname(directory) : directory, 'scene.json');
+      fs.writeFileSync(scenePath, JSON.stringify(sceneData));
+    }
     if (!stats.entries || stats.entries * 4 > 128 * 1024 * 1024) throw Error('Transfer exceeds the prototype budget.');
     const temporary = out + '.tmp';
     const compressed = zlib.createGzip({ level: 9 }), file = fs.createWriteStream(temporary);

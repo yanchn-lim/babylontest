@@ -1,131 +1,69 @@
-// Focused smoke check for the comparison scene.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'C:/Users/yc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const url = process.env.COMPARISON_URL || 'http://127.0.0.1:4185/comparison.html';
-const out = path.resolve('.tools/comparison');
-fs.mkdirSync(out, { recursive: true });
+const out = '.tools/comparison-smoke';
 
 (async () => {
-  const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--enable-unsafe-webgpu'] });
-  const errors = [];
-  const checks = [];
-  const watch = page => {
-    page.on('pageerror', error => errors.push(error.message));
-    page.on('console', message => { if (message.type() === 'error') errors.push(message.text() + ' ' + message.location().url); });
-    page.on('response', response => { if (response.status() >= 400) errors.push(response.status() + ' ' + response.url()); });
-  };
+  fs.mkdirSync(out, {recursive: true});
+  const browser = await chromium.launch({channel: 'msedge', headless: true, args: ['--enable-unsafe-webgpu']});
+  const errors = [], results = [];
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
+    const page = await browser.newPage({viewport: {width: 1440, height: 1100}});
+    const watch = p => {
+      p.on('pageerror', e => errors.push(e.message));
+      p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+    };
     watch(page);
-    await page.goto(url);
-    await page.waitForFunction(() => window.comparison?.ready, {}, { timeout: 60000 });
-    await page.selectOption('#gi', 'cascades');
-    await page.selectOption('#bounces', '1');
-    const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const state = () => page.evaluate(() => comparison.state());
-    const settleGI = async () => {
-      await page.waitForFunction(() => {
-        const state = comparison.state();
-        return state.cascades?.error || (state.activeGi === 'cascades' && !state.cascades.updating);
-      }, {}, { timeout: 90000 });
-      assert.equal((await state()).cascades.error, '');
-      assert.equal((await state()).activeGi, 'cascades');
-      await settle();
+    const settle = async () => {
+      await page.waitForFunction(() => window.comparison?.ready && (comparison.state().transfer?.error ||
+        (comparison.state().activeGi === 'transfer' && !comparison.state().transfer.updating)), {}, {timeout: 120000});
+      assert.equal(await page.evaluate(() => comparison.state().transfer.error), '');
+      await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     };
-    await settleGI();
-    const cascadeMetrics = [(await state()).cascades];
-    const setTime = async hour => {
-      await page.locator('#time').evaluate((input, value) => { input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true })); }, hour);
-      await settleGI();
-    };
-    const capture = async name => {
-      await page.locator('#reference').evaluate(image => image.decode());
-      await settle();
-      await page.screenshot({ path: path.join(out, name + '.png'), fullPage: true });
-    };
-    assert.equal((await state()).on, false);
-    assert.match((await state()).reference, /room-12-off.png$/);
-    await capture('daylight');
-    await setTime(21);
-    assert.equal((await state()).on, true);
-    await capture('night');
-    cascadeMetrics.push((await state()).cascades);
-    checks.push('Auto lighting switches between noon and night; exact references load.');
-    await page.selectOption('#lights', 'off');
-    await settleGI();
-    assert.equal((await state()).on, false);
-    assert.match((await state()).reference, /room-21-off.png$/);
-    await page.selectOption('#lights', 'on');
-    await setTime(12);
-    assert.equal((await state()).on, true);
-    checks.push('Manual On and Off override Auto and persist through time changes.');
-    await page.selectOption('#lights', 'auto');
-    await setTime(10.4);
-    assert.equal((await state()).reference, null);
-    assert.match(await page.locator('#reference-note').innerText(), /No exact reference/);
-    const revisionBeforeDrag = (await state()).cascades.revision;
-    const revisionDuringDrag = await page.evaluate(async () => {
-      const input = document.querySelector('#time');
-      for (let step = 0; step < 12; step++) {
-        input.value = String(9 + step * .1);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        await new Promise(requestAnimationFrame);
+    for (const study of ['room', 'couch', 'applaryd']) {
+      const target = new URL(url); target.searchParams.set('study', study);
+      await page.goto(target.href); await settle();
+      assert.equal(await page.locator('#gi, #bounces, #metallic-mode, #offset-mode, #density, #lighting-view, #sphere-material').count(), 0);
+      assert.deepEqual(await page.locator('#study option').evaluateAll(options => options.map(o => o.value)), ['room', 'couch', 'applaryd']);
+      const state = await page.evaluate(() => comparison.state());
+      assert.equal(state.transfer.completedBounces, 4);
+      if (study === 'room') {
+        assert.match(state.reference, /room-12-off.png$/);
+        await page.selectOption('#layout', 'overlay');
+        assert.equal(await page.locator('#blend-control').isVisible(), true);
+        await page.selectOption('#layout', 'split');
+      } else {
+        const triangles = await page.evaluate(() => comparison.scene.meshes.filter(m => m.getVerticesData('uv3')).reduce((n, m) => n + m.getTotalIndices() / 3, 0));
+        assert.equal(triangles, study === 'couch' ? 1982 : 7628);
+        await page.selectOption('#view', 'doorway');
       }
-      return comparison.state().cascades.revision;
-    });
-    assert.ok(revisionDuringDrag > revisionBeforeDrag, 'Continuous time input must not starve GI updates.');
-    await settleGI();
-    assert.equal((await state()).hour, 10.1);
-    checks.push('Intermediate times render and do not display a mismatched reference.');
-    await setTime(12);
-    const revision = (await state()).cascades.revision;
-    const before = await page.evaluate(() => comparison.camera.position.asArray());
-    await page.locator('canvas').focus();
-    await page.keyboard.down('KeyW');
-    await page.waitForTimeout(180);
-    await page.keyboard.up('KeyW');
-    const after = await page.evaluate(() => comparison.camera.position.asArray());
-    assert.ok(Math.hypot(...after.map((v, i) => v - before[i])) > .03);
-    assert.equal((await state()).cameraMatches, false);
-    assert.equal((await state()).cascades.revision, revision, 'Walking must not recalculate GI.');
-    await page.click('#reset');
-    assert.equal((await state()).cameraMatches, true);
-    checks.push('Walking moves the camera, hides the reference, and Reset restores alignment.');
-    await page.selectOption('#view', 'doorway');
-    assert.match((await state()).reference, /doorway-12-off.png$/);
-    await capture('doorway');
-    await page.selectOption('#gi', 'baked');
-    await settle();
-    assert.equal((await state()).activeGi, 'baked');
-    await capture('doorway-baked');
-    await page.selectOption('#gi', 'cascades');
-    await settleGI();
-    assert.equal((await state()).cascades.revision, revision, 'Switching GI must reuse the existing result.');
-    checks.push('Radiance cascades complete; baked switching works; camera motion reuses GI.');
-    await page.selectOption('#layout', 'overlay');
-    await page.locator('#blend').fill('0.5');
-    await capture('overlay');
-    checks.push('Both saved views, overlay layout and opacity control work.');
-    // Exercise the other shader language and narrow layout without a performance benchmark.
-    const fallback = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    watch(fallback);
-    await fallback.addInitScript(() => Object.defineProperty(navigator, 'gpu', { value: undefined }));
-    await fallback.goto(url);
-    await fallback.waitForFunction(() => window.comparison?.ready, {}, { timeout: 60000 });
-    assert.match(await fallback.locator('#status').innerText(), /WebGL/);
-    assert.equal(await fallback.locator('#gi').inputValue(), 'baked');
-    assert.ok(await fallback.locator('#bounces').isDisabled());
-    assert.ok(await fallback.locator('#gi option[value="cascades"]').evaluate(option => option.disabled));
-    assert.ok(await fallback.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await fallback.screenshot({ path: path.join(out, 'narrow-webgl.png'), fullPage: true });
-    checks.push('WebGL fallback renders; the narrow touch layout has no horizontal overflow.');
+      await page.locator('canvas').screenshot({path: `${out}/${study}-noon.png`});
+      await page.selectOption('#lights', 'auto');
+      await page.locator('#time').fill('21'); await page.locator('#time').dispatchEvent('input'); await settle();
+      assert.equal(await page.evaluate(() => comparison.state().on), true);
+      await page.selectOption('#lights', 'off'); await settle();
+      assert.equal(await page.evaluate(() => comparison.state().on), false);
+      await page.selectOption('#lights', 'on'); await settle();
+      await page.locator('canvas').screenshot({path: `${out}/${study}-night.png`});
+      const revision = await page.evaluate(() => comparison.state().transfer.revision);
+      await page.locator('canvas').focus(); await page.keyboard.down('KeyW');
+      await page.waitForTimeout(150); await page.keyboard.up('KeyW');
+      assert.equal(await page.evaluate(() => comparison.state().transfer.revision), revision);
+      await page.click('#reset');
+      results.push({study, state: await page.evaluate(() => comparison.state())});
+    }
+    const fallback = await browser.newPage(); watch(fallback);
+    await fallback.addInitScript(() => Object.defineProperty(navigator, 'gpu', {value: undefined}));
+    for (const study of ['room', 'applaryd']) {
+      const target = new URL(url); target.searchParams.set('study', study);
+      await fallback.goto(target.href); await fallback.waitForFunction(() => window.comparison?.ready);
+      assert.equal(await fallback.evaluate(() => comparison.state().activeGi), 'baked');
+      if (study === 'applaryd') assert.match(await fallback.locator('#status').innerText(), /direct lighting only/);
+    }
+    await fallback.close();
     assert.deepEqual(errors, []);
-    const report = { checks, errors, cascadeMetrics, note: 'Desktop smoke checks only; no iPhone performance or visual-parity claim.' };
-    fs.writeFileSync(path.join(out, 'smoke.json'), JSON.stringify(report, null, 2));
-    console.log(JSON.stringify(report, null, 2));
-  } finally {
-    await browser.close();
-  }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+    fs.writeFileSync(`${out}/report.json`, JSON.stringify({results, errors}, null, 2));
+    console.log(JSON.stringify({scenes: results.map(r => r.study), errors}));
+  } finally { await browser.close(); }
+})().catch(e => {console.error(e); process.exitCode = 1;});

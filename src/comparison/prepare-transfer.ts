@@ -1,5 +1,6 @@
+import { repairSamples } from './sample-repair';
 import { ComputeShader, StorageBuffer, UniformBuffer, type WebGPUEngine } from '@babylonjs/core';
-import { geometry } from './radiance-cascades';
+import { geometry } from './surface-geometry';
 import type { SceneData } from './main';
 import { fixedLightData, transferBindings, transferFields, transferFingerprint, transferSourceFor,
   TRANSFER_SIZE, TRANSFER_PIXELS, TRANSFER_RAYS } from './transfer-data';
@@ -18,12 +19,13 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
   };
   const params = new UniformBuffer(engine);
   try {
+    if (mesh.rayOrigins) buffer('rayOrigins', mesh.rayOrigins);
     buffer('nodes', mesh.nodes); buffer('triangles', mesh.triangles); buffer('surfaces', mesh.surfaces);
     buffer('surfaceLight', TRANSFER_PIXELS * 32); buffer('transfer', batch * TRANSFER_RAYS * 4);
     transferFields.forEach(name => params.addUniform(name, 4)); params.create();
     params.updateFloat4('sky', 0, 0, 0, TRANSFER_SIZE);
     data.fixtures.slice(0, 2).forEach((lamp, i) => params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity));
-    const names = ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', 'transfer'];
+    const names = ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', 'transfer', ...(data.sampleRepair ? ['rayOrigins'] : [])];
     if (data.fixtures.length !== 2) { buffer('fixedLights', fixedLightData(data)); names.push('fixedLights'); }
     const shader = new ComputeShader('Prepare diffuse transfer', engine, { computeSource: transferSourceFor(data) }, {
       entryPoint: 'prepareTransfer',
@@ -36,6 +38,7 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     let failure = '';
     shader.onError = (_effect, error) => { failure = error; };
     const offsets = new Uint32Array(TRANSFER_PIXELS + 1), chunks: Uint32Array[] = [];
+    const backfaces = new Uint16Array(TRANSFER_PIXELS);
     let entryCount = 0, representedHits = 0, activeSurfaces = 0;
     for (let start = 0; start < TRANSFER_PIXELS; start += batch) {
       signal?.throwIfAborted();
@@ -58,6 +61,7 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
         const weights = new Map<number, number>();
         for (let ray = 0; ray < TRANSFER_RAYS; ray++) {
           const target = hits[row * TRANSFER_RAYS + ray];
+          if (target === 0xfffffffe) { backfaces[index]++; continue; }
           if (target === 0xffffffff) continue;
           weights.set(target, (weights.get(target) || 0) + 1); representedHits++;
         }
@@ -71,6 +75,8 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     const light = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
     const visibility = new Float32Array(TRANSFER_PIXELS * 4);
     for (let i = 0; i < TRANSFER_PIXELS; i++) visibility.set(light.subarray(i * 8 + 4, i * 8 + 8), i * 4);
+    if (data.sampleRepair) data = { ...data, sampleRepair: { ...data.sampleRepair,
+      remap: repairSamples(data, mesh.surfaces, mesh.sampleFaces, backfaces) } };
     const bytes = new Uint8Array(64 + offsets.byteLength + visibility.byteLength + entryCount * 4);
     new Uint32Array(bytes.buffer, 0, 8).set([0x31544644, 1, TRANSFER_SIZE, TRANSFER_RAYS, entryCount]);
     bytes.set(await transferFingerprint(data), 32);
@@ -78,7 +84,7 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     bytes.set(new Uint8Array(visibility.buffer), 64 + offsets.byteLength);
     let cursor = 64 + offsets.byteLength + visibility.byteLength;
     for (const chunk of chunks) { bytes.set(new Uint8Array(chunk.buffer), cursor); cursor += chunk.byteLength; }
-    return { bytes, stats: { atlasSize: TRANSFER_SIZE, rays: TRANSFER_RAYS, activeSurfaces,
+    return { bytes, sceneData: data.sampleRepair ? data : undefined, stats: { atlasSize: TRANSFER_SIZE, rays: TRANSFER_RAYS, activeSurfaces,
       representedHits, entries: entryCount, bytes: bytes.byteLength, preparationMilliseconds: performance.now() - started } };
   } finally { buffers.forEach(value => value.dispose()); params.dispose(); }
 }

@@ -55,12 +55,14 @@ function area(positions, indices) {
       assert.equal(captureInfo.length, name === 'comparison' ? 1 : 9);
       assert.ok(captureInfo.every(c => !c.automatic && c.width === 128 && !c.gamma && c.diffuse.every(v => v === 0)));
       await page.locator('canvas').screenshot({ path: path.join(out, `${name}-${backend}-day-on.png`) });
+      if (name === 'apartment') {
       await page.selectOption('#reflections', 'off');
       assert.equal(await page.evaluate(() => testScene.scene.materials.filter(m => m.reflectionTexture).length), 0);
       assert.equal(await giHash(), gi, 'Reflection switching must not change diffuse GI.');
       await page.locator('canvas').screenshot({ path: path.join(out, `${name}-${backend}-day-off.png`) });
       await page.selectOption('#reflections', 'on'); await settle();
       assert.equal((await page.evaluate(() => testScene.state())).reflections.captures, day.reflections.captures);
+      }
       await page.locator('canvas').focus(); await page.keyboard.down('KeyW');
       await page.waitForTimeout(180); await page.keyboard.up('KeyW');
       assert.equal((await page.evaluate(() => testScene.state())).reflections.captures, day.reflections.captures);

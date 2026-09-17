@@ -31,10 +31,9 @@ const url = process.env.COMPARISON_URL || 'http://127.0.0.1:4193/comparison.html
     const data = await page.evaluate(async study => {
       const B = await import('/node_modules/.vite/deps/@babylonjs_core.js');
       const { loadCouch } = await import('/src/comparison/couch-study.ts');
-      const { offsetStudy } = await import('/src/comparison/offset-study.ts');
+      const { furnitureRoom } = await import('/src/comparison/furniture-room.ts');
       const { prepareScene } = await import('/src/apartment/prepare-scene.ts');
-      const room = offsetStudy(await (await fetch('/comparison/scene.json')).json(), false);
-      room.meshes = room.meshes.slice(0, 2); room.materials.pop();
+      const room = furnitureRoom(await (await fetch('/comparison/scene.json')).json());
       room.views.room = { position: [2.2, 1.4, 2.1], target: [0, .45, -1], fov: .8 };
       room.views.doorway = { position: [.95, .95, .65], target: [0, .4, -1], fov: .85 };
       if (study === 'applaryd') {
@@ -49,9 +48,10 @@ const url = process.env.COMPARISON_URL || 'http://127.0.0.1:4193/comparison.html
       const data = await prepareScene(sofa.meshes, sofa.materials, room);
       data.meshes.forEach(mesh => { mesh.material += room.materials.length; });
       room.meshes.push(...data.meshes); room.materials.push(...data.materials);
+      if (study === 'applaryd') room.sampleRepair = { mesh: 2 };
       scene.dispose(); engine.dispose(); return room;
     }, study);
     fs.writeFileSync(`public/comparison/${study}/scene.json`, JSON.stringify(data));
-    console.log('Prepared couch scene:', data.meshes.length, 'meshes. Generate both transfer caches next.');
+    console.log('Prepared couch scene:', data.meshes.length, 'meshes. Generate the transfer cache next.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

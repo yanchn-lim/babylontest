@@ -1,8 +1,8 @@
 import type { SceneData } from './main';
-import source from './radiance-cascades.wgsl?raw';
+import source from './transfer-tracing.wgsl?raw';
 import transferSource from './cached-transfer.wgsl?raw';
 import fixedLightsSource from './transfer-lights.wgsl?raw';
-import { adaptiveOffsets } from './adaptive-offsets';
+import { repairShader } from './sample-repair';
 
 export const TRANSFER_SIZE = 256;
 export const TRANSFER_RAYS = 1024;
@@ -11,24 +11,30 @@ export const transferShader = source + '\n' + transferSource;
 export const transferFields = ['sun', 'sunColor', 'sky', 'lamp0', 'lampColor0', 'lamp1', 'lampColor1',
   'origin', 'dimensions', 'range', 'nextDimensions', 'nextRange', 'update', 'bounce'];
 export const transferBindings = ['nodes', 'triangles', 'surfaces', 'params', 'hits', 'surfaceLight',
-  'cascades', 'output', 'bounceLight', 'transfer', 'offsets', 'fixedLights'];
+  'cascades', 'output', 'bounceLight', 'transfer', 'offsets', 'fixedLights', 'rayOrigins', 'sampleRemap'];
 
 // Keep the two-light comparison shader and its prepared cache unchanged.
-export function transferSourceFor(data: SceneData) {
+export function transferSourceFor(data: SceneData, receivedDiffuse = false) {
   if (data.fixtures.length > 8) throw Error('Cached diffuse supports up to eight fixed lights.');
-  const shader = data.fixtures.length === 2 ? transferShader : transferShader
+  // Change only the displayed sum; each propagated bounce keeps its surface colour.
+  // Visibility preparation and cache fingerprints use the original source by default.
+  let shader = receivedDiffuse ? source + '\n' + transferSource
+    .replace('radiance*=surface.color.rgb/f32(SKY_RAYS);', 'radiance/=f32(SKY_RAYS);')
+    .replace('vec4f(radiance,1)', 'vec4f(radiance*surface.color.rgb,1)')
+    .replace('total+=surface.color.rgb*params.sky.rgb', 'total+=params.sky.rgb') : transferShader;
+  if (data.fixtures.length !== 2) shader = shader
     .replace('fn prepareTransfer(', 'fn prepareTransferTwoLights(')
     .replace('fn shade(', 'fn shadeTwoLights(') + '\n' + fixedLightsSource;
-  return data.adaptiveOffsets ? adaptiveOffsets(shader) : shader;
+  return data.sampleRepair ? repairShader(shader) : shader;
 }
 
-export function fixedLightData(data: SceneData) {
-  return new Float32Array(data.fixtures.flatMap(light => [...light.position, light.intensity, ...light.color, 0]));
+export function fixedLightData(data: SceneData, intensityScale = 1) {
+  return new Float32Array(data.fixtures.flatMap(light => [...light.position, light.intensity * intensityScale, ...light.color, 0]));
 }
 
 export async function transferFingerprint(data: SceneData) {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
-    JSON.stringify(data) + transferSourceFor(data).replace(/\r\n/g, '\n') + `|atlas=${TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1`)));
+    JSON.stringify(data) + transferSourceFor(data).replace(/\r\n/g, '\n') + `|atlas=${TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1${data.sampleRepair ? "|sample-repair-v1" : ""}`)));
 }
 
 export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
@@ -57,5 +63,9 @@ export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
   }
   if (!visibility.every((v, i) => Number.isFinite(v) && v >= 0 && v <=
     (i % 4 === 3 && data.fixtures.length !== 2 ? 255 : 1))) throw Error('Invalid cached visibility.');
+  const remap = data.sampleRepair?.remap;
+  if (data.sampleRepair && (!remap || remap.length !== n || remap.some(value => !Number.isInteger(value) || value < 0 || value >= n))) {
+    throw Error('Invalid surface repair map. Regenerate the scene transfer.');
+  }
   return { offsets, visibility, entries };
 }

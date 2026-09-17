@@ -6,18 +6,16 @@ import {
 import { ComparisonLightmaps, type LightmapState } from './lightmaps';
 import { lighting, skyDisplay, sunInterval, type SwitchMode } from './lighting';
 import { navigation } from './navigation';
-import { RadianceCascades } from './radiance-cascades';
 import { CachedTransfer } from './cached-transfer';
 import { RoomReflections } from './reflections';
-import { offsetStudy } from './offset-study';
-import { couchMaterialMode, loadCouch } from './couch-study';
+import { loadCouch } from './couch-study';
 import { ApartmentLightmap } from '../apartment/lightmap';
 import './style.css';
 
 type Vec3 = [number, number, number];
 export interface SceneData {
   surfaceInset?: number;
-  adaptiveOffsets?: boolean;
+  sampleRepair?: { mesh: number; remap?: number[] };
   materials: { name: string; color: Vec3; roughness: number; transmitting?: boolean;
     diffuseTexture?: { size: number; pixels: number[] };
     metallicTexture?: { size: number; pixels: number[]; factor: number; wrapU: number; wrapV: number } }[];
@@ -33,61 +31,44 @@ const canvas = element<HTMLCanvasElement>('scene');
 const status = element('status');
 const time = element<HTMLInputElement>('time');
 const lights = element<HTMLSelectElement>('lights');
-const gi = element<HTMLSelectElement>('gi');
-const bounces = element<HTMLSelectElement>('bounces');
 const view = element<HTMLSelectElement>('view');
-const sphereMaterial = element<HTMLSelectElement>('sphere-material');
 const reference = element<HTMLImageElement>('reference');
 const note = element('reference-note');
 const base = import.meta.env.BASE_URL + 'comparison/';
-const query = new URLSearchParams(location.search), testingOffsets = query.get('study') === 'offsets';
+const query = new URLSearchParams(location.search);
 const couchStudy = query.get('study') === 'applaryd' ? 'applaryd' : 'couch';
-const testingCouch = query.get('study') === couchStudy, testingFurniture = testingOffsets || testingCouch;
+const testingCouch = query.get('study') === couchStudy;
 const couchName = couchStudy === 'applaryd' ? 'ÄPPLARYD' : 'KLIPPAN';
-const metallicMode = element<HTMLSelectElement>('metallic-mode');
-metallicMode.value = query.get('metallic') === 'legacy' ? 'legacy' : 'corrected';
-const study = element<HTMLSelectElement>('study'), density = element<HTMLSelectElement>('density');
-const offsets = element<HTMLSelectElement>('offset-mode'), lightingView = element<HTMLSelectElement>('lighting-view');
-study.value = testingCouch ? couchStudy : testingOffsets ? 'offsets' : 'room';
-density.value = query.get('density') === 'coarse' ? 'coarse' : 'dense';
-offsets.value = query.get('offset') === 'fixed' ? 'fixed' : 'adaptive';
-function changeStudy() {
+const study = element<HTMLSelectElement>('study');
+study.value = testingCouch ? couchStudy : 'room';
+study.addEventListener('change', () => {
   const url = new URL(location.href);
-  url.searchParams.set('study', study.value); url.searchParams.set('density', density.value);
-  url.searchParams.set('offset', offsets.value); url.searchParams.set('hour', time.value);
-  url.searchParams.set('lights', lights.value); url.searchParams.set('lighting', lightingView.value);
-  url.searchParams.set('metallic', metallicMode.value);
+  url.search = new URLSearchParams({ study: study.value, hour: time.value, lights: lights.value }).toString();
   location.assign(url);
-}
-study.addEventListener('change', changeStudy); density.addEventListener('change', changeStudy);
+});
+const hour = Number(query.get('hour') ?? 12);
+if (Number.isFinite(hour)) time.value = String(Math.max(0, Math.min(24, hour)));
+if (['auto', 'on', 'off'].includes(query.get('lights')!)) lights.value = query.get('lights')!;
+else if (testingCouch) lights.value = 'on';
+const diffuseBounces = 4;
 
 async function start() {
   const response = await fetch(base + 'scene.json');
   if (!response.ok) throw new Error('Comparison assets are missing. Run scripts/prepare-comparison.py with Blender.');
   const original: SceneData = await response.json();
   const couchData: SceneData | undefined = testingCouch ? await (await fetch(base + `${couchStudy}/scene.json`)).json() : undefined;
-  let data = couchData ? couchMaterialMode(couchData, metallicMode.value === 'corrected') : testingOffsets ? offsetStudy(original, density.value === 'dense') : original;
-  if (testingFurniture) {
-    if (testingOffsets) data.adaptiveOffsets = offsets.value === 'adaptive';
-    for (const id of ['lighting-control', 'offset-note', ...(testingCouch ? ['metallic-control'] : ['density-control', 'offset-control'])]) element(id).hidden = false;
-    for (const id of ['sphere-material', 'layout', 'gi']) element(id).parentElement!.hidden = true;
+  const data = couchData ?? original;
+  if (testingCouch) {
+    element('layout').parentElement!.hidden = true;
     document.querySelector<HTMLElement>('figure.reference')!.hidden = true;
-    document.querySelector<HTMLElement>('details')!.hidden = true;
     element('comparison').style.gridTemplateColumns = '1fr';
     element('comparison').style.maxWidth = '1100px';
-    document.querySelector('h1')!.textContent = testingCouch ? `${couchName} couch, cached diffuse GI.` : 'Dense furniture, controlled offsets.';
-    document.querySelector('header p:last-child')!.textContent = 'Same shape, material and lighting. Change one variable at a time.';
+    document.querySelector('h1')!.textContent = couchName + ' couch.';
+    document.querySelector('header p:last-child')!.textContent = 'Walk around and explore the lighting.';
     document.querySelector('.checkpoints > span')!.textContent = 'LIGHTING PRESETS';
-    view.options[0].textContent = 'Furniture & room'; view.options[1].textContent = testingCouch ? 'Couch · close view' : 'Thin parts · close view';
-    const hour = Number(query.get('hour') ?? 12);
-    if (Number.isFinite(hour)) time.value = String(Math.max(0, Math.min(24, hour)));
-    if (['auto', 'on', 'off'].includes(query.get('lights')!)) lights.value = query.get('lights')!;
-    else if (testingCouch) lights.value = 'on';
-    lightingView.value = query.get('lighting') === 'indirect' ? 'indirect' : 'full';
-    const count = data.meshes.slice(2).reduce((sum, mesh) => sum + mesh.indices.length / 3, 0);
-    element('offset-note').textContent = testingCouch
-      ? `IKEA ${couchName} · ${couchStudy === 'applaryd' ? 'Gunnared light blue, chaise longue' : 'Vissle grey'}. Cached diffuse GI. Switch Metallic GI handling to compare the fix. Geometry, native materials, lights and exposure stay the same. Indirect only makes the difference easier to see. This test uses separate lighting UVs; it does not fix the walkthrough’s overlapping atlas. No matched Cycles reference.`
-      : `${count.toLocaleString()} furniture triangles. Same shape and lighting UVs at both densities. Use Interior lights → On to inspect the furniture. The small sealed panel tests light leaks. This is an experimental test without a matched Cycles reference.`;
+    view.options[0].textContent = 'Furniture & room'; view.options[1].textContent = 'Couch · close view';
+    element('scene-note').hidden = false;
+    element('scene-note').textContent = 'IKEA ' + couchName + '. Native materials and cached diffuse lighting. No matched Cycles reference is available for this model.';
   }
   let engine: Engine | WebGPUEngine | undefined;
   if (await WebGPUEngine.IsSupportedAsync) {
@@ -120,7 +101,7 @@ async function start() {
     texture.gammaSpace = false;
     texture.wrapU = texture.wrapV = Texture.CLAMP_ADDRESSMODE;
   });
-  const empty = testingFurniture ? RawTexture.CreateRGBATexture(new Uint8Array([0, 0, 0, 255]), 1, 1, scene, false, false) : undefined;
+  const empty = testingCouch ? RawTexture.CreateRGBATexture(new Uint8Array([0, 0, 0, 255]), 1, 1, scene, false, false) : undefined;
   const [skyMap, fixtureMap, ...sunMaps] = empty ? [empty, empty, ...data.sunHours.map(() => empty)] : await Promise.all([
     load('sky'), load('fixtures'), ...data.sunHours.map(hour => load('sun-' + hour)),
   ]);
@@ -190,65 +171,36 @@ async function start() {
     return light;
   });
   const preparingTransfer = new URLSearchParams(location.search).has('prepareTransfer');
-  if (!preparingTransfer && new URLSearchParams(location.search).get('sphere') === 'mirror') sphereMaterial.value = 'mirror';
   const reflections = new RoomReflections(scene, meshes.filter(mesh => mesh.material !== materials[0]),
     [{ name: 'Comparison room', center: [0, 1.5, 0], size: [6, 3, 6], materials }], materials);
-  const reflectionControl = element<HTMLSelectElement>('reflections');
-  if (preparingTransfer || testingFurniture) { reflectionControl.value = 'off'; reflections.setEnabled(false); }
-  reflectionControl.addEventListener('change', () => reflections.setEnabled(reflectionControl.value === 'on'));
-  if (preparingTransfer) gi.value = 'baked';
-  let cascades: RadianceCascades | CachedTransfer | undefined;
-  let method = '';
-  let selection = '';
-  let cascadeError = '';
-  function selectGi() {
-    const key = gi.value + ':' + offsets.value + ':' + metallicMode.value;
-    if (!(engine instanceof WebGPUEngine) || gi.value === 'baked' || selection === key) { updateStatus(); return; }
-    basis.useCascades = false; basis.cascadeMap = skyMap;
-    cascades?.dispose(); cascades = undefined; cascadeError = ''; method = gi.value; selection = key;
+  reflections.setEnabled(!preparingTransfer && !testingCouch);
+  let transfer: CachedTransfer | undefined;
+  let transferError = '';
+  if (engine instanceof WebGPUEngine && !preparingTransfer) {
     try {
       engine.enableGPUTimingMeasurements = !!engine.getCaps().timerQuery;
-      const cache = testingCouch ? `${couchStudy}/${metallicMode.value}/transfer.bin.gz` : testingOffsets ? `offset-study/${density.value}-${offsets.value}/transfer.bin.gz` : 'transfer.bin.gz';
-      cascades = method === 'transfer' ? new CachedTransfer(scene, engine, data, base + cache)
-        : new RadianceCascades(scene, engine, data);
-      basis.cascadeMap = cascades.texture;
-      cascades.setLighting(lighting(Number(time.value), lights.value as SwitchMode), data.sky, Number(bounces.value));
-    } catch (error) { cascadeError = String(error); console.warn('Computed GI unavailable.', error); }
-    updateStatus();
-  }
-  if (!(engine instanceof WebGPUEngine)) {
-    gi.value = 'baked';
-    gi.querySelector<HTMLOptionElement>('[value="cascades"]')!.disabled = true;
-    gi.querySelector<HTMLOptionElement>('[value="transfer"]')!.disabled = true;
+      const cache = testingCouch ? couchStudy + '/corrected/transfer.bin.gz' : 'transfer.bin.gz';
+      transfer = new CachedTransfer(scene, engine, data, base + cache);
+      basis.cascadeMap = transfer.texture;
+    } catch (error) { transferError = String(error); console.warn('Cached diffuse unavailable.', error); }
   }
   function updateStatus() {
-    bounces.disabled = gi.value === 'baked' || !cascades || !!cascades.error;
     const state = lighting(Number(time.value), lights.value as SwitchMode);
-    basis.useCascades = gi.value !== 'baked' && !!cascades?.ready && !cascades.error;
-    const label = gi.value === 'baked' ? 'Baked GI' : cascades?.status || 'Computed GI unavailable · baked fallback';
-    const fallback = cascadeError ? ' · GI initialization failed' : '';
+    basis.useCascades = !!transfer?.ready && !transfer.error;
+    const label = transfer?.status || 'Baked GI fallback';
+    const fallback = transferError ? ' · GI initialization failed' : '';
     const text = `${engine instanceof WebGPUEngine ? 'WebGPU' : 'WebGL'} · Lights ${state.on ? 'on' : 'off'} (${lights.value}) · ${label}${fallback} · ${reflections.status}`;
-    const message = testingFurniture && !(engine instanceof WebGPUEngine) ? `${testingCouch ? 'Couch GI' : 'Offset'} test requires WebGPU · showing direct lighting only.` : text;
+    const message = testingCouch && (!(engine instanceof WebGPUEngine) || !!transfer?.error || !!transferError)
+      ? 'Couch GI requires WebGPU and a valid lighting cache · showing direct lighting only.' : text;
     if (status.textContent !== message) status.textContent = message;
   }
   function updateReference() {
     const state = lighting(Number(time.value), lights.value as SwitchMode);
-    const mirror = sphereMaterial.value === 'mirror';
-    const match = !mirror && cameraMatches && data.references.find(item => item.view === view.value && item.hour === Number(time.value) && item.on === state.on);
+    const match = cameraMatches && data.references.find(item => item.view === view.value && item.hour === Number(time.value) && item.on === state.on);
     reference.hidden = !match;
-    note.textContent = mirror ? 'Mirror inspection · select Ceramic for the matched offline reference. Room GI retains the ceramic scene.'
-      : !cameraMatches ? 'Free walk · reset the camera to compare.'
+    note.textContent = !cameraMatches ? 'Free walk · reset the camera to compare.'
       : !match ? 'No exact reference for this time and light state. Select a reference checkpoint above.' : '';
     if (match && !reference.src.endsWith('/' + match.file)) reference.src = base + match.file;
-  }
-  function applySphereMaterial() {
-    const mirror = sphereMaterial.value === 'mirror', material = materials[0];
-    material.albedoColor.set(...(mirror ? [1, 1, 1] as Vec3 : data.materials[0].color));
-    material.metallic = mirror ? 1 : 0;
-    material.roughness = mirror ? 0 : data.materials[0].roughness;
-    // A mirror has no diffuse contribution, including the precomputed lightmap.
-    material.lightmapTexture = mirror ? null : skyMap;
-    updateReference();
   }
   function resetView() {
     const selected = data.views[view.value];
@@ -263,18 +215,17 @@ async function start() {
   function applyLighting() {
     const hour = Number(time.value);
     const state = lighting(hour, lights.value as SwitchMode);
-    cascades?.setLighting(state, data.sky, Number(bounces.value));
+    transfer?.setLighting(state, data.sky, diffuseBounces);
     const interval = sunInterval(hour, data.sunHours);
     basis.sky = state.sky; basis.fixtures = Number(state.on); basis.blend = interval.blend;
     basis.lower = sunMaps[interval.lower]; basis.upper = sunMaps[interval.upper];
     sun.direction.set(...state.direction.map(value => -value) as Vec3);
     sun.position.copyFrom(sun.direction.scale(-18));
     sun.position.y += 1.5;
-    const direct = testingFurniture && lightingView.value === 'indirect' ? 0 : 1;
-    sun.intensity = state.sun * direct;
+    sun.intensity = state.sun;
     sun.diffuse.set(...state.color as Vec3); sun.specular.copyFrom(sun.diffuse);
     sunShadow.getShadowMap()!.resetRefreshCounter();
-    fixtures.forEach((light, index) => { light.intensity = state.on ? data.fixtures[index].intensity * direct : 0; });
+    fixtures.forEach((light, index) => { light.intensity = state.on ? data.fixtures[index].intensity : 0; });
     // Clear colour bypasses image processing; show the same exposed sky as the reference.
     scene.clearColor = new Color4(...skyDisplay(data.sky.map(value => value * state.sky) as Vec3), 1);
     const minutes = Math.round(hour * 60);
@@ -284,22 +235,7 @@ async function start() {
   }
   time.addEventListener('input', applyLighting);
   lights.addEventListener('change', applyLighting);
-  gi.addEventListener('change', selectGi);
-  bounces.addEventListener('change', applyLighting);
   view.addEventListener('change', resetView);
-  sphereMaterial.addEventListener('change', applySphereMaterial);
-  offsets.addEventListener('change', () => {
-    data.adaptiveOffsets = offsets.value === 'adaptive';
-    const url = new URL(location.href); url.searchParams.set('offset', offsets.value); history.replaceState(null, '', url);
-    selectGi(); applyLighting();
-  });
-  metallicMode.addEventListener('change', () => {
-    if (!couchData) return;
-    data = couchMaterialMode(couchData, metallicMode.value === 'corrected');
-    const url = new URL(location.href); url.searchParams.set('metallic', metallicMode.value); history.replaceState(null, '', url);
-    selectGi(); applyLighting();
-  });
-  lightingView.addEventListener('change', applyLighting);
   element('reset').addEventListener('click', resetView);
   document.querySelectorAll<HTMLButtonElement>('[data-hour]').forEach(button => button.addEventListener('click', () => {
     time.value = button.dataset.hour!;
@@ -320,25 +256,24 @@ async function start() {
   navigation(camera, canvas, () => { if (cameraMatches) { cameraMatches = false; updateReference(); } });
   const observer = new ResizeObserver(resize); observer.observe(canvas);
   window.addEventListener('resize', resize);
-  selectGi(); applySphereMaterial(); resetView(); applyLighting();
+  resetView(); applyLighting();
   await scene.whenReadyAsync();
   engine.runRenderLoop(() => {
-    if (gi.value !== 'baked') cascades?.tick();
+    transfer?.tick();
     updateStatus();
     const state = lighting(Number(time.value), lights.value as SwitchMode);
-    const ready = gi.value === 'baked' || !cascades || !!cascades.error || (!cascades.diagnostics().updating && cascades.ready);
-    reflections.tick(ready ? `${time.value}:${lights.value}:${gi.value}:${bounces.value}:${offsets.value}:${lightingView.value}:${cascades?.revision ?? 0}` : '',
+    const ready = !transfer || !!transfer.error || (!transfer.diagnostics().updating && transfer.ready);
+    reflections.tick(ready ? `${time.value}:${lights.value}:${transfer?.revision ?? 0}` : '',
       data.sky.map(value => value * state.sky));
     scene.render();
   });
   Object.assign(window, { comparison: {
     scene, camera, engine, ready: true,
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
-      offsetStudy: testingOffsets ? { density: density.value, offsets: offsets.value, lighting: lightingView.value } : null,
-      couchStudy: testingCouch ? { model: couchStudy, metallic: metallicMode.value, lighting: lightingView.value } : null,
-      gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? method : 'baked', cascades: method === 'cascades' ? cascades?.diagnostics() : undefined,
-      transfer: method === 'transfer' ? cascades?.diagnostics() : undefined,
-      reflections: reflections.diagnostics(), sphereMaterial: sphereMaterial.value, cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),
+      couchStudy: testingCouch ? { model: couchStudy } : null,
+      bounces: diffuseBounces, activeGi: basis.useCascades ? 'transfer' : 'baked',
+      transfer: transfer?.diagnostics(), reflections: reflections.diagnostics(), transferError,
+      cameraMatches, reference: reference.hidden ? null : reference.src }),
   } });
   if (preparingTransfer && engine instanceof WebGPUEngine) {
     const gpu = engine;
@@ -349,7 +284,7 @@ async function start() {
       },
     });
   }
-  window.addEventListener('pagehide', () => { observer.disconnect(); reflections.dispose(); cascades?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
+  window.addEventListener('pagehide', () => { observer.disconnect(); reflections.dispose(); transfer?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
 }
 
 start().catch(error => { console.error(error); status.textContent = String(error); });

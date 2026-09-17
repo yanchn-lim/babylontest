@@ -2,7 +2,8 @@ import {
   ComputeShader, Constants, RawTexture, StorageBuffer, Texture, UniformBuffer,
   type Scene, type WebGPUEngine,
 } from '@babylonjs/core';
-import { geometry } from './radiance-cascades';
+import { geometry } from './surface-geometry';
+import blurSource from './diffuse-blur.wgsl?raw';
 import type { SceneData } from './main';
 import type { lighting } from './lighting';
 import { decodeTransfer, fixedLightData, transferBindings, transferFields, transferSourceFor,
@@ -32,8 +33,9 @@ export class CachedTransfer {
   private started = 0;
   private lastUpdateWallMilliseconds = 0;
   private entryCount = 0;
+  private rejectedSamples = 0;
 
-  constructor(scene: Scene, private engine: WebGPUEngine, data: SceneData, url: string) {
+  constructor(scene: Scene, private engine: WebGPUEngine, data: SceneData, url: string, private fixtureIntensityScale = 1, private blurDiffuse = false, private receivedDiffuse = false) {
     this.texture = new RawTexture(null, TRANSFER_SIZE, TRANSFER_SIZE, Constants.TEXTUREFORMAT_RGBA, scene,
       false, false, Texture.BILINEAR_SAMPLINGMODE, Constants.TEXTURETYPE_HALF_FLOAT, Constants.TEXTURE_CREATIONFLAG_STORAGE);
     this.texture.gammaSpace = false;
@@ -42,7 +44,7 @@ export class CachedTransfer {
     transferFields.forEach(name => this.params.addUniform(name, 4)); this.params.create();
     this.params.updateFloat4('sky', 0, 0, 0, TRANSFER_SIZE);
     data.fixtures.slice(0, 2).forEach((lamp, i) => {
-      this.params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity);
+      this.params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity * fixtureIntensityScale);
       this.params.updateFloat4('lampColor' + i, ...lamp.color, 0);
     });
     void this.load(data, url).catch(error => {
@@ -60,7 +62,18 @@ export class CachedTransfer {
     if (this.disposed) return;
     // Keep each binding below the portable WebGPU storage-buffer limit.
     if (cache.entries.byteLength > 128 * 1024 * 1024) throw Error('Diffuse transfer exceeds the prototype buffer budget.');
-    const mesh = geometry(data);
+    const mesh = geometry(data, this.blurDiffuse);
+    if (this.receivedDiffuse && this.blurDiffuse) {
+      for (let i = 0; i < TRANSFER_PIXELS; i++) {
+        if (mesh.surfaces[i * 12 + 3] === 0) continue;
+        let front = 0;
+        for (let j = cache.offsets[i]; j < cache.offsets[i + 1]; j++) front += cache.entries[j] >>> 16;
+        // Unrepresented, non-sky rays hit back faces. Reject only mostly invalid samples.
+        const valid = front + cache.visibility[i * 4] * TRANSFER_RAYS >= TRANSFER_RAYS * .25;
+        mesh.surfaces[i * 12 + 7] = Number(valid);
+        this.rejectedSamples += Number(!valid);
+      }
+    }
     const allocations: Record<string, StorageBuffer> = {};
     const buffer = (name: string, value: ArrayBuffer | Float32Array | Uint32Array | number) => {
       const size = typeof value === 'number' ? value : value.byteLength;
@@ -70,18 +83,22 @@ export class CachedTransfer {
     };
     const surfaceLight = new Float32Array(TRANSFER_PIXELS * 8);
     for (let i = 0; i < TRANSFER_PIXELS; i++) surfaceLight.set(cache.visibility.subarray(i * 4, i * 4 + 4), i * 8 + 4);
+    if (mesh.rayOrigins) {
+      buffer('rayOrigins', mesh.rayOrigins); buffer('sampleRemap', Uint32Array.from(data.sampleRepair!.remap!));
+    }
     buffer('nodes', mesh.nodes); buffer('triangles', mesh.triangles); buffer('surfaces', mesh.surfaces);
     buffer('surfaceLight', surfaceLight); buffer('bounceLight', TRANSFER_PIXELS * 32);
     buffer('transfer', cache.entries); buffer('offsets', cache.offsets);
-    if (data.fixtures.length !== 2) buffer('fixedLights', fixedLightData(data));
+    if (data.fixtures.length !== 2) buffer('fixedLights', fixedLightData(data, this.fixtureIntensityScale));
     this.entryCount = cache.entries.length;
     const entries = {
-      shade: ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', ...(data.fixtures.length !== 2 ? ['fixedLights'] : [])],
-      gatherTransfer: ['surfaces', 'params', 'surfaceLight', 'output', 'bounceLight', 'transfer', 'offsets'],
+      shade: [...(data.sampleRepair ? ['rayOrigins'] : []), 'nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', ...(data.fixtures.length !== 2 ? ['fixedLights'] : [])],
+      gatherTransfer: [...(data.sampleRepair ? ['sampleRemap'] : []), 'surfaces', 'params', 'surfaceLight', 'output', 'bounceLight', 'transfer', 'offsets'],
       advance: ['params', 'surfaceLight', 'bounceLight'],
+      ...(this.blurDiffuse ? { blurDiffuse: ['surfaces', 'params', 'bounceLight', 'output'] } : {}),
     };
     for (const [entryPoint, names] of Object.entries(entries)) {
-      const shader = new ComputeShader('Cached diffuse ' + entryPoint, this.engine, { computeSource: transferSourceFor(data) }, {
+      const shader = new ComputeShader('Cached diffuse ' + entryPoint, this.engine, { computeSource: transferSourceFor(data, this.receivedDiffuse) + (this.blurDiffuse ? '\n' + blurSource : '') }, {
         entryPoint, bindingsMapping: Object.fromEntries(names.map(name => [name, { group: 0, binding: transferBindings.indexOf(name) }])),
       });
       for (const name of names) {
@@ -109,14 +126,17 @@ export class CachedTransfer {
       this.params.updateFloat4('sky', ...sky.map(v => v * state.sky) as Vec3, TRANSFER_SIZE);
       this.activeBounces = bounces; this.started = performance.now(); this.pending = undefined;
     }
-    this.params.updateFloat4('update', 0, TRANSFER_PIXELS, 0, 0);
-    this.params.updateFloat4('bounce', this.bounce, Number(this.bounce + 1 === this.activeBounces), 0, 0);
+    this.params.updateFloat4('update', 0, TRANSFER_PIXELS, 0, Number(this.receivedDiffuse && this.blurDiffuse));
+    this.params.updateFloat4('bounce', this.bounce, Number(this.bounce + 1 === this.activeBounces && !this.blurDiffuse), 0, 0);
     this.params.update();
-    const name = this.stage === 0 ? (this.bounce === 0 ? 'shade' : 'advance') : 'gatherTransfer';
+    const filtering = this.bounce === this.activeBounces;
+    const name = filtering ? 'blurDiffuse' : this.stage === 0 ? (this.bounce === 0 ? 'shade' : 'advance') : 'gatherTransfer';
     if (!this.shaders[name].dispatch(Math.ceil(TRANSFER_PIXELS / 64))) return;
-    if (++this.stage < 2) return;
-    this.stage = 0;
-    if (++this.bounce < this.activeBounces) return;
+    if (!filtering) {
+      if (++this.stage < 2) return;
+      this.stage = 0;
+      if (++this.bounce < this.activeBounces || this.blurDiffuse) return;
+    }
     this.bounce = 0; this.completedBounces = this.activeBounces;
     this.lastUpdateWallMilliseconds = performance.now() - this.started;
     this.ready = true; this.dirty = !!this.pending; this.revision++;
@@ -131,7 +151,8 @@ export class CachedTransfer {
   diagnostics() {
     return { ready: this.ready, updating: this.dirty, loading: this.loading, revision: this.revision, error: this.error,
       requestedBounces: this.pending?.bounces ?? this.activeBounces, completedBounces: this.completedBounces,
-      lastUpdateDispatches: this.completedBounces * 2, lastUpdateWallMilliseconds: this.lastUpdateWallMilliseconds,
+      lastUpdateDispatches: this.completedBounces ? this.completedBounces * 2 + Number(this.blurDiffuse) : 0,
+      blurDiffuse: this.blurDiffuse, receivedDiffuse: this.receivedDiffuse, rejectedSamples: this.rejectedSamples, lastUpdateWallMilliseconds: this.lastUpdateWallMilliseconds,
       atlasSize: TRANSFER_SIZE, surfaceRays: TRANSFER_RAYS, entries: this.entryCount, memoryBytes: this.memoryBytes,
       lastDispatchGpuMilliseconds: Object.fromEntries(Object.entries(this.shaders).map(([name, shader]) =>
         [name, shader.gpuTimeInFrame ? shader.gpuTimeInFrame.counter.current / 1e6 : null])) };

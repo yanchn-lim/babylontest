@@ -2,9 +2,9 @@ import { MaterialPluginBase, ShaderLanguage, type MaterialDefines, type PBRMater
 
 export interface ApartmentLightmapState { texture: Texture; ready: boolean; sky: number }
 
-/** The transfer texture already includes the receiving surface's diffuse colour. */
+/** Received diffuse light can use the native material colour at each visible pixel. */
 export class ApartmentLightmap extends MaterialPluginBase {
-  constructor(material: PBRMaterial, private state: ApartmentLightmapState) {
+  constructor(material: PBRMaterial, private state: ApartmentLightmapState, private receivedDiffuse = false) {
     super(material, 'ApartmentLightmap', 200, {}, true, true);
   }
   isCompatible() { return true; }
@@ -32,6 +32,14 @@ export class ApartmentLightmap extends MaterialPluginBase {
         #ifdef LIGHTMAP
         if (${state}.x > 0.5) {
           lightmapColor = ${wgsl ? 'textureSample(diffuseTransfer, diffuseTransferSampler, fragmentInputs.vMainUV3)' : 'texture2D(diffuseTransfer, vMainUV3)'};
+          ${this.receivedDiffuse ? `
+          // RGB is premultiplied by sample validity before bilinear filtering.
+          lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb / max(lightmapColor.a, 0.0001), 1.0);
+          #if defined(METALLICWORKFLOW) && !defined(UNLIT)
+          lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb * baseColor * (1.0 - reflectivityOut.metallic), 1.0);
+          #else
+          lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb * surfaceAlbedo, 1.0);
+          #endif` : ''}
         } else { lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb * ${state}.y, 1.0); }
         #endif`,
     };

@@ -20,6 +20,50 @@ The live sun and point lights use the comparison's filtered shadow settings,
 MSAA and ACES display transform. Seven lamps plus the sun fit the portable
 eight-light material limit.
 
+Apartment artificial lights use a runtime intensity scale of 0.35. The same scale
+applies to direct lighting and cached diffuse lighting; reflections capture the
+result. Prepared light positions, cache validation and visibility are unchanged,
+so this intensity adjustment does not require cache regeneration. Exposure,
+daylight and material settings retain their previous values. The previous look
+is saved at `checkpoint/apartment-before-light-balance-2026-09-17` (`4ca786b`).
+
+The apartment keeps its 256×256 GI texture and applies one 3×3 blur after the final
+bounce. The filter stays within connected lighting regions and checks surface
+direction, distance and brightness differences to preserve boundaries. It reuses
+the existing buffers and adds one dispatch per lighting update. It softens sample
+variation but does not repair light leaks. The filter runs only on WebGPU and is
+not applied to the comparison scenes or the original viewer.
+
+The apartment's runtime GI output stores received diffuse light (irradiance / pi),
+before multiplying by the receiving surface's colour. Each propagated bounce
+still uses the prepared coarse albedo and metallic fraction. The final material
+shader applies native full-resolution base colour and metalness. This restores
+tile joints and wood grain under indirect light without changing ray visibility,
+transport weights, bounce count or atlas size. No division by coarse albedo is used,
+so black or fully metallic samples cannot cause unstable colour ratios.
+
+The final blur also excludes samples whose cached rays have more than 75% back-face
+hits. Counts come from the difference between all 1,024 rays, stored front-face hit
+weights and sky misses. A spare surface component stores validity; output alpha
+stores the interpolation weight. The material normalizes the filtered RGB by this
+weight. This prevents mostly embedded samples from darkening visible edges, as
+confirmed at the bedroom ceiling where samples sit behind the adjoining wall.
+Transport remains unchanged. If all four interpolation samples are invalid, the
+result stays dark; this does not repair geometry or guarantee leak-free lighting.
+The mask adds no GPU buffers or dispatches. WebGL retains its baked fallback;
+comparison scenes retain their previous output and sample handling.
+
+The apartment adds subtle HDR bloom before ACES tone mapping: strength 0.5,
+threshold 0.7, kernel 32 and half-resolution filtering. The camera retains 4× MSAA.
+Exposure is unchanged. Bloom runs on the camera image, outside reflection capture
+and offline cache preparation. The original viewer and comparison are unchanged.
+Phone performance remains untested.
+
+The Bloom settings panel offers live strength (0–1), threshold (0–3) and spread
+(8–128) sliders. Strength 0 removes the glow. Lower threshold includes dimmer
+surfaces; spread controls the blur kernel width. Reload restores the defaults.
+These controls do not update GI or reflection captures.
+
 ## Local reflections
 
 The diffuse-only state is preserved at tag
@@ -76,7 +120,7 @@ visuals before choosing a final atlas or memory budget.
 
 The prepared cache downloads 14.9 MB and uses about 41.2 MB for GI buffers and its
 output texture, excluding model textures and shadow maps. A four-bounce update
-uses eight dispatch stages. Reflection-room partitioning still divides the render
+uses nine dispatch stages, including the final blur. Reflection-room partitioning still divides the render
 meshes to assign local probes; it does not change the prepared GI geometry.
 Desktop timing is not a GPU completion or phone measurement.
 

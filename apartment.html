@@ -13,6 +13,15 @@
       <button id="reset">Reset camera</button>
     </section>
     <section class="checkpoints" aria-label="Time presets"><span>TIME OF DAY</span><button data-hour="9">Morning</button><button data-hour="12">Noon</button><button data-hour="15">Afternoon</button><button data-hour="21">Night</button></section>
+    <details id="bloom-controls" class="bloom-controls" open>
+      <summary>Bloom settings</summary>
+      <div class="toolbar">
+        <label class="time">Strength <output id="bloom-strength-value" for="bloom-strength">0.50</output><input id="bloom-strength" aria-label="Bloom strength" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+        <label class="time">Threshold <output id="bloom-threshold-value" for="bloom-threshold">0.70</output><input id="bloom-threshold" aria-label="Bloom threshold" type="range" min="0" max="3" step="0.05" value="0.7"></label>
+        <label class="time">Spread <output id="bloom-spread-value" for="bloom-spread">32</output><input id="bloom-spread" aria-label="Bloom spread" type="range" min="8" max="128" step="8" value="32"></label>
+      </div>
+      <p>Strength sets the glow amount; 0 removes it. Lower threshold includes dimmer surfaces. Spread sets the glow width. Reload to restore defaults.</p>
+    </details>
     <figure><figcaption><strong>Bukit Merah apartment</strong><span>Real-time raster · cached diffuse</span></figcaption><div class="frame apartment-frame"><canvas id="scene" tabindex="0" aria-label="Interactive apartment"></canvas><div id="move-stick" aria-label="Drag to walk"><span id="stick-thumb"></span></div></div></figure>
     <footer><p id="status" role="status">Loading the apartment…</p><p>Drag to look · W A S D to walk · touch pad to move.<br>Auto lights: on before 07:00 and from 18:00.</p></footer>
     <details><summary>About this lighting study</summary><p>Four diffuse bounces use the same 1,024-ray transfer method as the comparison scene. Time and light changes update the lighting; walking does not restart it. Seven fixed room lights can be switched automatically or manually. The original textured materials are retained.</p><p>This is a first apartment prototype. Glass passes light without tint or refraction in the diffuse calculation. Local probes add reflections of the lit rooms, softened by material roughness. Switch reflections off to compare with the diffuse-only checkpoint. They refresh after lighting changes and stay fixed while walking. Their room boundaries and nearby-object reflections are approximate. The older baked skylight is the loading and WebGL fallback; it cannot reproduce changing indirect sun or lamp light. Mobile performance is not yet measured.</p></details>

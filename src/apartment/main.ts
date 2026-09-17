@@ -1,5 +1,5 @@
 import {
-  Color3, Color4, Constants, DirectionalLight, Engine, ImageProcessingConfiguration, Light,
+  Color3, Color4, Constants, DefaultRenderingPipeline, DirectionalLight, Engine, ImageProcessingConfiguration, Light,
   PointLight, Scene, ShadowGenerator, Texture, UniversalCamera, Vector3, WebGPUEngine,
 } from '@babylonjs/core';
 import { loadApartment } from '../interior-lighting/apartment';
@@ -18,6 +18,7 @@ const canvas = element<HTMLCanvasElement>('scene'), status = element('status');
 const time = element<HTMLInputElement>('time'), lights = element<HTMLSelectElement>('lights');
 const bounces = element<HTMLSelectElement>('bounces'), view = element<HTMLSelectElement>('view');
 const base = import.meta.env.BASE_URL;
+const fixtureIntensityScale = .35;
 const settings: Pick<SceneData, 'fixtures' | 'views' | 'sky'> = {
   sky: [.48, .65, 1],
   fixtures: [[10.2, 2.5, -6], [7.2, 2.5, -1.6], [1.6, 2.5, -6.7],
@@ -47,6 +48,31 @@ async function start() {
   const camera = new UniversalCamera('Apartment camera', Vector3.Zero(), scene);
   camera.inputs.clear(); camera.inertia = 0; camera.minZ = .05; camera.maxZ = 60;
   camera.checkCollisions = true; camera.ellipsoid.set(.18, .75, .18); camera.ellipsoidOffset.set(0, -.09, 0);
+  const bloom = !preparing
+    ? new DefaultRenderingPipeline('Apartment bloom', true, scene, [camera], false)
+    : undefined;
+  if (bloom) {
+    bloom.bloomEnabled = true;
+    bloom.bloomWeight = .5; bloom.bloomThreshold = .7;
+    bloom.bloomKernel = 32; bloom.bloomScale = .5;
+    bloom.samples = 4;
+    bloom.prepare();
+    for (const [id, property, digits] of [
+      ['bloom-strength', 'bloomWeight', 2],
+      ['bloom-threshold', 'bloomThreshold', 2],
+      ['bloom-spread', 'bloomKernel', 0],
+    ] as const) {
+      const input = element<HTMLInputElement>(id);
+      const update = () => {
+        const value = Number(input.value);
+        bloom[property] = value;
+        element(id + '-value').textContent = value.toFixed(digits);
+      };
+      input.addEventListener('input', update);
+      update();
+    }
+  }
+  element('bloom-controls').hidden = preparing;
   let { meshes, materials } = await loadApartment(scene);
   const atlasResponse = await fetch(base + 'apartment-transfer/atlas.json');
   if (!atlasResponse.ok) throw Error('Apartment lighting atlas is missing.');
@@ -66,7 +92,7 @@ async function start() {
     material.brdf.baseDiffuseModel = Constants.MATERIAL_DIFFUSE_MODEL_LAMBERT;
     if (material.needAlphaBlending()) continue;
     material.lightmapTexture = baked;
-    new ApartmentLightmap(material, basis);
+    new ApartmentLightmap(material, basis, true);
   }
   meshes.forEach(mesh => { mesh.checkCollisions = true; });
   const opaque = meshes.filter(mesh => !mesh.material!.needAlphaBlending());
@@ -99,8 +125,9 @@ async function start() {
     sun.position.copyFrom(sun.direction.scale(-22).add(new Vector3(6.2, 1.4, -4.5)));
     sun.intensity = state.sun; sun.diffuse.set(state.color[0], state.color[1], state.color[2]); sun.specular.copyFrom(sun.diffuse);
     sunShadow.getShadowMap()!.resetRefreshCounter();
-    fixtures.forEach((light, index) => { light.intensity = state.on ? settings.fixtures[index].intensity : 0; });
-    scene.clearColor = new Color4(...skyDisplay(settings.sky.map(v => v * state.sky) as [number, number, number]), 1);
+    fixtures.forEach((light, index) => { light.intensity = state.on ? settings.fixtures[index].intensity * fixtureIntensityScale : 0; });
+    const sky = settings.sky.map(v => v * state.sky) as [number, number, number];
+    scene.clearColor = new Color4(...(display.applyByPostProcess ? sky : skyDisplay(sky)), 1);
     const minutes = Math.round(hour * 60);
     element('time-label').textContent = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   }
@@ -162,11 +189,11 @@ async function start() {
       if (!response.ok) throw Error('Apartment diffuse data is missing.');
       const data: SceneData = await response.json();
       if (JSON.stringify(data.fixtures) !== JSON.stringify(settings.fixtures)) throw Error('Apartment lights changed. Regenerate the transfer cache.');
-      transfer = new CachedTransfer(scene, engine, data, base + 'apartment-transfer/transfer.bin.gz');
+      transfer = new CachedTransfer(scene, engine, data, base + 'apartment-transfer/transfer.bin.gz', fixtureIntensityScale, true, true);
       basis.texture = transfer.texture; applyLighting();
     } catch (error) { loadError = String(error); console.warn(loadError); }
   }
-  window.addEventListener('pagehide', () => { observer.disconnect(); reflections.dispose(); transfer?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
+  window.addEventListener('pagehide', () => { observer.disconnect(); bloom?.dispose(); reflections.dispose(); transfer?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
 }
 
 start().catch(error => { console.error(error); status.textContent = String(error); });

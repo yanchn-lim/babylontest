@@ -1,5 +1,4 @@
 import { Mesh, PBRMaterial, SceneLoader, type Scene } from '@babylonjs/core';
-import type { SceneData } from './main';
 
 export async function loadCouch(scene: Scene, study: 'couch' | 'applaryd' = 'couch') {
   await import('@babylonjs/loaders/glTF');
@@ -17,14 +16,4 @@ export async function loadCouch(scene: Scene, study: 'couch' | 'applaryd' = 'cou
     mesh.receiveShadows = true; mesh.checkCollisions = true;
   }
   return { meshes, materials: [...new Set(meshes.map(mesh => mesh.material as PBRMaterial))] };
-}
-
-export function couchMaterialMode(data: SceneData, corrected: boolean) {
-  const result = structuredClone(data);
-  if (!corrected) for (const material of result.materials) {
-    if (!material.metallicTexture) continue;
-    material.color = material.color.map(value => value * (1 - material.metallicTexture!.factor)) as [number, number, number];
-    delete material.metallicTexture;
-  }
-  return result;
 }
