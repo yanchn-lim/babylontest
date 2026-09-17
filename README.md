@@ -17,6 +17,11 @@ lights, and compare saved views side by side or with an overlay. WebGL uses the
 baked fallback. See the [comparison guide](docs/remake-comparison.md) for controls,
 implementation limits and asset preparation.
 
+Furniture checks are available in the comparison page's Study menu:
+
+- [KLIPPAN couch · metallic-texture fix](https://yanchn-lim.github.io/babylontest/comparison.html?study=couch&lights=on)
+- [Dense furniture · GI offsets](https://yanchn-lim.github.io/babylontest/comparison.html?study=offsets&lights=on)
+
 The viewer includes PBR materials, movable sunlight, shadows, bloom, light shafts,
 and an artistic day/night cycle. The apartment supports baked lighting and
 experimental WebGPU probe global illumination (GI). WebGPU is preferred when

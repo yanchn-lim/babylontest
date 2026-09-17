@@ -2,7 +2,7 @@
 
 [Open the published comparison](https://yanchn-lim.github.io/babylontest/comparison.html).
 
-The latest user-approved visual checkpoint is commit `d2b7a18`, saved as tag
+The shadow/noise checkpoint is commit `d2b7a18`, saved as tag
 [`checkpoint/comparison-shadows-noise-2026-09-17`](https://github.com/yanchn-lim/babylontest/tree/checkpoint/comparison-shadows-noise-2026-09-17).
 The earlier checkpoint `5a0ea1d` remains available as
 [`checkpoint/comparison-2026-09-17`](https://github.com/yanchn-lim/babylontest/tree/checkpoint/comparison-2026-09-17).

@@ -3,9 +3,8 @@ Run with Blender 4.5: blender -b -t 4 --python scripts/prepare-apartment-atlas.p
 """
 import json
 import math
-import os
 from pathlib import Path
-import subprocess
+import struct
 
 import bpy
 from mathutils import Vector
@@ -14,18 +13,29 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "public/models/bukit-merah/pbr"
 OUTPUT = ROOT / "public/apartment-transfer/atlas.json"
 model = json.loads((SOURCE / "Apartment.gltf").read_text())
+buffers = [(SOURCE / item["uri"]).read_bytes() for item in model["buffers"]]
+
+
+def accessor(index):
+    item = model["accessors"][index]
+    view = model["bufferViews"][item["bufferView"]]
+    components = {"SCALAR": 1, "VEC3": 3}[item["type"]]
+    fmt = {5126: "f", 5125: "I", 5123: "H"}[item["componentType"]]
+    stride = view.get("byteStride", struct.calcsize(fmt) * components)
+    offset = view.get("byteOffset", 0) + item.get("byteOffset", 0)
+    return [struct.unpack_from("<" + fmt * components, buffers[view["buffer"]], offset + i * stride)
+            for i in range(item["count"])]
 
 
 # This model has one mesh and no node transforms. Fail if its structure changes.
 assert len(model["meshes"]) == 1
 assert all(not any(key in node for key in ("matrix", "translation", "rotation", "scale")) for node in model["nodes"])
-subprocess.run([os.environ.get("NODE", "node"), "--experimental-strip-types", str(ROOT / "scripts/export-apartment-atlas.mjs")], check=True)
-geometry = json.loads((ROOT / ".tools/apartment-atlas-input.json").read_text())
 bpy.ops.wm.read_factory_settings(use_empty=True)
 groups, primitives, blockers = {}, [], []
-for primitive, mesh in zip(model["meshes"][0]["primitives"], geometry):
-    points = [mesh["positions"][i:i + 3] for i in range(0, len(mesh["positions"]), 3)]
-    indices = mesh["indices"]
+for primitive in model["meshes"][0]["primitives"]:
+    points = accessor(primitive["attributes"]["POSITION"])
+    normals = accessor(primitive["attributes"]["NORMAL"])
+    indices = [item[0] for item in accessor(primitive["indices"])]
     triangles = []
     transmitting = model["materials"][primitive["material"]].get("alphaMode") == "BLEND"
     for start in range(0, len(indices), 3):
@@ -34,10 +44,10 @@ for primitive, mesh in zip(model["meshes"][0]["primitives"], geometry):
             triangles.append(None)
             continue
         if (corners[1] - corners[0]).cross(corners[2] - corners[0]).length < 1e-10:
-            # Intersection slivers can collapse at the model's float32 precision.
+            # Skip triangles that collapse at the model's float32 precision.
             triangles.append(None)
             continue
-        normal = Vector(mesh["normals"][indices[start] * 3:indices[start] * 3 + 3]).normalized()
+        normal = Vector(normals[indices[start]]).normalized()
         key = (*[round(v, 4) for v in normal], round(normal.dot(corners[0]), 4))
         if key not in groups:
             u = (corners[1] - corners[0]).normalized()

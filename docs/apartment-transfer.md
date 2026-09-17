@@ -104,9 +104,7 @@ with separate triangle charts; it is not a full-room visual comparison.
 With the bundled tools, from the repository root in PowerShell:
 
 ```powershell
-$env:NODE = (Resolve-Path .\.tools\node-v24.19.0-win-x64\node.exe).Path
 & .\.tools\blender-4.5.3-windows-x64\blender.exe -b -t 4 --python scripts/prepare-apartment-atlas.py
-Remove-Item Env:NODE
 & .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js build
 # Run this preview in another terminal and leave it running:
 & .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4185
