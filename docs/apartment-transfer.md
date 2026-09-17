@@ -57,11 +57,11 @@ The probes are approximate, with possible seams between rooms, limited detail
 and inaccurate nearby-object reflections. They are not mirror or ray-traced
 reflections. Physical iPhone performance remains untested.
 
-The original model and its baked UVs are unchanged. The new page splits receiver
-triangles where other surfaces intersect them, preserving their shape and material
-UVs. Preparation uses the same splitter. A padded 256px lighting atlas is applied
-to UV3. Connected coplanar sections share a chart unless a wall blocks their join.
-Separate charts prevent filtering exterior lighting across the living-room corners.
+The original model and its baked UVs are unchanged. At the user's request, the
+remake no longer splits GI triangles at wall intersections. Preparation and the
+viewer both use the original 2,160 triangles. A regenerated padded 256px lighting
+atlas is applied to UV3. Connected coplanar sections share a chart unless a wall
+blocks their join. There are 515 charts with 40.7% chart coverage.
 Ray sample positions keep 8 mm of clearance from triangle edges where space allows
 to avoid starting on adjoining walls; the traced geometry itself is unchanged.
 The original baked skylight stays visible while the cache loads and on WebGL.
@@ -69,16 +69,16 @@ That fallback scales with sky brightness; it does not update indirect sun or lam
 light. It is not a matched reference for the new method.
 
 This is an apartment prototype. The compact atlas can lose lighting detail on
-small surfaces. This addresses the confirmed GI filtering leaks at wall joins;
-it does not establish that all model gaps or lighting artifacts are fixed. No
+small surfaces. Removing the intersection split can reintroduce corner leakage;
+the metallic-texture fix addresses a separate furniture-darkening issue. No
 apartment Cycles match or physical iPhone performance result is claimed. Review
 visuals before choosing a final atlas or memory budget.
 
-The prepared cache downloads 8.9 MB and uses about 30.4 MB for GI buffers and its
+The prepared cache downloads 14.9 MB and uses about 41.2 MB for GI buffers and its
 output texture, excluding model textures and shadow maps. A four-bounce update
-uses eight dispatch stages. The wall-intersection split increases the apartment
-from 2,160 to 13,784 triangles before the reflection-room split. Desktop timing
-is not a GPU completion or phone measurement.
+uses eight dispatch stages. Reflection-room partitioning still divides the render
+meshes to assign local probes; it does not change the prepared GI geometry.
+Desktop timing is not a GPU completion or phone measurement.
 
 ## Regenerate the apartment cache
 

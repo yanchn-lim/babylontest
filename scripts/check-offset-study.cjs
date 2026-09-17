@@ -79,7 +79,8 @@ const mean = values => values.reduce((a, b) => a + b, 0) / values.length;
     await page.goto(new URL('apartment.html', url).href);
     await page.waitForFunction(() => window.apartment?.ready && apartment.state().activeGi === 'transfer'
       && !apartment.state().transfer.updating, {}, { timeout: 120000 });
-    assert.equal(await page.evaluate(() => apartment.state().transfer.entries), 5152669);
+    const apartmentReport = JSON.parse(fs.readFileSync('public/apartment-transfer/transfer-report.json'));
+    assert.equal(await page.evaluate(() => apartment.state().transfer.entries), apartmentReport.entries);
     const fallback = await browser.newPage();
     await fallback.addInitScript(() => Object.defineProperty(navigator, 'gpu', { value: undefined }));
     await fallback.goto(url + '?study=offsets');

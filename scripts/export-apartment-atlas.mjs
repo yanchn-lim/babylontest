@@ -1,8 +1,7 @@
-// Use the same surface partition as the viewer before packing its lighting UVs.
+// Export the original triangles used by the viewer before packing lighting UVs.
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Mesh, NullEngine, Scene } from '@babylonjs/core';
-import { partitionSurfaceMeshes } from '../src/interior-lighting/surface-partition.ts';
 
 const source = new URL('../public/models/bukit-merah/pbr/', import.meta.url);
 const model = JSON.parse(fs.readFileSync(new URL('Apartment.gltf', source)));
@@ -27,7 +26,6 @@ try {
     mesh.setIndices(read(primitive.indices));
     return mesh;
   });
-  partitionSurfaceMeshes(meshes);
   const output = new URL('../.tools/apartment-atlas-input.json', import.meta.url);
   fs.mkdirSync(new URL('../.tools/', import.meta.url), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(meshes.map(mesh => ({

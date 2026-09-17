@@ -1,12 +1,12 @@
 {
   "atlasSize": 256,
   "rays": 1024,
-  "activeSurfaces": 48785,
-  "representedHits": 23037312,
-  "entries": 5152669,
-  "bytes": 21921464,
-  "preparationMilliseconds": 93298.09999999404,
-  "compressedBytes": 8882989,
-  "sha256": "330a91dca5742753f374ed47cb344b6a38ac1b28f252484df154d641fb868b30",
+  "activeSurfaces": 48867,
+  "representedHits": 23455097,
+  "entries": 8208306,
+  "bytes": 34144012,
+  "preparationMilliseconds": 48618.5,
+  "compressedBytes": 14896708,
+  "sha256": "c6e6d0210e0d7b57467cb78f39bc4c28b038c6cccd7a60726cb4fc5605b3bdc0",
   "errors": []
 }
