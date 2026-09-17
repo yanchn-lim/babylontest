@@ -2,6 +2,7 @@ import type { SceneData } from './main';
 import source from './radiance-cascades.wgsl?raw';
 import transferSource from './cached-transfer.wgsl?raw';
 import fixedLightsSource from './transfer-lights.wgsl?raw';
+import { adaptiveOffsets } from './adaptive-offsets';
 
 export const TRANSFER_SIZE = 256;
 export const TRANSFER_RAYS = 1024;
@@ -15,9 +16,10 @@ export const transferBindings = ['nodes', 'triangles', 'surfaces', 'params', 'hi
 // Keep the two-light comparison shader and its prepared cache unchanged.
 export function transferSourceFor(data: SceneData) {
   if (data.fixtures.length > 8) throw Error('Cached diffuse supports up to eight fixed lights.');
-  return data.fixtures.length === 2 ? transferShader : transferShader
+  const shader = data.fixtures.length === 2 ? transferShader : transferShader
     .replace('fn prepareTransfer(', 'fn prepareTransferTwoLights(')
     .replace('fn shade(', 'fn shadeTwoLights(') + '\n' + fixedLightsSource;
+  return data.adaptiveOffsets ? adaptiveOffsets(shader) : shader;
 }
 
 export function fixedLightData(data: SceneData) {

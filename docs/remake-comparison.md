@@ -316,3 +316,66 @@ prepared ceramic scene, and the ceramic reference is hidden while it is active.
 
 Implementation also follows the pinned Babylon 9.25.0 source installed in this
 project rather than assuming that current online APIs match the pinned version.
+
+## Dense furniture and adaptive offsets
+
+Select **Study → Dense furniture · offsets**, or open
+`/comparison.html?study=offsets&lights=on`. This is an opt-in experiment; the
+original comparison and apartment retain their existing offsets and caches.
+
+The coarse and dense versions have the same shape, material, face normals and
+lighting-atlas allocation. Switch **Furniture mesh** to change tessellation and
+**GI offsets** to compare the fixed and adaptive variants. The offset switch
+preserves the camera. **Indirect only** removes live direct lighting so the GI
+can be inspected. Reflections start disabled. No matched Cycles reference is
+shown for these added objects. The test requires WebGPU; WebGL shows direct
+lighting only and labels that limitation.
+
+Fixed uses the current 4 mm normal offset, 1 mm ray minimum and the apartment's
+8 mm edge inset. Adaptive probes along both sides of each surface normal and
+limits the offset to one quarter of the nearby clearance or part thickness,
+capped at 4 mm. A position-dependent numerical tolerance supplies the minimum
+ray distance. Edge-inset weights are capped at 5% instead of collapsing thin
+triangles toward their centres. These are trial settings for room-scale scenes,
+not a general solution for arbitrary geometry or coordinate magnitudes.
+
+The table includes thin parts and close joins. A separate closed panel has a
+2 mm internal gap and 1 mm walls. Its central inner-face samples must have zero
+sky and lamp visibility. The browser check compares those values in both modes,
+measures GI brightness at identical atlas locations across densities, checks
+night lighting and walking stability, and loads the existing room/apartment
+caches. A clean test does not establish the cause of dark furniture in another
+project; atlas coverage, normals and material/reflection inputs still matter.
+
+The initial desktop check measured a 0.026% tabletop and 0.043% backrest GI
+brightness difference between coarse and dense adaptive variants. The sealed
+gap's fixed-offset samples incorrectly saw about 4.11% sky visibility and 100%
+visibility of the first lamp; both became zero with adaptive offsets at both
+densities. This synthetic scene did not reproduce severe density-related
+darkening. Physical-phone performance and other projects' furniture are untested.
+
+Prepare all four caches against a built preview (not the development server):
+
+```powershell
+# Build, then leave a preview running on port 4189 in another terminal.
+& .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js build
+# Separate terminal:
+& .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4189
+```
+
+```powershell
+foreach ($density in @('coarse', 'dense')) {
+  foreach ($offset in @('fixed', 'adaptive')) {
+    $env:COMPARISON_URL = "http://127.0.0.1:4189/comparison.html?study=offsets&density=$density&offset=$offset"
+    $env:TRANSFER_OUTPUT_DIR = "public/comparison/offset-study/$density-$offset"
+    & .\.tools\node-v24.19.0-win-x64\node.exe scripts/prepare-comparison-transfer.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'Offset cache preparation failed' }
+  }
+}
+Remove-Item Env:COMPARISON_URL, Env:TRANSFER_OUTPUT_DIR
+& .\.tools\node-v24.19.0-win-x64\node.exe node_modules/vite/bin/vite.js build
+& .\.tools\node-v24.19.0-win-x64\node.exe scripts/check-offset-study.cjs
+```
+
+Screenshots and measurements are written to `.tools/offset-study`. Only the
+selected variant is loaded; each variant's preparation report records its size.

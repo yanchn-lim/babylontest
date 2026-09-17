@@ -32,7 +32,7 @@ export function geometry(data: SceneData) {
         const b = points[(j + 2) % 3].map((v, k) => v - p[k]);
         const twiceArea = Math.hypot(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
         const height = twiceArea / Math.hypot(...a.map((v, k) => v - b[k]));
-        return Math.min(1 / 3, data.surfaceInset / height);
+        return Math.min(data.adaptiveOffsets ? .05 : 1 / 3, data.surfaceInset / height);
       });
       const uv = ids.map(i => mesh.uvs.slice(i * 2, i * 2 + 2));
       triangles.push({ a: points[0], b: points[1], c: points[2], material: mesh.material,
