@@ -2,7 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'C:/Users/yc/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const url = process.env.COMPARISON_URL || 'http://127.0.0.1:4194/comparison.html';
-const out = '.tools/couch-study';
+const study = process.env.COUCH_STUDY || 'couch';
+if (!['couch', 'applaryd'].includes(study)) throw Error('Unknown couch study.');
+const out = `.tools/${study}-study`;
 
 (async () => {
   fs.mkdirSync(out, { recursive: true });
@@ -13,13 +15,13 @@ const out = '.tools/couch-study';
     page.on('console', message => { if (['error', 'warning'].includes(message.type())) errors.push(message.text()); });
     const settle = () => page.waitForFunction(() => window.comparison?.ready && comparison.state().activeGi === 'transfer'
       && !comparison.state().transfer.updating, {}, { timeout: 120000 });
-    await page.goto(url + '?study=couch&lights=on');
+    await page.goto(url + `?study=${study}&lights=on`);
     await settle();
     assert.equal(await page.locator('#metallic-control').isVisible(), true);
-    const native = await page.evaluate(() => comparison.scene.meshes.filter(m => m.name.startsWith('ProcessedMeshNode')).map(m => ({
+    const native = await page.evaluate(() => comparison.scene.meshes.filter(m => m.getVerticesData('uv3')).map(m => ({
       triangles: m.getTotalIndices() / 3, albedo: !!m.material.albedoTexture, metallic: !!m.material.metallicTexture,
     })));
-    assert.equal(native.reduce((sum, m) => sum + m.triangles, 0), 1982);
+    assert.equal(native.reduce((sum, m) => sum + m.triangles, 0), study === 'applaryd' ? 7628 : 1982);
     assert.ok(native.every(m => m.albedo && m.metallic));
     for (const mode of ['corrected', 'legacy']) {
       const camera = await page.evaluate(() => comparison.camera.position.asArray());
@@ -60,7 +62,7 @@ const out = '.tools/couch-study';
     assert.ok(await page.evaluate(() => comparison.state().reference));
     const fallback = await browser.newPage();
     await fallback.addInitScript(() => Object.defineProperty(navigator, 'gpu', { value: undefined }));
-    await fallback.goto(url + '?study=couch');
+    await fallback.goto(url + `?study=${study}`);
     await fallback.waitForFunction(() => window.comparison?.ready);
     assert.match(await fallback.locator('#status').innerText(), /requires WebGPU/);
     await fallback.close();

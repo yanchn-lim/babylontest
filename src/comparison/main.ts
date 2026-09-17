@@ -41,12 +41,14 @@ const reference = element<HTMLImageElement>('reference');
 const note = element('reference-note');
 const base = import.meta.env.BASE_URL + 'comparison/';
 const query = new URLSearchParams(location.search), testingOffsets = query.get('study') === 'offsets';
-const testingCouch = query.get('study') === 'couch', testingFurniture = testingOffsets || testingCouch;
+const couchStudy = query.get('study') === 'applaryd' ? 'applaryd' : 'couch';
+const testingCouch = query.get('study') === couchStudy, testingFurniture = testingOffsets || testingCouch;
+const couchName = couchStudy === 'applaryd' ? 'ÄPPLARYD' : 'KLIPPAN';
 const metallicMode = element<HTMLSelectElement>('metallic-mode');
 metallicMode.value = query.get('metallic') === 'legacy' ? 'legacy' : 'corrected';
 const study = element<HTMLSelectElement>('study'), density = element<HTMLSelectElement>('density');
 const offsets = element<HTMLSelectElement>('offset-mode'), lightingView = element<HTMLSelectElement>('lighting-view');
-study.value = testingCouch ? 'couch' : testingOffsets ? 'offsets' : 'room';
+study.value = testingCouch ? couchStudy : testingOffsets ? 'offsets' : 'room';
 density.value = query.get('density') === 'coarse' ? 'coarse' : 'dense';
 offsets.value = query.get('offset') === 'fixed' ? 'fixed' : 'adaptive';
 function changeStudy() {
@@ -63,7 +65,7 @@ async function start() {
   const response = await fetch(base + 'scene.json');
   if (!response.ok) throw new Error('Comparison assets are missing. Run scripts/prepare-comparison.py with Blender.');
   const original: SceneData = await response.json();
-  const couchData: SceneData | undefined = testingCouch ? await (await fetch(base + 'couch/scene.json')).json() : undefined;
+  const couchData: SceneData | undefined = testingCouch ? await (await fetch(base + `${couchStudy}/scene.json`)).json() : undefined;
   let data = couchData ? couchMaterialMode(couchData, metallicMode.value === 'corrected') : testingOffsets ? offsetStudy(original, density.value === 'dense') : original;
   if (testingFurniture) {
     if (testingOffsets) data.adaptiveOffsets = offsets.value === 'adaptive';
@@ -73,7 +75,7 @@ async function start() {
     document.querySelector<HTMLElement>('details')!.hidden = true;
     element('comparison').style.gridTemplateColumns = '1fr';
     element('comparison').style.maxWidth = '1100px';
-    document.querySelector('h1')!.textContent = testingCouch ? 'KLIPPAN couch, corrected GI.' : 'Dense furniture, controlled offsets.';
+    document.querySelector('h1')!.textContent = testingCouch ? `${couchName} couch, cached diffuse GI.` : 'Dense furniture, controlled offsets.';
     document.querySelector('header p:last-child')!.textContent = 'Same shape, material and lighting. Change one variable at a time.';
     document.querySelector('.checkpoints > span')!.textContent = 'LIGHTING PRESETS';
     view.options[0].textContent = 'Furniture & room'; view.options[1].textContent = testingCouch ? 'Couch · close view' : 'Thin parts · close view';
@@ -84,7 +86,7 @@ async function start() {
     lightingView.value = query.get('lighting') === 'indirect' ? 'indirect' : 'full';
     const count = data.meshes.slice(2).reduce((sum, mesh) => sum + mesh.indices.length / 3, 0);
     element('offset-note').textContent = testingCouch
-      ? 'IKEA KLIPPAN · Vissle grey. Switch Metallic GI handling to compare the fix. Geometry, native materials, lights and exposure stay the same. Indirect only makes the difference easier to see. This test uses separate lighting UVs; it does not fix the walkthrough’s overlapping atlas. No matched Cycles reference.'
+      ? `IKEA ${couchName} · ${couchStudy === 'applaryd' ? 'Gunnared light blue, chaise longue' : 'Vissle grey'}. Cached diffuse GI. Switch Metallic GI handling to compare the fix. Geometry, native materials, lights and exposure stay the same. Indirect only makes the difference easier to see. This test uses separate lighting UVs; it does not fix the walkthrough’s overlapping atlas. No matched Cycles reference.`
       : `${count.toLocaleString()} furniture triangles. Same shape and lighting UVs at both densities. Use Interior lights → On to inspect the furniture. The small sealed panel tests light leaks. This is an experimental test without a matched Cycles reference.`;
   }
   let engine: Engine | WebGPUEngine | undefined;
@@ -149,8 +151,8 @@ async function start() {
     return mesh;
   });
   if (testingCouch) {
-    const couch = await loadCouch(scene);
-    const atlas = await (await fetch(base + 'couch/atlas.json')).json();
+    const couch = await loadCouch(scene, couchStudy);
+    const atlas = await (await fetch(base + `${couchStudy}/atlas.json`)).json();
     couch.meshes.forEach((mesh, index) => {
       if (atlas[index].length !== mesh.getTotalVertices() * 2) throw Error('Couch lighting atlas does not match the model.');
       mesh.setVerticesData('uv3', atlas[index]);
@@ -206,7 +208,7 @@ async function start() {
     cascades?.dispose(); cascades = undefined; cascadeError = ''; method = gi.value; selection = key;
     try {
       engine.enableGPUTimingMeasurements = !!engine.getCaps().timerQuery;
-      const cache = testingCouch ? `couch/${metallicMode.value}/transfer.bin.gz` : testingOffsets ? `offset-study/${density.value}-${offsets.value}/transfer.bin.gz` : 'transfer.bin.gz';
+      const cache = testingCouch ? `${couchStudy}/${metallicMode.value}/transfer.bin.gz` : testingOffsets ? `offset-study/${density.value}-${offsets.value}/transfer.bin.gz` : 'transfer.bin.gz';
       cascades = method === 'transfer' ? new CachedTransfer(scene, engine, data, base + cache)
         : new RadianceCascades(scene, engine, data);
       basis.cascadeMap = cascades.texture;
@@ -333,7 +335,7 @@ async function start() {
     scene, camera, engine, ready: true,
     state: () => ({ hour: Number(time.value), mode: lights.value, on: lighting(Number(time.value), lights.value as SwitchMode).on,
       offsetStudy: testingOffsets ? { density: density.value, offsets: offsets.value, lighting: lightingView.value } : null,
-      couchStudy: testingCouch ? { metallic: metallicMode.value, lighting: lightingView.value } : null,
+      couchStudy: testingCouch ? { model: couchStudy, metallic: metallicMode.value, lighting: lightingView.value } : null,
       gi: gi.value, bounces: Number(bounces.value), activeGi: basis.useCascades ? method : 'baked', cascades: method === 'cascades' ? cascades?.diagnostics() : undefined,
       transfer: method === 'transfer' ? cascades?.diagnostics() : undefined,
       reflections: reflections.diagnostics(), sphereMaterial: sphereMaterial.value, cascadeError, cameraMatches, reference: reference.hidden ? null : reference.src }),

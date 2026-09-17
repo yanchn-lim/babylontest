@@ -402,3 +402,16 @@ port 4194. Run `scripts/prepare-comparison-transfer.cjs` twice, setting
 and `TRANSFER_OUTPUT_DIR` to the matching `public/comparison/couch/<mode>` folder.
 Rebuild to include the generated files. `node scripts/check-couch-study.cjs`
 checks both rendered modes, GI values, night lighting, walking and WebGL fallback.
+
+## ÄPPLARYD artifact study
+
+Open `comparison.html?study=applaryd&lights=on`, or select **ÄPPLARYD chaise**.
+The 7,628-triangle light-blue chaise uses its native materials and the same cached
+diffuse GI as KLIPPAN. Use the close view to inspect cushion seams and armrests;
+compare full lighting with indirect only, and daylight with interior lamps.
+The separate Blender lighting atlas does not reproduce the walkthrough atlas.
+No artifact fix or matched Cycles reference is included.
+
+Use the couch preparation and check commands above with `COUCH_STUDY=applaryd`.
+For transfer preparation, use `study=applaryd` and output to
+`public/comparison/applaryd/<mode>`. Asset provenance is in that folder’s `SOURCE.md`.

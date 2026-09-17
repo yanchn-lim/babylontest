@@ -1,9 +1,10 @@
 import { Mesh, PBRMaterial, SceneLoader, type Scene } from '@babylonjs/core';
 import type { SceneData } from './main';
 
-export async function loadCouch(scene: Scene) {
+export async function loadCouch(scene: Scene, study: 'couch' | 'applaryd' = 'couch') {
   await import('@babylonjs/loaders/glTF');
-  const asset = await SceneLoader.ImportMeshAsync('', import.meta.env.BASE_URL + 'comparison/couch/', 'klippan.glb', scene);
+  const file = study === 'applaryd' ? 'applaryd.glb' : 'klippan.glb';
+  const asset = await SceneLoader.ImportMeshAsync('', import.meta.env.BASE_URL + `comparison/${study}/`, file, scene);
   const meshes = asset.meshes.filter((mesh): mesh is Mesh => mesh instanceof Mesh && mesh.getTotalVertices() > 0);
   // Flatten the imported transforms identically during preparation and display.
   for (const mesh of meshes) {

@@ -1,9 +1,11 @@
 """Unwrap the couch's lighting UVs; keep the native material UVs unchanged."""
-import bpy, json, math
+import bpy, json, math, sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-data = json.loads((root / '.tools/couch-study/geometry.json').read_text())
+study = sys.argv[sys.argv.index('--') + 1] if '--' in sys.argv else 'couch'
+assert study in ('couch', 'applaryd')
+data = json.loads((root / f'.tools/{study}-study/geometry.json').read_text())
 vertices, faces, lookup = [], [], {}
 for mesh in data:
     positions = mesh['positions']
@@ -37,5 +39,5 @@ for source in data:
     count = len(source['positions']) // 3 * 2
     atlas.append([.48 + value * .50 if i % 2 == 0 else .02 + value * .96 for i, value in enumerate(flat[start:start + count])])
     start += count
-(root / 'public/comparison/couch/atlas.json').write_text(json.dumps(atlas, separators=(',', ':')))
+(root / f'public/comparison/{study}/atlas.json').write_text(json.dumps(atlas, separators=(',', ':')))
 print('Couch atlas:', len(faces), 'triangles')
