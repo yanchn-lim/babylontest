@@ -28,6 +28,10 @@ zero-area source triangles previously caused collapsed-UV failures at these
 rotations. Preparation now excludes those faces without changing native meshes
 or returned UV ordering. A completed run reports the excluded face count.
 
+See [live lighting integration](live-lighting-integration.md) for the new
+renderer entry, revision protocol and Interior integration steps. This remains
+a local prototype; it does not update the deployed editor.
+
 ## Controlled comparison
 
 1. Start with a **Short trial**. It stops after 4,096 work items: active samples
@@ -35,7 +39,9 @@ or returned UV ordering. A completed run reports the excluded face count.
    A trial produces timings, not a usable lighting cache.
 2. Repeat with the same placement and settings for a warm measurement.
 3. Change the kernel, batch size or pause. The lab defaults to the active kernel,
-   1,024 samples per batch and an 8 ms pause.
+   a 1,024-sample allocation and an 8 ms minimum pause. Adaptive scheduling is
+   enabled by default; actual batches are capped at 512 or reduced to 128 when
+   frame times rise. Disable it for fixed-schedule comparisons.
 4. Use **Build full lighting** to cover all active samples. Completed data is
    decoded and validated before it is displayed with four diffuse bounces.
 5. Repeat full builds for the same input. **Exact match** means the SHA-256
@@ -52,14 +58,16 @@ Larger batches reduce dispatch/readback count but can make each GPU job longer.
 Pauses add wall time and can give other work time to run. Neither setting is
 assumed to improve performance until measured on the target device.
 
-The preview pauses during preparation. The worker, GPU engine, model and bounded
+The preview remains interactive during preparation. The worker, GPU engine, model and bounded
 atlas cache stay loaded between runs. Materials and transfer are rebuilt; exact
 unchanged unwrap inputs reuse completed UVs. A completed
 layout preserves instance slots. Allocation retries compute charts once and
 repeat only packing. Sofa placement
-changes clear the preview's old GI without starting preparation. Hiding the
-page requests cancellation. Stop takes effect after the current GPU batch;
-it cannot interrupt an already submitted dispatch or synchronous atlas work.
+changes clear the preview's old GI and queue a build after 900 ms when automatic
+preparation is enabled. Hiding the page requests cancellation. Stop takes effect
+after the current GPU batch; it cannot interrupt an already submitted dispatch.
+If the worker cannot acknowledge cancellation within 1.5 seconds, the host
+terminates it. That releases its atlas cache and requires a cold restart.
 
 ## Measurements and limits
 
@@ -73,14 +81,17 @@ black. This observation does not validate every individual chair sample or
 establish final material appearance. The temporary material-comparison diagnostic
 was removed after this check; the original fixture materials remain unchanged.
 
-- Loading, Materials, Atlas, Transfer, Validation and Compression are wall times.
+- Loading, Materials, Atlas, Transfer and Validation are wall times. The live
+  viewer receives raw bytes; compression is no longer part of this path. Older
+  measurements below include compression and a paused preview.
 - Readback includes GPU execution, driver waits and copying. It is not a GPU
   timestamp query or a measurement of GPU utilization.
 - Dispatch includes first-use compilation waits. CPU hit packing measures the
   JavaScript aggregation after each ray readback. Pauses report elapsed waits.
 - Ray readback bytes exclude the final visibility readback and packed cache.
-- Largest page frame gap uses `requestAnimationFrame` while the preview is
-  paused. It does not measure other applications or prove the PC stays smooth.
+- Largest page frame gap uses `requestAnimationFrame` while the preview renders.
+  It does not measure other applications or prove the PC stays smooth. The page
+  also reports installation time, installation frame gap and time to visible GI.
 - Short trials cover one atlas region. Do not extrapolate their speed to the
   full scene, or compare their totals with full builds.
 - Total time ends in the worker before posting the result. Main-thread cloning,
@@ -90,7 +101,8 @@ was removed after this check; the original fixture materials remain unchanged.
 
 The shared API accepts optional `transferOptions` with `batchSize` (multiples
 of 64 from 64 to 4096), `pauseMilliseconds` (0 to 100), `strategy` (`active` or
-`reference`), and `onBatch(timings)`. Shared API defaults are 1024/8 with the active
+`reference`), `onBatch(timings)` and an optional `schedule()` callback read
+between batches. A scheduled batch cannot exceed the allocated batch size. Shared API defaults are 1024/8 with the active
 kernel. The lab uses this
 hook to measure and stop trials; cancellation never returns a partial cache.
 
@@ -263,3 +275,104 @@ node --experimental-strip-types --test tests/preparation-schedule.test.mjs tests
 npx tsc --noEmit
 npx vite build
 ```
+
+## Live preview prototype (18 September 2026)
+
+The live path keeps rendering during preparation, transfers raw bytes, uploads
+in 4 MiB writes and publishes only the completed four-bounce result. The same
+19-piece IKEA fixture at the 30-degree sofa placement completed a cold worker
+build in 46.38 s: loading 1.53 s, materials 0.64 s, atlas 12.92 s, transfer 30.35 s
+and validation 0.94 s. It used 301,505 active samples in a 256 x 2304 atlas, with
+249.9 MiB of entries in two pages. The largest preparation frame gap was 87 ms.
+
+Visible GI arrived 58.81 s after the job started; installation after receipt took
+11.24 s. The largest measured installation frame gap was 533 ms. An earlier
+version that yielded during validation/uploads but computed surface geometry
+synchronously stalled for 3,942 ms. Cooperative surface rasterization removed
+that multi-second stall in this run, but synchronous chart/BVH work, fingerprints,
+message delivery and allocations can still cause hitches. The visual transition
+is complete GI replacing direct lighting, not progressive partial GI.
+
+These are individual local desktop Chromium observations with the preview
+rendering, not directly comparable performance claims against historical paused
+runs. Preparation can take longer because the viewer shares the GPU and the
+schedule yields more often. Whole-PC responsiveness and phone performance remain
+unverified. Camera movement during installation was checked visually. An edit
+during a running build cancelled the old job and only the new revision installed.
+
+Verification: 106 local tests, TypeScript and the production build passed. GPU
+checks compared synchronous/cooperative surface buffers and raw/chunked versus
+gzip-loaded output. All six day/night output comparisons were pixel-identical.
+Changing preparation batch sizes preserved cache bytes. The checks rejected
+obsolete revisions, mismatched atlases, moved geometry with equal vertex counts,
+and invalid fingerprints, and exercised cancellation during upload.
+
+A repeated run reused all 20 atlas allocations (0 builds, 0 packing attempts).
+Its atlas stage took 0.17 s, transfer 30.28 s, and worker total 32.09 s. The cache
+hash matched the cold run exactly. Visible GI arrived at 43.32 s; installation
+took 11.10 s, with a 458 ms largest installation frame gap. The largest frame
+gap during preparation was 108 ms. This remains a responsiveness prototype with
+measurable hitches, not a stable-frame-time or faster-total-bake claim.
+
+## Provisional lighting stream (18 September 2026)
+
+The lab now optionally sends visible lighting patches during ray preparation.
+The preview includes measured skylight and one bounce from shadowed sun and
+fixtures. Final filtered four-bounce GI replaces it without a blank transition.
+See `docs/live-lighting-integration.md` for the APIs and acknowledgement protocol.
+
+A final-version cold run of the same 19-piece IKEA fixture, with the sofa rotated
+30 degrees, fixed 512-sample batches and an 8 ms pause, produced 71 patches.
+The first arrived at 18.56 s, after atlas/source preparation. Worker preparation
+finished in 49.04 s (atlas 12.78 s, transfer 33.34 s), and complete GI was visible
+at 77.44 s. Installation took 27.17 s. The largest measured preparation and
+installation frame gaps were both 1,009 ms. These background-browser observations
+show streaming functionality; they do not establish stable frame times.
+
+With streaming disabled, a repeated run reused all 20 atlas allocations, took
+32.13 s overall (atlas 0.15 s, transfer 30.43 s), and matched the streamed run's
+cache hash exactly. Its largest preparation frame gap was 1,058 ms. Cold/warm
+loading and atlas work differ, so their total times are not a streaming-overhead
+comparison. Streaming adds source-light computation, CPU accumulation, readback
+and texture uploads. An adaptive repeated run also advanced much more slowly
+and was stopped; its smaller batches/longer pauses make timing device-dependent.
+
+Stop removed provisional GI and a subsequent run started successfully. Camera
+movement was checked during streaming, and the scene retained that view after
+final installation. The atlas remained 256 x 2304 with 301,505 active samples,
+38,338 source triangles and 249.9 MiB of packed entries in two cache pages.
+
+Verification: 106 local tests, TypeScript and the production build passed. GPU
+checks exercised two- and seven-fixture streams, confirmed byte-identical final
+caches, bounded/ordered early patches, receiving-sample validity and exact GPU
+texture-region writes. They checked stale/duplicate/late updates, cancellation,
+provisional-light retention during installation, lighting-state invalidation and
+time changes during final installation. Existing six day/night raw-versus-gzip
+and single-versus-paged output comparisons remained pixel-identical. Build
+warnings about large chunks and xatlas's externalized Node module remain.
+Phone performance, production Interior integration and reflection refreshes
+remain unverified.
+
+## Streaming finalization checks (18 September 2026)
+
+Stream starts now carry the exact lighting state and fixture scale. The viewer
+rejects delayed starts for different lighting and copies mutable host settings.
+A rejected retry cannot attach later patches to an older provisional stream.
+Idle visibility changes preserve the completed status. Downloaded reports now
+retain first-patch time, patch count, complete-GI time and installation metrics.
+
+The finalization run used the same 19-piece IKEA fixture, rotated 30 degrees,
+with fixed 512-sample batches and an 8 ms pause. First lighting arrived at
+19.02 s through 74 patches. Worker preparation took 49.62 s (atlas 13.06 s,
+transfer 33.88 s); complete GI arrived at 73.24 s, including 22.10 s of final
+installation. The largest preparation and installation frame gaps were both
+1,009 ms. Camera movement during installation was retained. Switching tabs
+after completion preserved the ready status. No browser errors were reported.
+These are single desktop observations, not a stable-frame-time guarantee.
+
+Verification: 107 local tests, TypeScript, the production build and GPU checks
+passed. Added checks cover queued/running/cancelled/idle status, delayed lighting,
+fixture-scale and sky mismatches, rejected retries and mutable lighting inputs.
+Final cache bytes and all six final pixel comparisons remain unchanged. The
+production editor, iframe relay, reflections and phone performance still need
+integration verification.

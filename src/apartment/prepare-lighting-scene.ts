@@ -24,6 +24,7 @@ export interface LightingSceneInput {
   signal?: AbortSignal;
   transferOptions?: TransferPreparationOptions;
   onProgress?: (stage: 'scene' | 'atlas' | 'transfer', fraction: number) => void;
+  onAtlasReady?: (atlas: number[][], sceneData: SceneData) => void;
 }
 
 /** Prepare one matching atlas, scene description and raw transfer cache. No input mesh is modified. */
@@ -80,6 +81,7 @@ export async function prepareLightingScene(input: LightingSceneInput) {
     mesh.indices = lightingIndices(mesh.positions, mesh.indices);
   });
   signal?.throwIfAborted(); onProgress('atlas', 1);
+  input.onAtlasReady?.(atlas, sceneData);
   onProgress('transfer', 0);
   const transfer = await prepareTransfer(sceneData, engine, fraction => onProgress('transfer', fraction), signal,
     { batchSize: 1024, pauseMilliseconds: 8, ...input.transferOptions });

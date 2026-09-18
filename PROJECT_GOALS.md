@@ -146,11 +146,54 @@ The preparation lab at `/preparation.html` is a controlled optimization scene
 for editor lighting rebuilds. It uses the real apartment and original APPLARYD,
 the shared preparation API and 1,024 rays per active sample.
 Manual short trials and full builds compare batch sizes, pacing, warm worker
-reuse and cache hashes. It does not start preparation on load or placement
-changes. This adds a measurement fixture; it does not establish a speedup or
-change existing viewer quality. See [the lab guide](docs/preparation-benchmark.md).
+reuse and cache hashes. It does not start preparation on load. The live prototype now queues
+preparation 900 ms after placement changes when automatic preparation is enabled.
+This adds a measurement fixture; it does not establish a speedup or change
+existing fixed-viewer quality. See [the lab guide](docs/preparation-benchmark.md).
 
-The next target is a fully furnished apartment after editing has finished.
+The target is a fully furnished apartment with editing and lighting preparation
+running concurrently. Users should enter 3D quickly. This supersedes the earlier
+assumption that editing finishes before preparation starts.
+
+Inspected [Injaneity Interior](https://github.com/injaneity/interior/tree/9b9eb48e0a44)
+at `9b9eb48e0a44` on 2026-09-18. Its editor debounces edits by 900 ms, cancels
+obsolete preparation jobs, rejects stale results, and loads completed results
+into a hidden renderer. The initial apartment uses a prepared baseline. Current
+3D entry still waits for the latest revision, lighting, reflections and transition
+warmup. See `src/render-preparation-queue.js`, `walkthrough/app.js` and
+`walkthrough/renderer-entry.js` in that repository.
+
+Interior currently pins renderer `700e160`, before our `d9dd4a9` preparation
+optimizations. Each edited build creates and terminates a worker; the integration
+does not yet pass a persistent atlas cache, furniture groups or previous layout.
+Future preparation work must support responsive editing, safe cancellation and
+scene snapshots, and fast 3D entry. The local prototype now also tests progressive
+provisional lighting during ray preparation.
+The local preparation lab now tests this concurrent flow. Its live viewer shows
+direct lighting first and installs complete four-bounce GI from raw bytes without
+a scene reload. Revision checks reject stale results; editing clears obsolete GI.
+The worker retains completed atlas reuse and adapts transfer batches to page frame
+times. Validation, surface rasterization and GPU uploads yield during installation.
+The optional stream shows measured skylight and one sun/lamp bounce in bounded
+atlas patches, then replaces it with complete filtered four-bounce GI. The worker
+waits for each patch acknowledgement. Revisions, cancellation and lighting-state
+changes invalidate obsolete patches. Final cache bytes remain unchanged. Atlas
+generation must complete before streaming starts; preparation can take longer.
+The renderer-side streaming implementation is prepared for integration handoff.
+Stream starts include their lighting state, mismatched delayed starts are rejected,
+and host state mutation cannot hide a lighting change. Downloaded lab reports keep
+first-stream and final-installation measurements. This remains opt-in and local,
+not a deployed Interior update.
+It omits the stock apartment controls, bloom and reflection probes; production
+integration must preserve those paths separately. See
+[the integration guide](docs/live-lighting-integration.md).
+The local furnished test retained camera control during preparation and GI
+installation. A repeated build reused all 20 atlas allocations and matched the
+cold cache bytes. Cooperative installation reduced a measured 3.94 s frame stall
+to 0.46-0.53 s in individual runs; further hitches remain. Preparation and visible
+GI took 32.09 s and 43.32 s on the repeated run. These are local observations,
+not phone or production-editor performance guarantees.
+
 Stage one excludes zero-area faces from shared lighting unwrapping and transport
 without changing native meshes. The lab adds the failing sofa rotations, a
 three-detailed-sofa capacity fixture and a mixed 19-piece baseline (one detailed

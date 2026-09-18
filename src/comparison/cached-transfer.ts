@@ -4,7 +4,7 @@ import {
 } from '@babylonjs/core';
 import { transferLayout } from './transfer-layout';
 import { pagedTransferSource, splitTransferPages, transferPageOffsets, TRANSFER_PAGE_BYTES, type TransferPage } from './transfer-pages';
-import { geometry } from './surface-geometry';
+import { geometry, geometryAsync } from './surface-geometry';
 import blurSource from './diffuse-blur.wgsl?raw';
 import type { SceneData } from './main';
 import type { lighting } from './lighting';
@@ -12,6 +12,11 @@ import { decodeTransfer, fixedLightData, transferBindings, transferFields, trans
   TRANSFER_RAYS } from './transfer-data';
 
 type Vec3 = [number, number, number];
+export interface TransferLoadOptions {
+  /** Opt-in paced uploads for a live editor. Existing file viewers retain their path. */
+  uploadChunkBytes?: number;
+  onUpload?: (bytes: number) => void;
+}
 
 /** Dense diffuse sampling, with static ray hits combined into exact integer weights. */
 export class CachedTransfer {
@@ -40,7 +45,9 @@ export class CachedTransfer {
   private transferPages: (TransferPage & { transfer: StorageBuffer; offsets: StorageBuffer })[] = [];
   private gatherPage = 0;
 
-  constructor(scene: Scene, private engine: WebGPUEngine, data: SceneData, url: string, private fixtureIntensityScale = 1, private blurDiffuse = false, private receivedDiffuse = false, private pageBytes = TRANSFER_PAGE_BYTES) {
+  constructor(scene: Scene, private engine: WebGPUEngine, data: SceneData, source: string | ArrayBuffer, private fixtureIntensityScale = 1, private blurDiffuse = false, private receivedDiffuse = false, private pageBytes = TRANSFER_PAGE_BYTES, private loadOptions: TransferLoadOptions = {}) {
+    const chunk = loadOptions.uploadChunkBytes;
+    if (chunk !== undefined && (!Number.isInteger(chunk) || chunk < 4 || chunk % 4)) throw Error('Upload chunk size must be a positive multiple of four.');
     this.layout = transferLayout(data);
     this.memoryBytes = this.layout.pixels * 8;
     if (this.layout.height > engine.getCaps().maxTextureSize) throw Error("Lighting atlas exceeds this device texture limit.");
@@ -56,23 +63,32 @@ export class CachedTransfer {
       this.params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity * fixtureIntensityScale);
       this.params.updateFloat4('lampColor' + i, ...lamp.color, 0);
     });
-    void this.load(data, url).catch(error => {
+    void this.load(data, source).catch(error => {
       if (!this.disposed) { this.error = String(error); this.loading = false; console.warn(this.error); }
     });
   }
 
-  private async load(data: SceneData, url: string) {
-    const response = await fetch(url, { signal: this.request.signal });
-    if (!response.ok || !response.body) throw Error('Could not load cached diffuse transfer.');
-    const stream = response.headers.get('Content-Encoding')?.includes('gzip') ? response.body
-      : response.body.pipeThrough(new DecompressionStream('gzip'));
-    const bytes = await new Response(stream).arrayBuffer();
-    const cache = await decodeTransfer(bytes, data);
+  private async load(data: SceneData, input: string | ArrayBuffer) {
+    let bytes: ArrayBuffer;
+    if (typeof input === 'string') {
+      const response = await fetch(input, { signal: this.request.signal });
+      if (!response.ok || !response.body) throw Error('Could not load cached diffuse transfer.');
+      const stream = response.headers.get('Content-Encoding')?.includes('gzip') ? response.body
+        : response.body.pipeThrough(new DecompressionStream('gzip'));
+      bytes = await new Response(stream).arrayBuffer();
+    } else bytes = input;
+    const yieldWork = async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      this.request.signal.throwIfAborted();
+    };
+    const paced = !!this.loadOptions.uploadChunkBytes;
+    const cache = await decodeTransfer(bytes, data, paced ? yieldWork : undefined);
     if (this.disposed) return;
     const pages = splitTransferPages(cache.offsets, this.pageBytes);
-    const mesh = geometry(data, this.blurDiffuse);
+    const mesh = paced ? await geometryAsync(data, this.blurDiffuse, yieldWork) : geometry(data, this.blurDiffuse);
     if (this.receivedDiffuse && this.blurDiffuse) {
       for (let i = 0; i < this.layout.pixels; i++) {
+        if (paced && i % 2048 === 0) await yieldWork();
         if (mesh.surfaces[i * 12 + 3] === 0) continue;
         let front = 0;
         for (let j = cache.offsets[i]; j < cache.offsets[i + 1]; j++) front += cache.entries[j] >>> this.layout.bits;
@@ -83,25 +99,37 @@ export class CachedTransfer {
       }
     }
     const allocations: Record<string, StorageBuffer> = {};
-    const buffer = (name: string, value: ArrayBuffer | Float32Array | Uint32Array | number) => {
+    let uploaded = 0;
+    const buffer = async (name: string, value: ArrayBuffer | Float32Array | Uint32Array | number) => {
+      this.request.signal.throwIfAborted();
       const size = typeof value === 'number' ? value : value.byteLength;
       const result = new StorageBuffer(this.engine, Math.max(4, size));
-      if (typeof value !== 'number') result.update(value instanceof ArrayBuffer ? new Uint8Array(value) : value);
       this.buffers.push(result); allocations[name] = result; this.memoryBytes += Math.max(4, size);
+      if (typeof value !== 'number') {
+        const raw = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+        const chunk = this.loadOptions.uploadChunkBytes ?? Math.max(4, size);
+        for (let offset = 0; offset < size; offset += chunk) {
+          const part = raw.subarray(offset, Math.min(size, offset + chunk));
+          result.update(part, offset, part.byteLength); uploaded += part.byteLength;
+          this.loadOptions.onUpload?.(uploaded);
+          if (paced) await yieldWork();
+        }
+      }
       return result;
     };
     const surfaceLight = new Float32Array(this.layout.pixels * 8);
     for (let i = 0; i < this.layout.pixels; i++) surfaceLight.set(cache.visibility.subarray(i * 4, i * 4 + 4), i * 8 + 4);
     if (mesh.rayOrigins) {
-      buffer('rayOrigins', mesh.rayOrigins); buffer('sampleRemap', Uint32Array.from(data.sampleRepair!.remap!));
+      await buffer('rayOrigins', mesh.rayOrigins); await buffer('sampleRemap', Uint32Array.from(data.sampleRepair!.remap!));
     }
-    buffer('nodes', mesh.nodes); buffer('triangles', mesh.triangles); buffer('surfaces', mesh.surfaces);
-    buffer('surfaceLight', surfaceLight); buffer('bounceLight', this.layout.pixels * 32);
-    this.transferPages = pages.map(page => ({ ...page,
-      transfer: buffer('transfer', cache.entries.subarray(page.entryStart, page.entryEnd)),
-      offsets: buffer('offsets', transferPageOffsets(cache.offsets, page)),
-    }));
-    if (data.fixtures.length !== 2) buffer('fixedLights', fixedLightData(data, this.fixtureIntensityScale));
+    await buffer('nodes', mesh.nodes); await buffer('triangles', mesh.triangles); await buffer('surfaces', mesh.surfaces);
+    await buffer('surfaceLight', surfaceLight); await buffer('bounceLight', this.layout.pixels * 32);
+    for (const page of pages) this.transferPages.push({ ...page,
+      transfer: await buffer('transfer', cache.entries.subarray(page.entryStart, page.entryEnd)),
+      offsets: await buffer('offsets', transferPageOffsets(cache.offsets, page)),
+    });
+    if (data.fixtures.length !== 2) await buffer('fixedLights', fixedLightData(data, this.fixtureIntensityScale));
+    this.request.signal.throwIfAborted();
     this.entryCount = cache.entries.length;
     const entries = {
       shade: [...(data.sampleRepair ? ['rayOrigins'] : []), 'nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', ...(data.fixtures.length !== 2 ? ['fixedLights'] : [])],

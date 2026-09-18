@@ -1,3 +1,5 @@
+import type { LightingPreviewOptions } from './streaming-preview';
+
 export interface PreparationTimings {
   geometryMilliseconds: number;
   dispatchMilliseconds: number;
@@ -19,6 +21,15 @@ export interface TransferPreparationOptions {
   batchSize?: number;
   pauseMilliseconds?: number;
   onBatch?: (timings: PreparationTimings) => void;
+  /** Read between batches. Batch size cannot exceed the initial allocation. */
+  schedule?: () => { batchSize: number; pauseMilliseconds: number };
+  preview?: LightingPreviewOptions;
+}
+
+export function interactiveSchedule(frameMilliseconds: number, maxBatch: number, minPause: number) {
+  const busy = frameMilliseconds > 24;
+  return preparationSchedule({ batchSize: Math.min(maxBatch, busy ? 128 : 512),
+    pauseMilliseconds: Math.max(minPause, busy ? 32 : 8) });
 }
 
 export function preparationSchedule(options: TransferPreparationOptions = {}) {

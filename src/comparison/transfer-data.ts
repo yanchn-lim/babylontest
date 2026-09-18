@@ -43,7 +43,7 @@ export async function transferFingerprint(data: SceneData) {
     JSON.stringify(data) + transferSourceFor(data).replace(/\r\n/g, '\n') + `|atlas=${data.lightingLayout ? `${layout.width}x${layout.height}|layout=v2` : TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1${data.sampleRepair ? "|sample-repair-v1" : ""}`)));
 }
 
-export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
+export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData, yieldWork?: () => Promise<void>) {
   const layout = transferLayout(data), n = layout.pixels;
   if (bytes.byteLength < 64 + (n + 1) * 4 + n * 16) throw Error('Incomplete diffuse transfer data.');
   const header = new Uint32Array(bytes, 0, 8);
@@ -59,6 +59,7 @@ export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
   const entries = new Uint32Array(bytes, 64 + offsets.byteLength + visibility.byteLength, header[4]);
   if (offsets[0] !== 0 || offsets[n] !== entries.length) throw Error('Invalid diffuse transfer offsets.');
   for (let i = 0; i < n; i++) {
+    if (yieldWork && i % 2048 === 0) await yieldWork();
     if (offsets[i] > offsets[i + 1] || offsets[i + 1] > entries.length) throw Error('Invalid diffuse transfer row.');
     let hits = 0;
     for (let j = offsets[i]; j < offsets[i + 1]; j++) {

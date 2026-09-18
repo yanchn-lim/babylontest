@@ -6,6 +6,7 @@ import type { SceneData } from './main';
 import { activeTransferSource } from './active-transfer';
 import { transferLayout } from './transfer-layout';
 import { TransferHitPacker } from './transfer-packing';
+import { previewSources, StreamingPreview } from './streaming-preview';
 import { fixedLightData, transferBindings, transferFields, transferFingerprint, transferSourceFor,
   TRANSFER_RAYS } from './transfer-data';
 
@@ -40,9 +41,12 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     params.updateFloat4('sky', 0, 0, 0, layout.width);
     params.updateFloat4('dimensions', layout.height, 0, 0, 0);
     data.fixtures.slice(0, 2).forEach((lamp, i) => params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity));
+    data.fixtures.slice(0, 2).forEach((lamp, i) => params.updateFloat4('lampColor' + i, ...lamp.color, 0));
     const names = ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', 'transfer', ...(data.sampleRepair ? ['rayOrigins'] : [])];
     if (data.fixtures.length !== 2) { buffer('fixedLights', fixedLightData(data)); names.push('fixedLights'); }
     if (active) names.push('activeIndices');
+    const preview = options.preview ? new StreamingPreview(data,
+      await previewSources(data, engine, params, allocations, options.preview, signal), options.preview.state.sky) : undefined;
     const shader = new ComputeShader('Prepare diffuse transfer', engine, { computeSource: active ? activeTransferSource(data) : transferSourceFor(data) }, {
       entryPoint: active ? 'prepareActiveTransfer' : 'prepareTransfer',
       bindingsMapping: Object.fromEntries(names.map(name => [name, { group: 0, binding: transferBindings.indexOf(name) }])),
@@ -57,10 +61,12 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     const backfaces = new Uint16Array(n);
     const packer = new TransferHitPacker(n, layout.bits), packed = new Uint32Array(batch * TRANSFER_RAYS);
     let entryCount = 0, representedHits = 0, activeSurfaces = 0, nextOffset = 0;
-    for (let start = 0; start < workCount; start += batch) {
+    for (let start = 0; start < workCount;) {
       signal?.throwIfAborted();
+      const next = options.schedule ? preparationSchedule(options.schedule()) : { batchSize: batch, pauseMilliseconds };
+      if (next.batchSize > batch) throw Error('Scheduled batch exceeds the allocated batch size.');
       const batchStarted = performance.now();
-      const count = Math.min(batch, workCount - start);
+      const count = Math.min(next.batchSize, workCount - start);
       params.updateFloat4('update', start, count, 0, 0); params.update();
       while (!shader.dispatch(active ? count : Math.ceil(count / 64))) {
         signal?.throwIfAborted();
@@ -82,6 +88,7 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
         if (mesh.surfaces[index * 12 + 3] === 0) continue;
         activeSurfaces++;
         const count = packer.pack(hits, row * TRANSFER_RAYS, packed, packedCount);
+        preview?.add(index, packed, packedCount, count, packer.representedHits);
         packedCount += count; entryCount += count;
         backfaces[index] = packer.backfaces; representedHits += packer.representedHits;
         if (entryCount > 0xffffffff) throw Error('Diffuse transfer exceeds the cache address range.');
@@ -93,9 +100,11 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
       timings.elapsedMilliseconds = performance.now() - started;
       options.onBatch?.({ ...timings });
       signal?.throwIfAborted(); progress((start + count) / workCount);
-      if (pauseMilliseconds && start + count < workCount) {
+      start += count;
+      if (preview) await preview.flush(allocations.surfaceLight, start / workCount, options.preview!.onChunk, signal);
+      if (next.pauseMilliseconds && start < workCount) {
         const pauseStarted = performance.now();
-        await pausePreparation(pauseMilliseconds, signal);
+        await pausePreparation(next.pauseMilliseconds, signal);
         timings.pauseMilliseconds += performance.now() - pauseStarted;
       }
     }

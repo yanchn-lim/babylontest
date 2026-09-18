@@ -2,8 +2,9 @@ import type { SceneData } from '../comparison/main';
 import type { PreparationTimings } from '../comparison/preparation-schedule';
 import type { Placement } from './fixture';
 import type { Layout } from './furnishings';
+import type { LightingPreviewChunk, LightingPreviewState } from '../comparison/streaming-preview';
 
-export interface RunSettings { layout: Layout; placement: Placement; batchSize: number; pauseMilliseconds: number; trial: boolean; strategy: 'active' | 'reference' }
+export interface RunSettings { layout: Layout; placement: Placement; batchSize: number; pauseMilliseconds: number; trial: boolean; strategy: 'active' | 'reference'; interactive: boolean; streaming: boolean }
 export interface RunReport extends RunSettings {
   outcome: 'complete' | 'trial' | 'cancelled' | 'failed';
   error?: string;
@@ -21,9 +22,13 @@ export interface RunReport extends RunSettings {
   bytes?: number;
   warm: boolean;
 }
-export type WorkerRequest = { type: 'cancel' } | { type: 'run'; id: number; base: string; settings: RunSettings };
+export type WorkerRequest = { type: 'cancel'; id: number } | { type: 'budget'; id: number; frameMilliseconds: number }
+  | { type: 'stream-ack'; id: number; sequence: number }
+  | { type: 'run'; id: number; base: string; settings: RunSettings };
 export type WorkerReply = { type: 'progress'; id: number; stage: string; fraction: number; timings?: PreparationTimings }
-  | { type: 'result'; id: number; report: RunReport; atlas?: number[][]; sceneData?: SceneData; gzip?: Uint8Array }
+  | { type: 'stream-start'; id: number; atlas: number[][]; sceneData: SceneData; lighting: LightingPreviewState }
+  | ({ type: 'stream-chunk'; id: number } & LightingPreviewChunk)
+  | { type: 'result'; id: number; report: RunReport; atlas?: number[][]; sceneData?: SceneData; transferBytes?: ArrayBuffer }
   | { type: 'error'; id: number; message: string };
 
 export function compareResult(report: RunReport, references: Map<string, string>) {

@@ -205,3 +205,10 @@ for bounds, timing definitions and controlled comparisons.
   bounces and day/night updates, including repaired rows and rectangular atlases.
 - Run TypeScript and the production build. Existing fixed viewers and prepared
   assets do not need to be regenerated to add this interface.
+
+## Live display without a completed cache
+
+For geometry-first viewing and revision-safe lighting installation, see
+[live lighting integration](live-lighting-integration.md). Preparation still
+returns a complete matching result. The new viewer can show direct lighting
+while that result is built, then install raw transfer bytes without a reload.

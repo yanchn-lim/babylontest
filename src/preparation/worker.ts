@@ -1,9 +1,10 @@
 import { Scene, WebGPUEngine } from '@babylonjs/core';
 import { LightingAtlasCache, prepareLightingScene } from '../apartment/prepare-lighting-scene';
 import { decodeTransfer, transferFingerprint } from '../comparison/transfer-data';
-import type { PreparationTimings } from '../comparison/preparation-schedule';
+import { interactiveSchedule, type PreparationTimings } from '../comparison/preparation-schedule';
 import type { LightingLayout } from '../comparison/transfer-layout';
 import { loadFixture } from './fixture';
+import { lighting } from '../comparison/lighting';
 import type { RunReport, WorkerRequest, WorkerReply } from './protocol';
 
 let engine: WebGPUEngine | undefined, scene: Scene | undefined;
@@ -12,11 +13,19 @@ let previousLayout: LightingLayout | undefined;
 const atlasCache = new LightingAtlasCache();
 const send = (message: WorkerReply) => self.postMessage(message);
 const hex = (bytes: Uint8Array) => Array.from(bytes, v => v.toString(16).padStart(2, '0')).join('');
+let activeId = -1, frameMilliseconds = 16;
+let acknowledgement: { sequence: number; resolve: () => void } | undefined;
 
 self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
-  if (data.type === 'cancel') { controller?.abort(); return; }
+  if (data.type === 'stream-ack') {
+    if (data.id === activeId && data.sequence === acknowledgement?.sequence) acknowledgement.resolve();
+    return;
+  }
+  if (data.type === 'cancel') { if (data.id === activeId) controller?.abort(); return; }
+  if (data.type === 'budget') { if (data.id === activeId && Number.isFinite(data.frameMilliseconds)) frameMilliseconds = data.frameMilliseconds; return; }
   if (controller) { send({ type: 'error', id: data.id, message: 'A preparation job is already running.' }); return; }
   const { id, settings, base } = data, started = performance.now(), warm = !!fixture;
+  activeId = id; frameMilliseconds = 16;
   const abort = new AbortController(); controller = abort;
   let stage = 'Loading', phaseStart = started, trialFinished = false, timings: PreparationTimings | undefined;
   const stages: Record<string, number> = {};
@@ -35,9 +44,23 @@ self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
     }
     abort.signal.throwIfAborted();
     const selected = fixture.select(settings.layout, settings.placement); counts = selected.counts;
+    const previewLighting = { state: lighting(9, 'on'), fixtureIntensityScale: .35 };
     const prepared = await prepareLightingScene({ ...selected, previousLayout, atlasCache, engine: engine!, signal: abort.signal,
+      onAtlasReady: settings.streaming && !settings.trial ? (atlas, sceneData) => send({ type: 'stream-start', id, atlas, sceneData, lighting: previewLighting }) : undefined,
       onProgress: (name, fraction) => progress({ scene: 'Materials', atlas: 'Atlas', transfer: 'Transfer' }[name], fraction),
       transferOptions: { strategy: settings.strategy, batchSize: settings.batchSize, pauseMilliseconds: settings.pauseMilliseconds,
+        preview: settings.streaming && !settings.trial ? { ...previewLighting,
+          onChunk: chunk => new Promise<void>((resolve, reject) => {
+            abort.signal.throwIfAborted();
+            const cancel = () => { acknowledgement = undefined; reject(abort.signal.reason); };
+            abort.signal.addEventListener('abort', cancel, { once: true });
+            acknowledgement = { sequence: chunk.sequence, resolve: () => {
+              abort.signal.removeEventListener('abort', cancel); acknowledgement = undefined; resolve();
+            } };
+            self.postMessage({ type: 'stream-chunk', id, ...chunk } satisfies WorkerReply, { transfer: [chunk.pixels.buffer] });
+          }),
+        } : undefined,
+        schedule: settings.interactive ? () => interactiveSchedule(frameMilliseconds, settings.batchSize, settings.pauseMilliseconds) : undefined,
         onBatch(value) {
           timings = value;
           if (settings.trial && value.processedSamples >= 4096) { trialFinished = true; abort.abort(); }
@@ -48,16 +71,14 @@ self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
     await decodeTransfer(prepared.transferBytes.buffer, prepared.sceneData);
     const inputHash = hex(await transferFingerprint(prepared.sceneData));
     const outputHash = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', prepared.transferBytes)));
-    abort.signal.throwIfAborted(); progress('Compression', 0);
-    const gzip = new Uint8Array(await new Response(new Blob([prepared.transferBytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
     abort.signal.throwIfAborted(); stages[stage] = performance.now() - phaseStart;
     previousLayout = prepared.sceneData.lightingLayout;
-    const message: WorkerReply = { type: 'result', id, atlas: prepared.atlas, sceneData: prepared.sceneData, gzip,
+    const message: WorkerReply = { type: 'result', id, atlas: prepared.atlas, sceneData: prepared.sceneData, transferBytes: prepared.transferBytes.buffer as ArrayBuffer,
       report: { ...settings, outcome: 'complete', totalMilliseconds: performance.now() - started, stages, timings,
         inputHash, outputHash, bytes: prepared.transferBytes.byteLength, warm, counts, atlasHeight: prepared.stats.atlas.height,
         atlasBuilds: prepared.stats.atlas.atlasBuilds, atlasCacheHits: prepared.stats.atlas.atlasCacheHits,
         packingAttempts: prepared.stats.atlas.packingAttempts, ignoredTriangles: prepared.stats.atlas.ignoredTriangles } };
-    self.postMessage(message, { transfer: [gzip.buffer] });
+    self.postMessage(message, { transfer: [prepared.transferBytes.buffer] });
   } catch (error) {
     stages[stage] = performance.now() - phaseStart;
     if (abort.signal.aborted) send({ type: 'result', id, report: { ...settings, outcome: trialFinished ? 'trial' : 'cancelled',
@@ -68,5 +89,5 @@ self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
       scene?.dispose(); engine?.dispose(); scene = undefined; engine = undefined; fixture = undefined; previousLayout = undefined;
       atlasCache.clear();
     }
-  } finally { controller = undefined; }
+  } finally { controller = undefined; acknowledgement = undefined; }
 };

@@ -22,7 +22,8 @@ function lightingCharts(mesh: SceneData['meshes'][number]) {
   return parents.map((_, face) => root(face));
 }
 
-export function geometry(data: SceneData, labelCharts = false) {
+function* geometrySteps(data: SceneData, labelCharts: boolean, cooperative: boolean) {
+  let lastYield = performance.now();
   const { pixels, height } = transferLayout(data);
   const rayOrigins = data.sampleRepair ? new Float32Array(pixels * 4) : undefined;
   const sampleFaces = new Int32Array(pixels).fill(-1);
@@ -37,6 +38,9 @@ export function geometry(data: SceneData, labelCharts = false) {
     const charts = labelCharts ? lightingCharts(mesh) : [];
     const position = (i: number) => mesh.positions.slice(i * 3, i * 3 + 3) as Vec3;
     for (let face = 0; face < mesh.indices.length; face += 3) {
+      if (cooperative && face % 192 === 0 && performance.now() - lastYield > 6) {
+        yield; lastYield = performance.now();
+      }
       const ids = mesh.indices.slice(face, face + 3);
       const points = ids.map(position);
       const insetWeights = points.map((p, j) => {
@@ -59,6 +63,9 @@ export function geometry(data: SceneData, labelCharts = false) {
       const lo = [0, 1].map(k => Math.max(0, Math.floor(Math.min(a[k], b[k], c[k]) - 2)));
       const hi = [0, 1].map(k => Math.min((k ? height : SIZE) - 1, Math.ceil(Math.max(a[k], b[k], c[k]) + 2)));
       for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) {
+        if (cooperative && x === lo[0] && y % 8 === 0 && performance.now() - lastYield > 6) {
+          yield; lastYield = performance.now();
+        }
         const u = ((b[1] - c[1]) * (x + .5 - c[0]) + (c[0] - b[0]) * (y + .5 - c[1])) / area;
         const v = ((c[1] - a[1]) * (x + .5 - c[0]) + (a[0] - c[0]) * (y + .5 - c[1])) / area;
         const weights = [u, v, 1 - u - v];
@@ -124,5 +131,20 @@ export function geometry(data: SceneData, labelCharts = false) {
     chartOffset += mesh.indices.length / 3;
   }
   return { surfaces, rayOrigins, sampleFaces, min, max, ...packBvh(buildBvh(triangles)) };
+}
+
+export function geometry(data: SceneData, labelCharts = false) {
+  const steps = geometrySteps(data, labelCharts, false);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+
+/** Same arithmetic and ordering, with scheduling points for an interactive viewer. */
+export async function geometryAsync(data: SceneData, labelCharts: boolean, yieldWork: () => Promise<void>) {
+  const steps = geometrySteps(data, labelCharts, true);
+  let step = steps.next();
+  while (!step.done) { await yieldWork(); step = steps.next(); }
+  return step.value;
 }
 

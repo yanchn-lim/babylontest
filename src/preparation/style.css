@@ -7,8 +7,7 @@ dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9
 dt { color: #98a6ac; } dd { margin: 0; font-variant-numeric: tabular-nums; }
 .note { color: #98a6ac; font-size: 13px; line-height: 1.6; }
 .progress { margin: 20px 0; } progress { width: 100%; height: 8px; accent-color: #38725c; }
-#status { margin: 8px 0; } #paused { position: absolute; inset: 0; background: #18241daa; color: white; place-content: center; text-align: center; }
-#paused:not([hidden]) { display: grid; }
+#status { margin: 8px 0; }
 .history { overflow-x: auto; margin: 16px 0; } table { border-collapse: collapse; width: 100%; font-size: 13px; text-align: left; }
 th, td { padding: 12px 10px; border-bottom: 1px solid #2d393d; white-space: nowrap; }
 button:disabled, select:disabled { opacity: .5; cursor: default; }

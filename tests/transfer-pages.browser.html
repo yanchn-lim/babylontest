@@ -4,11 +4,14 @@
 <p>Compare every output pixel with a single buffer, using small pages to force boundaries. Includes four bounces, repaired rows, high addresses and day/night updates.</p>
 <button id="run">Run GPU checks</button><pre id="result" role="status">Ready</pre><canvas id="canvas" width="16" height="16"></canvas>
 <script type="module">
-import { Scene, WebGPUEngine } from '@babylonjs/core';
+import { Mesh, Scene, WebGPUEngine } from '@babylonjs/core';
 import { prepareTransfer } from '../src/comparison/prepare-transfer';
 import { decodeTransfer, transferFingerprint } from '../src/comparison/transfer-data';
 import { CachedTransfer } from '../src/comparison/cached-transfer';
+import { LiveLighting } from '../src/apartment/live-lighting';
+import { FromHalfFloat, ToHalfFloat } from '@babylonjs/core/Misc/halfFloat';
 import { lighting } from '../src/comparison/lighting';
+import { geometry, geometryAsync } from '../src/comparison/surface-geometry';
 const button=document.getElementById('run'), status=document.getElementById('result');
 button.onclick=async()=>{
   button.disabled=true; let engine,scene;
@@ -24,23 +27,56 @@ button.onclick=async()=>{
         fixtures:Array.from({length:rectangular?7:2},(_,i)=>({position:[i*.1,0,.5],color:[1,.8,.6],intensity:1})),sky:[1,1,1],views:{},sunHours:[],references:[],
         ...(rectangular?{lightingLayout:{version:1,width:256,height:320,allocations:[{id:'panel',x:0,y:256,size:64}]}}:{}),
         ...(repair?{sampleRepair:{mesh:0}}:{})};
+      const syncGeometry=geometry(data,true), asyncGeometry=await geometryAsync(data,true,()=>new Promise(resolve=>setTimeout(resolve,0)));
+      for(const key of Object.keys(syncGeometry)){const a=syncGeometry[key] instanceof ArrayBuffer?new Uint8Array(syncGeometry[key]):syncGeometry[key],b=asyncGeometry[key] instanceof ArrayBuffer?new Uint8Array(asyncGeometry[key]):asyncGeometry[key];if(a===undefined&&b===undefined)continue;if(a.length!==b.length||!a.every((v,i)=>Object.is(v,b[i])))throw Error('Cooperative geometry differs: '+key);}
+      results.push({variant,cooperativeGeometryExact:true});
       status.textContent=variant+': preparing test cache';
       const prepared=await prepareTransfer(data,engine,()=>{},undefined,{strategy:'active',batchSize:256,pauseMilliseconds:8});
       data=prepared.sceneData??data;
+      const streamChunks=[];
+      if(!repair) {
+        let finished=false;
+        const streamed=await prepareTransfer(data,engine,()=>{},undefined,{batchSize:64,preview:{state:lighting(9,'on'),fixtureIntensityScale:.35,
+          onChunk:async chunk=>{
+            if(finished||chunk.sequence!==streamChunks.length+1||chunk.pixels.length>256*64*4)throw Error('Invalid stream ordering or size');
+            if(!chunk.pixels.every(Number.isFinite))throw Error('Non-finite preview');
+            streamChunks.push(chunk);
+          }}});
+        finished=true;
+        if(prepared.bytes.length!==streamed.bytes.length||!prepared.bytes.every((v,i)=>v===streamed.bytes[i]))throw Error('Streaming changed cache bytes');
+        const streamCache=await decodeTransfer(prepared.bytes.buffer,data);
+        for(const chunk of streamChunks)for(let i=0;i<chunk.pixels.length/4;i++) {
+          const sample=chunk.firstRow*256+i;
+          let front=0;for(let j=streamCache.offsets[sample];j<streamCache.offsets[sample+1];j++)front+=streamCache.entries[j]>>>(rectangular?21:16);
+          if(front+streamCache.visibility[sample*4]*1024<256&&chunk.pixels[i*4+3]!==0)throw Error('Invalid sample visible in stream');
+        }
+        if(!streamChunks.some(c=>c.fraction<1&&c.pixels.some((v,i)=>i%4!==3&&v>0)))throw Error('No early provisional lighting');
+        results.push({variant,streamingExactBytes:true,earlyLighting:true,streamUpdates:streamChunks.length});
+      }
       if(repair) {
         const cache=await decodeTransfer(prepared.bytes.buffer,data);
         const occupied=Array.from({length:cache.offsets.length-1},(_,i)=>i).filter(i=>cache.offsets[i+1]>cache.offsets[i]);
         data.sampleRepair.remap[occupied[0]]=occupied.at(-1);
         prepared.bytes.set(await transferFingerprint(data),32);
       }
+      if (rectangular) {
+        let batch=0;
+        const paced=await prepareTransfer(data,engine,()=>{},undefined,{batchSize:256,
+          schedule:()=>({batchSize:++batch%2?64:128,pauseMilliseconds:1})});
+        if(!prepared.bytes.every((v,i)=>v===paced.bytes[i])||prepared.bytes.length!==paced.bytes.length) throw Error('Adaptive preparation changed cache bytes');
+        results.push({adaptiveScheduleExactBytes:true,batches:batch});
+      }
       const gzip=await new Response(new Blob([prepared.bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
       const url=URL.createObjectURL(new Blob([gzip]));
       const single=new CachedTransfer(scene,engine,data,url,1,rectangular,rectangular);
       const paged=new CachedTransfer(scene,engine,data,url,1,rectangular,rectangular,4096);
+      let uploaded=0, largestUpload=0;
+      const raw=new CachedTransfer(scene,engine,data,prepared.bytes.buffer,1,rectangular,rectangular,4096,
+        {uploadChunkBytes:256*1024,onUpload:bytes=>{largestUpload=Math.max(largestUpload,bytes-uploaded);uploaded=bytes;}});
       try {
         for(const hour of [9,21]) {
           status.textContent=variant+': comparing '+hour+':00';
-          for(const transfer of [single,paged]) {
+          for(const transfer of [single,paged,raw]) {
             const revision=transfer.revision; transfer.setLighting(lighting(hour,'on'),data.sky,4);
             const start=performance.now();
             while(transfer.revision===revision) {
@@ -50,16 +86,89 @@ button.onclick=async()=>{
               await new Promise(resolve=>setTimeout(resolve,4));
             }
           }
-          const pixels=await Promise.all([single.texture.readPixels(),paged.texture.readPixels()]);
+          const pixels=await Promise.all([single.texture.readPixels(),paged.texture.readPixels(),raw.texture.readPixels()]);
           const bytes=pixels.map(p=>new Uint8Array(p.buffer,p.byteOffset,p.byteLength));
-          if(bytes[0].length!==bytes[1].length||!bytes[0].every((v,i)=>v===bytes[1][i])) throw Error(variant+': output pixels differ');
+          if(bytes.some(b=>b.length!==bytes[0].length||!b.every((v,i)=>v===bytes[0][i]))) throw Error(variant+': output pixels differ');
           if(!pixels[0].some((v,i)=>i%4!==3&&v>0)) throw Error('No lighting in test output');
           const diagnostics=paged.diagnostics();
           if(diagnostics.transferPages<2||diagnostics.largestTransferPageBytes>4096) throw Error('Test did not exercise multiple bounded pages');
           if(diagnostics.lastUpdateDispatches!==4*(1+diagnostics.transferPages)+1) throw Error('Incomplete page dispatch count');
-          results.push({variant,hour,exactPixels:true,pages:diagnostics.transferPages,largestPageBytes:diagnostics.largestTransferPageBytes});
+          if(largestUpload>256*1024) throw Error('Upload chunk limit exceeded');
+          results.push({variant,hour,rawAndGzipExactPixels:true,largestUpload,exactPixels:true,pages:diagnostics.transferPages,largestPageBytes:diagnostics.largestTransferPageBytes});
         }
-      } finally {single.dispose();paged.dispose();URL.revokeObjectURL(url);}
+        if(rectangular) {
+          const renderMeshes=data.meshes.map((source,i)=>{
+            const mesh=new Mesh('test-'+i,scene);mesh.setVerticesData('position',source.positions);mesh.setVerticesData('normal',source.normals);mesh.setIndices(source.indices);return mesh;
+          });
+          const published=[], live=new LiveLighting(scene,engine,revision=>published.push(revision));
+          const result={revision:1,atlas:data.meshes.map(m=>m.uvs),sceneData:data,transferBytes:prepared.bytes.buffer,lighting:{state:lighting(9,'on'),fixtureIntensityScale:.35}};
+          try {
+            live.setLighting(lighting(9,'on'),data.sky);live.reset(1,renderMeshes);
+            if(live.apply({...result,revision:0})!==false) throw Error('Accepted obsolete revision');
+            let rejected=false;try{live.apply({...result,atlas:[]});}catch{rejected=true;}
+            if(!rejected) throw Error('Accepted mismatched atlas');
+            renderMeshes[0].position.x=1;rejected=false;try{live.apply(result);}catch{rejected=true;}renderMeshes[0].position.x=0;
+            if(!rejected)throw Error('Accepted moved geometry with same vertex count');
+            live.apply(result);live.reset(2,renderMeshes);
+            await new Promise(resolve=>setTimeout(resolve,40));live.tick();
+            if(live.basis.ready||published.length) throw Error('Cancelled upload published');
+            live.apply({...result,revision:2});
+            const start=performance.now();
+            while(!live.basis.ready){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-start>30000)throw Error('Live timeout');await new Promise(resolve=>setTimeout(resolve,4));}
+            if(published.join(',')!=='2'||live.diagnostics().transfer.completedBounces!==4)throw Error('Published wrong revision or incomplete bounces');
+            live.reset(3,renderMeshes);
+            if(live.beginStream({...result,revision:2})!==false)throw Error('Stale stream accepted');
+            live.setLighting(lighting(21,'on'),data.sky);
+            if(live.beginStream({...result,revision:3})!==false)throw Error('Delayed stream accepted old lighting');
+            live.setLighting(lighting(9,'on'),data.sky);
+            if(live.beginStream({...result,revision:3,lighting:{...result.lighting,fixtureIntensityScale:1}})!==false)throw Error('Wrong fixture intensity accepted');
+            if(live.beginStream({...result,revision:3,sceneData:{...data,sky:[0,0,0]}})!==false)throw Error('Wrong sky accepted');
+            live.beginStream({...result,revision:3});live.updateStream({...streamChunks[0],revision:3});
+            if(live.beginStream({...result,revision:3,lighting:{state:lighting(21,'on'),fixtureIntensityScale:.35}})!==false)throw Error('Stale retry accepted');
+            if(live.basis.ready||live.updateStream({...streamChunks[0],sequence:2,revision:3})!==false)throw Error('Rejected retry reused an older stream');
+            live.beginStream({...result,revision:3});
+            for(const chunk of streamChunks)live.updateStream({...chunk,revision:3});
+            if(!live.basis.ready||live.diagnostics().phase!=='streaming')throw Error('Stream is not visible');
+            const streamedTexture=live.basis.texture;
+            const streamedPixels=await streamedTexture.readPixels();
+            const expectedPixels=new Float32Array(streamedPixels.length);
+            for(const chunk of streamChunks)expectedPixels.set(Float32Array.from(chunk.pixels,v=>FromHalfFloat(ToHalfFloat(Math.min(v,65504)))),chunk.firstRow*256*4);
+            if(!streamedPixels.every((v,i)=>v===expectedPixels[i]))throw Error('Stream texture patch differs or overwrote another region');
+            if(!streamedPixels.some((v,i)=>i%4!==3&&v>0))throw Error('Empty streamed GPU texture');
+            if(live.updateStream({...streamChunks[0],revision:3})!==false)throw Error('Duplicate stream accepted');
+            if(live.updateStream({...streamChunks[0],revision:2})!==false)throw Error('Stale stream patch accepted');
+            rejected=false;try{live.updateStream({...streamChunks.at(-1),sequence:streamChunks.length+2,revision:3});}catch{rejected=true;}
+            if(!rejected)throw Error('Missing stream sequence accepted');
+            live.apply({...result,revision:3});
+            if(!live.basis.ready||live.basis.texture!==streamedTexture)throw Error('Provisional lighting lost during installation');
+            if(live.updateStream({...streamChunks.at(-1),sequence:streamChunks.length+1,revision:3})!==false)throw Error('Late patch accepted during final installation');
+            live.setLighting(lighting(21,'on'),data.sky);
+            if(live.basis.ready||live.diagnostics().phase!=='installing')throw Error('Time change cancelled final installation');
+            const streamStart=performance.now();
+            while(live.diagnostics().phase!=='ready'){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-streamStart>30000)throw Error('Stream handover timeout');await new Promise(resolve=>setTimeout(resolve,4));}
+            if(published.join(',')!=='2,3'||live.basis.texture===streamedTexture)throw Error('Final handover failed');
+            live.setLighting(lighting(9,'on'),data.sky);live.reset(4,renderMeshes);live.beginStream({...result,revision:4});live.updateStream({...streamChunks[0],revision:4});live.cancelStream(4);
+            if(live.basis.ready||live.updateStream({...streamChunks[0],revision:4})!==false)throw Error('Cancelled stream remains visible');
+            live.beginStream({...result,revision:4});live.updateStream({...streamChunks[0],revision:4});live.setLighting(lighting(21,'on'),data.sky);
+            if(live.basis.ready||live.updateStream({...streamChunks[0],revision:4})!==false)throw Error('Old time preview remains visible');
+            const mutableState=lighting(9,'on'),mutableSky=[...data.sky];
+            live.setLighting(mutableState,mutableSky);live.beginStream({...result,revision:4});live.updateStream({...streamChunks[0],revision:4});
+            mutableState.direction[0]+=.1;live.setLighting(mutableState,mutableSky);
+            if(live.basis.ready)throw Error('Mutable state hid a lighting change');
+            live.setLighting(lighting(9,'on'),mutableSky);live.beginStream({...result,revision:4});live.updateStream({...streamChunks[0],revision:4});
+            mutableSky[0]+=.1;live.setLighting(lighting(9,'on'),mutableSky);
+            if(live.basis.ready)throw Error('Mutable sky hid a lighting change');
+            results.push({delayedLightingRejected:true,fixtureScaleRejected:true,skyMismatchRejected:true,mutableLightingSafe:true,streamTextureExactPixels:true,timeChangeInvalidatesStream:true,streamedTextureNonzero:true,retainedDuringInstallation:true,lateStreamRejected:true,cancelStream:true});
+            live.reset(5,renderMeshes);
+            const corrupt=prepared.bytes.slice();corrupt[32]^=1;
+            live.apply({...result,revision:5,transferBytes:corrupt.buffer});
+            const failureStart=performance.now();
+            while(!live.diagnostics().error){live.tick();engine.endFrame();if(performance.now()-failureStart>10000)throw Error('Missing fingerprint error');await new Promise(resolve=>setTimeout(resolve,4));}
+            if(live.basis.ready||published.length!==2)throw Error('Invalid cache became visible');
+            results.push({liveRevisionSafety:true,cancelDuringUpload:true,invalidAtlasRejected:true,invalidGeometryRejected:true,invalidCacheKeepsPreview:true,completedBounces:4});
+          } finally {live.dispose();renderMeshes.forEach(m=>m.dispose());}
+        }
+      } finally {single.dispose();paged.dispose();raw.dispose();URL.revokeObjectURL(url);}
     }
     status.textContent='PASS\n'+JSON.stringify(results,null,2);
   } catch(error) {status.textContent='FAIL: '+(error.stack??error);}
