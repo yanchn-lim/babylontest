@@ -1,5 +1,15 @@
 import { packTransferEntry } from './transfer-layout';
 
+/** Extract visibility without allocating an array view for each atlas sample. */
+export function transferVisibility(light: Float32Array) {
+  const visibility = new Float32Array(light.length / 2);
+  for (let source = 4, target = 0; source < light.length; source += 8, target += 4) {
+    visibility[target] = light[source]; visibility[target + 1] = light[source + 1];
+    visibility[target + 2] = light[source + 2]; visibility[target + 3] = light[source + 3];
+  }
+  return visibility;
+}
+
 /** Exact integer weights in first-hit order, with scratch storage reused for every sample. */
 export class TransferHitPacker {
   private counts: Uint16Array;

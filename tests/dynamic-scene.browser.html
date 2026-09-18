@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Dynamic scene lighting checks</title>
+<h1>Dynamic scene lighting checks</h1>
+<button id="run">Run GPU checks</button><pre id="result" role="status">Ready</pre>
+<canvas id="canvas" width="80" height="80"></canvas>
+<div id="move-stick"><span id="stick-thumb"></span></div>
+<script type="module">
+import { ComputeShader, MeshBuilder, PBRMaterial, StorageBuffer, UniformBuffer } from '@babylonjs/core';
+import { createLiveViewer } from '../src/apartment/live-viewer';
+import { prepareTransfer } from '../src/comparison/prepare-transfer';
+import { geometry } from '../src/comparison/surface-geometry';
+import { sceneRayDistance, transferRayDistance } from '../src/comparison/ray-distance';
+import { decodeTransfer, transferSourceFor, transferFields, transferBindings } from '../src/comparison/transfer-data';
+import { previewSources } from '../src/comparison/streaming-preview';
+import { lighting } from '../src/comparison/lighting';
+const button=document.getElementById('run'), status=document.getElementById('result');
+const check=(value,message)=>{if(!value)throw Error(message);};
+const rejects=(run,pattern)=>{try{run();}catch(error){check(pattern.test(String(error)),String(error));return;}throw Error('Expected rejection');};
+button.onclick=async()=>{
+  button.disabled=true; let viewer;
+  const results=[];
+  try {
+    let first;
+    const settings={fixtures:[{position:[0,2,0],color:[1,.5,.2],intensity:4}],sky:[.3,.5,1],
+      views:{living:{position:[0,1,-4],target:[0,0,0],fov:1}}};
+    viewer=await createLiveViewer(document.getElementById('canvas'),async scene=>{
+      first=MeshBuilder.CreateBox('Old apartment',{},scene);first.material=new PBRMaterial('Old walls',scene);
+      return {meshes:[first],settings};
+    });
+    viewer.reset(1,[first]);
+    const oldLight=viewer.scene.getLightByName('Room light'), oldShadow=oldLight.getShadowGenerator();
+    const sun=viewer.scene.getLightByName('Sun'), sunShadow=sun.getShadowGenerator(), camera=viewer.camera.position.asArray();
+    const next=MeshBuilder.CreateBox('New apartment',{},viewer.scene);next.material=new PBRMaterial('New walls',viewer.scene);
+    first.setEnabled(false);
+    const nextSettings={fixtures:[{position:[3,4,5],color:[.2,1,.4],intensity:6},{position:[-2,3,1],color:[1,1,1],intensity:2}],
+      sky:[.1,.2,.3],views:{entry:{position:[2,2,-5],target:[0,0,0],fov:.8}}};
+    viewer.reset(2,[next],nextSettings);
+    const lights=viewer.scene.lights.filter(light=>light!==sun);
+    check(lights.length===2&&!viewer.scene.lights.includes(oldLight),'Old fixtures survived model switch');
+    check(oldShadow.getShadowMap()===null,'Old shadow map retained');
+    check(sun.getShadowGenerator()===sunShadow,'Sun defaults changed');
+    check(lights[0].position.equalsToFloats(3,4,5)&&lights[0].intensity===6*.35,'New fixture settings not applied');
+    check(JSON.stringify(camera)===JSON.stringify(viewer.camera.position.asArray()),'Camera moved during reset');
+    check(viewer.diagnostics().revision===2&&viewer.diagnostics().phase==='preview','Old GI survived');
+    nextSettings.fixtures[0].position[0]=999;nextSettings.sky[0]=999;nextSettings.views.entry.position[0]=999;
+    viewer.resetCamera();check(viewer.camera.position.equalsToFloats(2,2,-5),'Caller mutation changed saved view');
+    rejects(()=>viewer.reset(1,[first],settings),/revisions must increase/);
+    check(viewer.scene.lights.includes(lights[0])&&viewer.diagnostics().revision===2,'Stale reset changed lighting');
+    check(viewer.apply({revision:1})===false&&viewer.beginStream({revision:1})===false,'Stale lighting accepted');
+    const expected={fixtures:[{position:[3,4,5],color:[.2,1,.4],intensity:6},{position:[-2,3,1],color:[1,1,1],intensity:2}],sky:[.1,.2,.3]};
+    rejects(()=>viewer.apply({revision:2,sceneData:{...expected,sky:[1,1,1]}}),/sky does not match/);
+    rejects(()=>viewer.apply({revision:2,sceneData:{...expected,fixtures:settings.fixtures}}),/fixtures do not match/);
+    rejects(()=>viewer.apply({revision:2,sceneData:expected,atlas:[]}),/atlas does not match/);
+    check(viewer.beginStream({revision:2,sceneData:{...expected,sky:[1,1,1]},lighting:{state:lighting(9,'on'),fixtureIntensityScale:.35}})===false,'Mismatched stream sky accepted');
+    viewer.reset(3,[next]);check(viewer.scene.lights.includes(lights[0]),'Furniture update replaced fixtures');
+    check(sunShadow.getShadowMap().renderList.length===1&&sunShadow.getShadowMap().renderList[0]===next,'Old shadow casters retained');
+    results.push({modelSwitch:true,settingsCopied:true,staleResultsRejected:true,furnitureResetCompatible:true});
+    viewer.pause(true);
+
+    // The receiving plane faces an opaque blocker 40 metres away.
+    const meshes=[0,1].map(i=>{const r=i?100:1,z=i?40:0,u=i?48:16;return {material:0,
+      positions:[-r,-r,z,r,-r,z,r,r,z,-r,r,z],normals:Array(4).fill([0,0,i?-1:1]).flat(),
+      indices:i?[0,2,1,0,3,2]:[0,1,2,0,2,3],uvs:[u,16,u+8,16,u+8,24,u,24].map(v=>v/256)};});
+    const base={meshes,materials:[{name:'white',color:[1,1,1],roughness:1}],
+      fixtures:Array.from({length:2},()=>({position:[0,0,1],color:[1,1,1],intensity:0})),sky:[0,0,0],views:{},sunHours:[],references:[]};
+    const receiver=20*256+20, measured=[];
+    for(const dynamic of [false,true]) {
+      status.textContent=JSON.stringify(results,null,2)+'\nTesting '+(dynamic?'scene bounds':'legacy range');
+      const data={...base,...(dynamic?{rayDistance:sceneRayDistance(base)}:{})};
+      const prepared=await prepareTransfer(data,viewer.engine,()=>{},undefined,{batchSize:256,pauseMilliseconds:0});
+      const decoded=await decodeTransfer(prepared.bytes.buffer,data);
+      if(dynamic){
+        const refined=await prepareTransfer(data,viewer.engine,()=>{},undefined,{batchSize:64,pauseMilliseconds:0,
+          preview:{state:lighting(9,'off'),fixtureIntensityScale:.35,progressive:true,onChunk:async()=>{},onCheckpoint:async()=>{}}});
+        check(prepared.bytes.length===refined.bytes.length&&prepared.bytes.every((v,i)=>v===refined.bytes[i]),'Dynamic progressive cache differs');
+      }
+      const raw=geometry(data), buffers={}, params=new UniformBuffer(viewer.engine);
+      transferFields.forEach(name=>params.addUniform(name,4));params.create();
+      params.updateFloat4('sky',0,0,0,256);params.updateFloat4('dimensions',256,0,0,0);
+      params.updateFloat4('origin',0,0,0,transferRayDistance(data));
+      for(const name of ['nodes','triangles','surfaces','surfaceLight']){
+        const value=name==='surfaceLight'?256*256*32:raw[name];
+        buffers[name]=new StorageBuffer(viewer.engine,typeof value==='number'?value:value.byteLength);
+        if(typeof value!=='number')buffers[name].update(value);
+      }
+      try{
+        const state={...lighting(9,'off'),direction:[0,0,1],sun:1,color:[1,1,1]};
+        const preview=await previewSources(data,viewer.engine,params,buffers,{state,fixtureIntensityScale:0,onChunk:async()=>{}});
+        const names=['nodes','triangles','surfaces','params','surfaceLight'];
+        const shader=new ComputeShader('Final sun range check',viewer.engine,{computeSource:transferSourceFor(data)},
+          {entryPoint:'shade',bindingsMapping:Object.fromEntries(names.map(name=>[name,{group:0,binding:transferBindings.indexOf(name)}]))});
+        for(const name of names)if(name==='params')shader.setUniformBuffer(name,params);else shader.setStorageBuffer(name,buffers[name]);
+        let error='';shader.onError=(_,message)=>{error=message;};
+        params.updateFloat4('update',0,256*256,0,0);params.update();
+        const start=performance.now();
+        while(!shader.dispatch(1024)){if(error||performance.now()-start>15000)throw Error(error||'Shader timeout');await new Promise(resolve=>setTimeout(resolve,10));}
+        const read=await buffers.surfaceLight.read(0,undefined,undefined,true), final=new Float32Array(read.buffer,read.byteOffset,read.byteLength/4);
+        measured.push({dynamic,distance:transferRayDistance(data),sky:decoded.visibility[receiver*4],previewSun:preview[receiver*8],finalSun:final[receiver*8]});
+      }finally{params.dispose();Object.values(buffers).forEach(buffer=>buffer.dispose());}
+    }
+    check(measured[0].sky===1&&measured[1].sky<.25,'Far blocker was missed by sky rays');
+    check(measured[0].previewSun>.3&&measured[1].previewSun===0,'Streaming sun rays missed far blocker');
+    check(measured[0].finalSun>.3&&measured[1].finalSun===0,'Final sun rays missed far blocker');
+    results.push({farBlocker:measured,progressiveExact:true});
+    status.textContent='PASS\n'+JSON.stringify(results,null,2);
+  }catch(error){status.textContent='FAIL\n'+(error.stack||error)+'\n'+JSON.stringify(results,null,2);}
+  finally{viewer?.dispose();button.disabled=false;}
+};
+</script></html>

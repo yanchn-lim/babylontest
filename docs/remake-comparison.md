@@ -5,8 +5,8 @@ viewers. See [the current graphics policy](../PROJECT_GOALS.md#shared-graphics-d
 The original viewer is retired; `/` opens the current apartment.
 
 `/comparison.html` uses cached dense diffuse lighting with four indirect bounces.
-Select Room, KLIPPAN or ÄPPLARYD. The original apartment viewer at `/` and the
-remake apartment at `/apartment.html` remain separate.
+Select Room, KLIPPAN or ÄPPLARYD. The apartment study is at `/apartment.html`;
+the root route redirects there.
 
 ## Controls
 
@@ -21,7 +21,7 @@ The renderer and bounce count are fixed. Old radiance-cascade, metallic-factor,
 mesh-density, offset and mirror diagnostic choices have been removed. Earlier
 versions remain in the existing Git checkpoint tags.
 
-The room uses local reflections. Furniture retains the diffuse study settings.
+All comparison scenes use local reflections and the shared graphics defaults.
 Room lighting falls back to baked maps on WebGL or when the transfer cache fails.
 Furniture has no baked/reference lighting and reports direct-only fallback.
 
@@ -30,7 +30,8 @@ Furniture has no baked/reference lighting and reports direct-only fallback.
 Offline preparation traces 1,024 fixed cosine-weighted rays per sample in a
 256-by-256 surface atlas. Repeated target hits become integer weights. Cached
 visibility supplies sky and fixed lamps; current sun visibility is traced live.
-Four bounces use eight compute dispatches. Walking reuses the finished texture.
+Four bounces and the final diffuse filter use nine compute dispatches for a
+single cache page. Walking reuses the finished texture.
 This is cached surface diffuse transfer, not radiance cascades or path tracing.
 
 `surface-geometry.ts` prepares samples and the BVH. `cached-transfer.ts` runs the

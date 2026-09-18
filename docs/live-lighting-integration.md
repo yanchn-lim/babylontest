@@ -41,6 +41,14 @@ and triangle counts increase; the atlas cache retains the completed unwrap.
   disabling and disposing obsolete geometry. Pass source meshes in the same
   import order used by the isolated preparation scene. Do not pass reflection
   partition output as if it were the original source meshes.
+- `viewer.reset(revision, meshes, settings)`: switch apartment inputs without
+  recreating the viewer. Pass the new `fixtures`, `sky` and `views` used for
+  preparation. This copies the settings, replaces room lights and their shadow
+  maps, clears old GI and updates shadow casters. It keeps the camera position;
+  `resetCamera()` then uses the new saved views. Cancel the old preparation job
+  and increase the revision before accepting new work. Old results are rejected.
+  The host still owns removing old geometry. The two-argument reset retains the
+  current settings for ordinary furniture edits.
 - `viewer.beginStream({ revision, atlas, sceneData, lighting, checkpoints? })`: validate the matching
   geometry and install its atlas with an empty provisional texture. Call after
   `prepareLightingScene.onAtlasReady`; it does not wait for ray preparation.
@@ -61,7 +69,7 @@ and triangle counts increase; the atlas cache retains the completed unwrap.
 - `viewer.apply({ revision, atlas, sceneData, transferBytes })`: accepts a complete
   result, with raw `ArrayBuffer` bytes. Returns false for an obsolete revision.
   Synchronous input errors throw. Atlas coordinates, vertex counts, world-space
-  positions and fixture settings are checked; cache decoding verifies the scene
+  positions, fixture settings and sky are checked; cache decoding verifies the scene
   and shader fingerprint. The host must advance revisions for material, topology,
   transform and other preparation-input changes, even when vertex counts match.
 - `viewer.diagnostics()`: scene revision, phase (`preview`, `streaming`, `refining`, `installing`,
@@ -75,8 +83,8 @@ and triangle counts increase; the atlas cache retains the completed unwrap.
 
 The viewer uses the apartment's 0.35 fixture-intensity scale, received diffuse
 material response, four bounces and filtered final GI. This prototype fixes time
-to 09:00 with fixtures on, matching the preparation lab. It does not include the
-stock apartment's time/settings UI, bloom or reflection probes. It is not a drop-in
+to 09:00 with fixtures on, matching the preparation lab. It includes shared bloom
+and reflection probes, but not the stock apartment's time/settings UI. It is not a drop-in
 visual replacement for `src/apartment/main.ts`. Keep the authored baseline path
 and existing WebGL fallback. Port the live lifecycle to the production apartment
 entry, including its existing controls and reflection mesh mapping, before
@@ -333,7 +341,9 @@ acknowledgeCheckpoint(jobId, rays);
 
 The lab protocol uses `checkpoint` and `checkpoint-ack` messages. The worker
 waits until the four-bounce image is published before starting the next pass.
-Keep rendering while awaiting the promise; `LiveLighting.tick()` advances it.
+`LiveLighting` advances the GPU stages independently of rendered frames. Awaiting
+the promise does not require calls to `tick()` or a running render loop. Keep
+rendering to display the published image and support navigation.
 An obsolete message may return false; acknowledge it only for its original job,
 or cancel that job. Handle rejection during cancellation without failing the
 newer job. Never send the final result while a checkpoint is still installing.
@@ -408,6 +418,15 @@ Keeping a second export copy adds approximately the full raw cache size to memor
 `CachedTransfer` accepts its original gzip URL, a raw `ArrayBuffer`, or `null`
 for checkpoint preparation. The live component owns the checkpoint lifecycle.
 Its optional final argument controls `uploadChunkBytes` and `onUpload(bytes)`.
+It also accepts `independentUpdates: true` and `onUpdated()`. `LiveLighting`
+enables these internally; editor hosts need no new option or message. Existing
+fixed viewers retain one GPU stage per `tick()`. The independent path submits
+one stage, waits for GPU completion through a four-byte buffer read, then yields
+before the next stage. It does not queue the whole update at once. A completed
+checkpoint swaps textures and resolves its promise after the final GPU stage;
+the final `onReady` callback marks the texture ready for the next rendered frame.
+Cancellation prevents publication after disposal. Browser suspension can still
+pause work, but slow rendering no longer adds one frame of delay per GPU stage.
 The live component uploads at most 4 MiB per write and yields between writes;
 validation, surface rasterization and validity-mask loops also yield. It still
 allocates all final GPU buffers. Chart identification, BVH construction and some

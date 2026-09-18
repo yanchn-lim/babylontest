@@ -25,7 +25,7 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
   configureDisplay(scene);
   let input: LiveViewerInput;
   try { input = await loadScene(scene); } catch (error) { scene.dispose(); engine.dispose(); throw error; }
-  const { settings } = input;
+  let settings = structuredClone(input.settings);
   const camera = new UniversalCamera('Apartment camera', Vector3.Zero(), scene);
   const bloom = createBloom(scene, camera), reflections = new LiveReflections(scene);
   camera.inputs.clear(); camera.inertia = 0; camera.minZ = .05; camera.maxZ = 60;
@@ -72,12 +72,15 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
     shadow.getShadowMap()!.refreshRate = 0; shadows.push(shadow);
   };
   addShadow(sun, 2048);
-  settings.fixtures.forEach(source => {
+  const roomLights: PointLight[] = [];
+  const createRoomLights = () => settings.fixtures.forEach(source => {
     const light = new PointLight('Room light', new Vector3(...source.position), scene);
     light.diffuse = new Color3(...source.color); light.specular.copyFrom(light.diffuse);
     light.intensityMode = Light.INTENSITYMODE_LUMINOUSINTENSITY; light.falloffType = Light.FALLOFF_GLTF;
     light.intensity = source.intensity * .35; light.shadowMinZ = .05; light.shadowMaxZ = 18; addShadow(light, 1024);
+    roomLights.push(light);
   });
+  createRoomLights();
   live.setLighting(state, settings.sky);
   scene.clearColor = new Color4(...settings.sky.map(v => v * state.sky) as [number, number, number], 1);
   let frames = 0;
@@ -97,9 +100,17 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
     reflections.tick(reflectionKey, settings.sky.map(value => value * state.sky));
     scene.render(); frames++;
   };
-  const reset = (revision: number, meshes: Mesh[]) => {
+  const reset = (revision: number, meshes: Mesh[], nextSettings?: LiveViewerInput['settings']) => {
+    const replacement = nextSettings === undefined ? undefined : structuredClone(nextSettings);
     live.reset(revision, meshes);
-    reflections.reset(meshes, settings.reflectionRooms); initialize(meshes);
+    reflections.reset(meshes, (replacement ?? settings).reflectionRooms); initialize(meshes);
+    input = { meshes: [...meshes], settings: replacement ?? settings };
+    if (replacement) {
+      shadows.splice(1).forEach(shadow => shadow.dispose());
+      roomLights.splice(0).forEach(light => light.dispose());
+      settings = replacement; createRoomLights(); live.setLighting(state, settings.sky);
+      scene.clearColor = new Color4(...settings.sky.map(v => v * state.sky) as [number, number, number], 1);
+    }
     for (const shadow of shadows) {
       shadow.getShadowMap()!.renderList = meshes.filter(mesh => !mesh.material!.needAlphaBlending());
       shadow.getShadowMap()!.resetRefreshCounter();
@@ -124,6 +135,7 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
     apply(result: LiveLightingResult) {
       if (result.revision !== live.diagnostics().revision) return false;
       if (JSON.stringify(result.sceneData.fixtures) !== JSON.stringify(settings.fixtures)) throw Error('Lighting fixtures do not match the viewer.');
+      if (JSON.stringify(result.sceneData.sky) !== JSON.stringify(settings.sky)) throw Error('Lighting sky does not match the viewer.');
       return live.apply(result);
     },
     dispose() { window.removeEventListener('resize', resize); engine.stopRenderLoop(render); live.dispose(); reflections.dispose(); bloom.dispose(); scene.dispose(); engine.dispose(); },

@@ -5,6 +5,20 @@ editors that use the cached dense diffuse renderer. It owns atlas generation,
 scene extraction and transfer preparation. Editors must not repack the returned
 atlas or combine its cache with a different model revision.
 
+Shared preparation now records `sceneData.rayDistance` from the world-space
+opaque geometry's bounding-box diagonal, plus a small margin for ray offsets
+and GPU float rounding. Furniture participates in those bounds. Sun and sky
+visibility use this distance in preparation, streaming and final lighting.
+Point-light rays still stop at their light position. Preserve this field when
+serializing the returned scene; it is part of the transfer fingerprint. Rebuild
+shared-preparation caches when adopting this change. Older prepared scenes that
+omit the field retain their original 24-metre limit and cache compatibility.
+
+This does not change camera clipping, direct-light shadow coverage or the fixed
+256×256 architecture allocation. Scene units must remain metres. Atlas growth
+for architecture needs a separate layout change; furniture allocation growth
+continues to work as before.
+
 ```ts
 import { LightingAtlasCache, prepareLightingScene } from './src/apartment/prepare-lighting-scene';
 

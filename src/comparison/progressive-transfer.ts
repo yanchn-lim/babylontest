@@ -8,7 +8,7 @@ const rayOrder = Uint16Array.from({ length: 1024 }, (_, index) => {
 });
 export function progressiveRay(index: number) { return rayOrder[index]; }
 
-type Row = { entries: Uint32Array; firstRays: Uint16Array };
+type Row = { entries: Uint32Array; firstRays: Uint16Array; start?: number; end?: number };
 type Block = Row & { first: number; offsets: Uint32Array };
 
 /** Compact partial rows, consumed in order and released as the next pass advances. */
@@ -33,15 +33,15 @@ export class ProgressiveRows {
     offsets.fill(cursor, next);
     return { offsets, entries };
   }
+  /** Consume the returned range before the next take; no per-row views are allocated. */
   take(index: number): Row | undefined {
     const block = this.blocks[this.cursor];
     if (!block) return;
     const row = index - block.first;
     if (row < 0 || row + 1 >= block.offsets.length) throw Error('Progressive rows must be consumed in order.');
-    const start = block.offsets[row], end = block.offsets[row + 1];
-    const result = { entries: block.entries.subarray(start, end), firstRays: block.firstRays.subarray(start, end) };
+    block.start = block.offsets[row]; block.end = block.offsets[row + 1];
     if (row + 2 === block.offsets.length) this.blocks[this.cursor++] = undefined;
-    return result;
+    return block;
   }
 }
 
@@ -61,7 +61,7 @@ export class ProgressiveHitPacker {
   pack(hits: Uint32Array, start: number, rayStart: number, rayEnd: number,
     output: Uint32Array, firstRays: Uint16Array, offset: number, previous?: Row) {
     let count = 0; this.representedHits = 0;
-    if (previous) for (let i = 0; i < previous.entries.length; i++) {
+    if (previous) for (let i = previous.start ?? 0, end = previous.end ?? previous.entries.length; i < end; i++) {
       const entry = previous.entries[i], target = entry & this.mask, weight = entry >>> this.bits;
       this.targets[count++] = target; this.counts[target] = weight; this.first[target] = previous.firstRays[i];
       this.representedHits += weight;

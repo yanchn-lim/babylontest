@@ -606,3 +606,100 @@ See [the integration requirement](lighting-scene-interface.md#wall-intersections
 
 Verification: 115 local tests, TypeScript and the production build passed.
 The existing xatlas browser-module and large-bundle warnings remain.
+
+## Architecture indexing and CPU packing
+
+Architecture chart generation now uses bounding-box trees to find potential
+shared edges and opaque blockers. The existing geometric tests, tolerances,
+pair order and chart order remain unchanged. Progressive rows now expose ranges
+in their existing buffers, avoiding a row object and two typed-array views per
+sample. Visibility extraction copies four values directly. Packed-entry validation
+retains the same limits without allocating a bits array or calculating a power
+for every entry. The shader, 1,024-ray count, five refinement stages, scheduling,
+atlas layout and cache format are unchanged.
+
+The partitioned apartment produced exactly the same complete chart objects as
+the previous all-pairs algorithm. In a focused Node check, chart generation took
+17.27 s before and 0.41 s after. This measures chart discovery only, not the full
+atlas build. Additional checks compare the old and new algorithms across scales,
+translations, rotations, partial edges and near-touching blockers. The living-room
+light-leak regression still passes.
+
+Local browser measurements used the same 19-piece IKEA fixture, 30-degree sofa
+rotation, active kernel, 512-sample budget, 8 ms pauses, streaming and five-pass
+refinement. Adaptive pacing and automatic preparation were off. All runs used
+296,783 active samples, a 256×2304 atlas and 1,159.3 MiB of raw ray readback.
+
+| Measurement | Before cold | Before warm | After cold 1 | After warm | After cold 2 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Atlas | 28.31 s | 0.37 s | 16.70 s | 0.27 s | 15.87 s |
+| CPU hit packing | 9.91 s | 9.46 s | 5.64 s | 5.61 s | 5.35 s |
+| Preparation total | 71.72 s | 38.40 s | 63.51 s | 68.98 s | 86.79 s |
+| Complete GI visible | 75.20 s | 40.18 s | 79.10 s | 83.52 s | 101.90 s |
+| Final installation | 1.64 s | 1.58 s | 14.04 s | 14.33 s | 13.63 s |
+
+The CPU stages improved, but these runs do **not** establish an end-to-end
+speedup. The later runs had frame gaps near one second and long checkpoint/final
+installation waits. The browser panel was hidden for the first two optimized
+runs; making it visible did not restore normal frame timing in the third run.
+Frame throttling is a suspected cause, not a verified diagnosis. Keep this
+limitation when comparing totals. No tests or builds ran during the timed bakes.
+Cold runs rebuilt 11 allocations and reused nine duplicate furniture shapes;
+warm runs reused all 20 allocations. Cold atlas packing still needed 314 attempts.
+
+Verification: 123 tests, TypeScript and production build passed. GPU regression
+checks retain exact reference cache bytes and final pixels for legacy, repaired,
+rectangular and progressive fixtures, including checkpoints and cancellation.
+The optimized furnished runs matched each other's final cache. Export of their
+reports did not complete in the browser, so their hash was not independently
+compared with the saved furnished baseline. Phone performance is untested.
+
+## Lighting updates independent of render frames
+
+Live checkpoint and final installation previously advanced one GPU stage per
+rendered frame. A two-page, four-bounce filtered update requires 13 stages. With
+frame gaps near one second, this added roughly 13 seconds per update even when
+the GPU work itself was short. The live component now uses an optional paced
+update loop. It submits one stage, waits for GPU completion through a four-byte
+read, yields, and continues. The fixed viewers keep their original `tick()` path.
+No ray count, bounce count, shader, atlas, filter or cache format changed.
+
+The same 19-piece IKEA fixture, rotated 30 degrees, used 512-sample batches and
+8 ms pauses. Streaming and all five refinement passes were enabled; adaptive
+pacing and automatic preparation were disabled. No tests or builds ran during
+these measurements.
+
+| Measurement | Cold | Warm atlas cache |
+| --- | ---: | ---: |
+| Preparation total | 49.81 s | 34.49 s |
+| Complete GI ready | 52.43 s | 35.93 s |
+| Atlas | 14.34 s | 0.21 s |
+| Transfer | 32.87 s | 32.80 s |
+| First provisional lighting | 21.26 s | 4.06 s |
+| First four-bounce checkpoint | 25.13 s | 7.89 s |
+| Final installation | 1.27 s | 1.26 s |
+| Largest preparation frame gap | 558 ms | 592 ms |
+| Largest installation frame gap | 375 ms | 375 ms |
+
+The earlier slow cold run took 101.90 s, including 13.63 s final installation;
+the earlier slow warm run took 83.52 s. Browser frame timing also improved in
+the new runs. This comparison does not isolate the update-loop speedup from
+that timing change. The no-render-loop GPU regression separately proves that
+checkpoint and final publication no longer depend on rendered frames. Ready
+means the GPU texture has completed and the live material can use it; the next
+rendered frame displays it. Main-thread hitches remain, and phone performance
+is untested.
+
+Both new full builds produced SHA-256
+`16f741c701c99fb97ba3343e57c7c64241533728b5507edd27a867b1170ed008`,
+matching the saved furnished baseline before the CPU changes. The lab now shows
+this hash in its measurement panel. The atlas remains 256×2304 with 296,783
+active samples and 158.9 MiB of transfer entries across two pages.
+
+Verification: 123 Node tests, TypeScript and production build passed. The GPU
+suite compared every checkpoint and final pixel at day and night with the
+frame-driven reference. Checkpoint and final installation completed without
+`tick()` or render-loop calls, including the `LiveLighting` integration. Disposal
+during an active GPU update prevented publication. Existing revision,
+cancellation, cache validation and single-final-callback checks passed. Existing
+xatlas browser-module and large-bundle build warnings remain.

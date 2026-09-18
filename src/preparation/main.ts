@@ -56,6 +56,7 @@ function metrics(report: Report) {
   if (report.atlasHeight) values.push(['Lighting atlas', `256 × ${report.atlasHeight}`]);
   if (report.atlasBuilds !== undefined) values.push(['Atlas builds / reused', `${report.atlasBuilds} / ${report.atlasCacheHits}`], ['Packing attempts', String(report.packingAttempts)]);
   if (report.error) values.push(['Failure', report.error]);
+  if (report.outputHash) values.push(['Cache SHA-256', report.outputHash]);
   if (t) values.push(['GPU + readback wait', seconds(t.readbackMilliseconds)], ['CPU hit packing', seconds(t.packingMilliseconds)],
     ['Dispatch / compilation', seconds(t.dispatchMilliseconds)], ['Intentional pauses', seconds(t.pauseMilliseconds)],
     ['Largest batch', seconds(t.maxBatchMilliseconds)], ['Work items processed', t.processedSamples.toLocaleString()], ['Total atlas slots', t.atlasPixels.toLocaleString()],

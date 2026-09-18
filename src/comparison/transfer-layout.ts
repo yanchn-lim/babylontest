@@ -18,6 +18,7 @@ export function transferLayout(data: Pick<SceneData, 'lightingLayout'>) {
 }
 
 export function packTransferEntry(target: number, weight: number, bits: number) {
-  if (![16, 21].includes(bits) || !Number.isInteger(target) || target < 0 || target >= 2 ** bits || !Number.isInteger(weight) || weight < 1 || weight > 1024) throw Error('Invalid diffuse transfer entry.');
+  if ((bits !== 16 && bits !== 21) || !Number.isInteger(target) || target < 0 || target >= (bits === 16 ? 65536 : 2097152)
+    || !Number.isInteger(weight) || weight < 1 || weight > 1024) throw Error('Invalid diffuse transfer entry.');
   return ((weight << bits) | target) >>> 0;
 }

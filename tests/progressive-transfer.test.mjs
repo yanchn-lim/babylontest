@@ -7,6 +7,7 @@ registerHooks({resolve(s,c,n) {
 }});
 const { progressiveRay, ProgressiveHitPacker, ProgressiveRows } = await import('../src/comparison/progressive-transfer.ts');
 const { TransferHitPacker } = await import('../src/comparison/transfer-packing.ts');
+const readRow = row => ({entries:row.entries.slice(row.start ?? 0,row.end),firstRays:row.firstRays.slice(row.start ?? 0,row.end)});
 
 test('progressive passes visit every original ray once with spread-out early coverage', () => {
   const rays = Array.from({length:1024}, (_,i) => progressiveRay(i));
@@ -44,10 +45,10 @@ test('partial rows survive batch boundary changes, including empty rows', () => 
   const rows=new ProgressiveRows();
   rows.add(0,new Uint32Array([0,1,1]),new Uint32Array([7]),new Uint16Array([12]));
   rows.add(2,new Uint32Array([0,2,3]),new Uint32Array([8,9,10]),new Uint16Array([13,14,15]));
-  assert.deepEqual([...rows.take(0).entries],[7]);
-  assert.deepEqual([...rows.take(1).entries],[]);
-  assert.deepEqual([...rows.take(2).firstRays],[13,14]);
-  assert.deepEqual([...rows.take(3).entries],[10]);
+  assert.deepEqual([...readRow(rows.take(0)).entries],[7]);
+  assert.deepEqual([...readRow(rows.take(1)).entries],[]);
+  assert.deepEqual([...readRow(rows.take(2)).firstRays],[13,14]);
+  assert.deepEqual([...readRow(rows.take(3)).entries],[10]);
   assert.equal(rows.take(4),undefined);
 });
 
@@ -60,10 +61,21 @@ test('checkpoint snapshot expands occupied rows without consuming the next pass 
   assert.deepEqual([...snapshot.offsets],[0,0,1,1,1,1,3,3,3]);
   assert.deepEqual([...snapshot.entries],[7,8,9]);
   snapshot.entries[0]=99;
-  assert.deepEqual([...rows.take(0).entries],[7]);
-  assert.deepEqual([...rows.take(1).entries],[]);
-  assert.deepEqual([...rows.take(2).entries],[8,9]);
+  assert.deepEqual([...readRow(rows.take(0)).entries],[7]);
+  assert.deepEqual([...readRow(rows.take(1)).entries],[]);
+  assert.deepEqual([...readRow(rows.take(2)).entries],[8,9]);
   assert.throws(()=>rows.snapshot(new Uint32Array([1,3,5]),8),/consumed/);
+});
+
+test('refinement merges only the previous row range inside a shared block', () => {
+  for (const bits of [16,21]) {
+    const packer=new ProgressiveHitPacker(2**bits,bits), output=new Uint32Array(1024), first=new Uint16Array(1024);
+    const previous={entries:new Uint32Array([0xffffffff,(32<<bits)|5,(96<<bits)|3,0xffffffff]),
+      firstRays:new Uint16Array([0,0,4,0]),start:1,end:3};
+    const count=packer.pack(new Uint32Array(128).fill(3),0,128,256,output,first,0,previous);
+    assert.equal(count,2);assert.equal(packer.representedHits,256);
+    assert.deepEqual([...output.slice(0,count)],[(32<<bits)|5,(224<<bits)|3]);
+  }
 });
 
 test('transient checkpoints reject invalid rays, offsets, energy and visibility', async () => {

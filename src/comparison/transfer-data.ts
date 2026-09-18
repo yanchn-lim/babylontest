@@ -5,6 +5,7 @@ import transferSource from './cached-transfer.wgsl?raw';
 import fixedLightsSource from './transfer-lights.wgsl?raw';
 import { repairShader } from './sample-repair';
 import { transferLayout } from './transfer-layout';
+import { transferRayDistance } from './ray-distance';
 
 export const TRANSFER_SIZE = 256;
 export const TRANSFER_RAYS = 1024;
@@ -31,6 +32,10 @@ export function transferSourceFor(data: SceneData, receivedDiffuse = false) {
   if (data.lightingLayout) shader = shader
     .replaceAll('packed&65535u', 'packed&2097151u').replaceAll('packed>>16u', 'packed>>21u')
     .replace('vec2f(params.sky.w-1.0)', 'vec2f(params.sky.w-1.0,params.dimensions.x-1.0)');
+  if (data.rayDistance !== undefined) {
+    transferRayDistance(data);
+    shader = shader.replaceAll('24.0', 'params.origin.w');
+  }
   return shader;
 }
 

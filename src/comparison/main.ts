@@ -15,6 +15,7 @@ import './style.css';
 
 type Vec3 = [number, number, number];
 export interface SceneData {
+  rayDistance?: number;
   lightingLayout?: import('./transfer-layout').LightingLayout;
   surfaceInset?: number;
   sampleRepair?: { mesh: number; remap?: number[] };

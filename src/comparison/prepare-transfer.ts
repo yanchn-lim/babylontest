@@ -5,7 +5,8 @@ import { geometry } from './surface-geometry';
 import type { SceneData } from './main';
 import { activeTransferSource } from './active-transfer';
 import { transferLayout } from './transfer-layout';
-import { TransferHitPacker } from './transfer-packing';
+import { transferRayDistance } from './ray-distance';
+import { TransferHitPacker, transferVisibility } from './transfer-packing';
 import { ProgressiveHitPacker, ProgressiveRows } from './progressive-transfer';
 import { previewSources, StreamingPreview } from './streaming-preview';
 import { fixedLightData, transferBindings, transferFields, transferFingerprint, transferSourceFor,
@@ -15,6 +16,7 @@ import { fixedLightData, transferBindings, transferFields, transferFingerprint, 
 export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, progress: (fraction: number) => void, signal?: AbortSignal,
   options: TransferPreparationOptions = {}) {
   signal?.throwIfAborted();
+  const rayDistance = transferRayDistance(data);
   const { batchSize: batch, pauseMilliseconds } = preparationSchedule(options);
   const layout = transferLayout(data), n = layout.pixels;
   const active = (options.strategy ?? 'active') === 'active';
@@ -45,6 +47,7 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     transferFields.forEach(name => params.addUniform(name, 4)); params.create();
     params.updateFloat4('sky', 0, 0, 0, layout.width);
     params.updateFloat4('dimensions', layout.height, 0, 0, 0);
+    params.updateFloat4('origin', 0, 0, 0, rayDistance);
     data.fixtures.slice(0, 2).forEach((lamp, i) => params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity));
     data.fixtures.slice(0, 2).forEach((lamp, i) => params.updateFloat4('lampColor' + i, ...lamp.color, 0));
     const names = ['nodes', 'triangles', 'surfaces', 'params', 'surfaceLight', 'transfer', ...(data.sampleRepair ? ['rayOrigins'] : [])];
@@ -164,8 +167,7 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
       if (partial && options.preview?.onCheckpoint) {
         const raw = await allocations.surfaceLight.read(0, undefined, undefined, true);
         const light = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
-        const visibility = new Float32Array(n * 4);
-        for (let i = 0; i < n; i++) visibility.set(light.subarray(i * 8 + 4, i * 8 + 8), i * 4);
+        const visibility = transferVisibility(light);
         signal?.throwIfAborted();
         await options.preview.onCheckpoint({ rays: rayEnd as 64 | 128 | 256 | 512, ...partial.snapshot(indices, n), visibility });
         signal?.throwIfAborted();
@@ -176,8 +178,7 @@ export async function prepareTransfer(data: SceneData, engine: WebGPUEngine, pro
     offsets.fill(entryCount, nextOffset);
     const raw = await allocations.surfaceLight.read(0, undefined, undefined, true);
     const light = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
-    const visibility = new Float32Array(n * 4);
-    for (let i = 0; i < n; i++) visibility.set(light.subarray(i * 8 + 4, i * 8 + 8), i * 4);
+    const visibility = transferVisibility(light);
     if (data.sampleRepair) data = { ...data, sampleRepair: { ...data.sampleRepair,
       remap: repairSamples(data, mesh.surfaces, mesh.sampleFaces, backfaces) } };
     const bytes = new Uint8Array(64 + offsets.byteLength + visibility.byteLength + entryCount * 4);

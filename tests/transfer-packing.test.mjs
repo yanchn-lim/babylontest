@@ -5,8 +5,23 @@ registerHooks({resolve(s,c,n) {
   if (c.parentURL?.includes('/src/') && s.startsWith('.') && !/\.[a-z]+$/.test(s)) return n(s+'.ts',c);
   return n(s,c);
 }});
-const { TransferHitPacker } = await import('../src/comparison/transfer-packing.ts');
+const { TransferHitPacker, transferVisibility } = await import('../src/comparison/transfer-packing.ts');
 const { packTransferEntry } = await import('../src/comparison/transfer-layout.ts');
+
+test('visibility extraction preserves all four channels and ignores radiance', () => {
+  const light=new Float32Array([99,99,99,99,.25,.5,.75,127,88,88,88,88,0,-0,1,255]);
+  assert.deepEqual(transferVisibility(light),new Float32Array([.25,.5,.75,127,0,-0,1,255]));
+  assert.deepEqual(transferVisibility(new Float32Array()),new Float32Array());
+});
+
+test('entry packing retains address and weight limits for both cache formats', () => {
+  for(const bits of [16,21]) {
+    assert.equal(packTransferEntry(2**bits-1,1024,bits),((1024<<bits)|(2**bits-1))>>>0);
+    for(const target of [-1,.5,2**bits,NaN,Infinity])assert.throws(()=>packTransferEntry(target,1,bits));
+    for(const weight of [0,1.5,1025,NaN,Infinity])assert.throws(()=>packTransferEntry(0,weight,bits));
+  }
+  for(const bits of [0,16.5,20,32,NaN])assert.throws(()=>packTransferEntry(0,1,bits));
+});
 
 test('reused typed counters match Map bytes, order and counts over changing rows', () => {
   for (const bits of [16,21]) {

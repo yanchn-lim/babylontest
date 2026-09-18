@@ -5,6 +5,7 @@ import type { TransferPreparationOptions } from '../comparison/preparation-sched
 import { generateLightingPages } from './lighting-pages';
 import type { LightingLayout } from '../comparison/transfer-layout';
 import { prepareScene } from './prepare-scene';
+import { sceneRayDistance } from '../comparison/ray-distance';
 import { lightingIndices } from './lighting-geometry';
 import { LightingAtlasCache, furnitureAtlasGeometry } from './lighting-atlas-cache';
 export { LightingAtlasCache } from './lighting-atlas-cache';
@@ -52,6 +53,7 @@ export async function prepareLightingScene(input: LightingSceneInput) {
   const materials = [...new Set(meshes.map(mesh => mesh.material as PBRMaterial))];
   onProgress('scene', 0);
   const sceneData = await prepareScene(meshes, materials, settings, emptyAtlas);
+  sceneData.rayDistance = sceneRayDistance(sceneData);
   signal?.throwIfAborted(); onProgress('scene', 1);
   const geometry = sceneData.meshes.map(mesh => ({ positions: mesh.positions, normals: mesh.normals,
     transmitting: !!sceneData.materials[mesh.material].transmitting }));

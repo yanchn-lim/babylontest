@@ -107,7 +107,8 @@ export class LiveLighting {
     if (snapshot.checkpoints) {
       this.checkpoints = true;
       this.transfer = new CachedTransfer(this.scene, this.engine, snapshot.sceneData, null, .35, true, true, undefined,
-        { uploadChunkBytes: 4 * 1024 * 1024, onUpload: bytes => { this.uploadedBytes = bytes; } });
+        { uploadChunkBytes: 4 * 1024 * 1024, onUpload: bytes => { this.uploadedBytes = bytes; },
+          independentUpdates: true, onUpdated: () => this.tick() });
       this.transfer.setLighting(this.state!, this.sky, 4);
     }
     return true;
@@ -158,7 +159,8 @@ export class LiveLighting {
     this.finalRequested = true;
     this.meshes.forEach((mesh, i) => mesh.setVerticesData('uv3', atlas[i]));
     this.transfer = new CachedTransfer(this.scene, this.engine, sceneData, transferBytes, .35, true, true, undefined,
-      { uploadChunkBytes: 4 * 1024 * 1024, onUpload: bytes => { this.uploadedBytes = bytes; } });
+      { uploadChunkBytes: 4 * 1024 * 1024, onUpload: bytes => { this.uploadedBytes = bytes; },
+        independentUpdates: true, onUpdated: () => this.tick() });
     this.transfer.setLighting(this.state!, this.sky, 4);
     return true;
   }

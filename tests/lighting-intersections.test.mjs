@@ -5,12 +5,14 @@ import { test } from 'node:test';
 import { Mesh, NullEngine, PBRMaterial, Scene } from '@babylonjs/core';
 
 registerHooks({ resolve(specifier, context, next) {
-  if (context.parentURL?.includes('/src/') && specifier.startsWith('.') && !specifier.endsWith('.ts')) return next(specifier + '.ts', context);
+  if ((context.parentURL?.includes('/src/') || context.parentURL?.includes('/fixtures/')) && specifier.startsWith('.') && !specifier.endsWith('.ts')) return next(specifier + '.ts', context);
   return next(specifier, context);
 } });
 const { partitionLightingArchitecture } = await import('../src/apartment/lighting-intersections.ts');
 const { generateLightingAtlas } = await import('../src/apartment/lighting-atlas.ts');
 const { geometry } = await import('../src/comparison/surface-geometry.ts');
+const { architecturalCharts } = await import('../src/apartment/lighting-charts.ts');
+const { architecturalCharts: referenceCharts } = await import('./fixtures/lighting-charts-reference.ts');
 
 function makeMesh(scene, name, positions, indices, normals) {
   const mesh = new Mesh(name, scene);
@@ -62,6 +64,10 @@ test('apartment corner bilinear samples cannot blend the exterior into the livin
       positions: Array.from(mesh.getVerticesData('position')), normals: Array.from(mesh.getVerticesData('normal')),
       transmitting: !!data.materials[data.meshes[i].material].transmitting,
     }));
+    const before = performance.now(), reference = referenceCharts(inputs, new Set()), referenceMilliseconds = performance.now() - before;
+    const indexedAt = performance.now(), indexed = architecturalCharts(inputs, new Set()), indexedMilliseconds = performance.now() - indexedAt;
+    assert.deepEqual(indexed, reference, 'Chart membership, order and coordinates remain exact.');
+    console.log({ referenceChartMilliseconds:referenceMilliseconds, indexedChartMilliseconds:indexedMilliseconds });
     // Transparent meshes remain indexed and do not enter atlas rasterization.
     const atlas = await generateLightingAtlas(inputs, new Set(), { size:256 });
     data.surfaceInset = .008;

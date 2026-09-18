@@ -1,6 +1,6 @@
 # Project goals
 
-Updated: 2026-09-18
+Updated: 2026-09-19
 
 ## Current focus
 
@@ -105,12 +105,12 @@ At the user's request, the apartment retains its 256×256 GI texture and adds a
 small blur to the final indirect lighting. It checks lighting-region boundaries,
 surface geometry and brightness differences to preserve corners and contact
 shadows. This adds one dispatch per lighting update, with no new GPU buffers.
-Comparison scenes and the original viewer retain their existing behavior.
+All active cached viewers now share this filter under the graphics policy below.
 
 The apartment adds a subtle bloom pass before the existing ACES display transform.
 It uses the user-approved strength 0.5, threshold 0.7, kernel 32 and half-resolution filtering, with
-4× MSAA. Exposure and reflection capture remain unchanged. This applies only to
-normal apartment viewing; offline preparation and comparison scenes are unchanged.
+4× MSAA. Exposure and reflection capture remain unchanged. All active viewers
+now share these display defaults; offline preparation omits camera bloom.
 Live bloom strength, threshold and spread controls let the user tune this effect.
 Reload restores the initial bloom settings.
 
@@ -120,8 +120,8 @@ continues to use the prepared coarse colours. The 256×256 output also masks sam
 with more than 75% back-face hits and normalizes the remaining interpolation
 weights. This targets false dark seams caused by samples behind adjoining walls.
 The cache, bounce count, GPU allocation and nine-dispatch update remain unchanged.
-This display correction applies only to the apartment. Comparison scenes, baked
-fallback, original viewer, and the separate ÄPPLARYD correction are preserved.
+All active cached viewers now share this display correction. Baked fallback
+and the separate ÄPPLARYD sample correction are preserved.
 All-invalid interpolation footprints and other GI errors remain unresolved.
 
 At the user's request, editors can use the shared `prepareLightingScene` interface
@@ -130,6 +130,18 @@ matching dense transfer cache. Preparation keeps native model geometry and
 material UVs unchanged. It requires WebGPU and a static preparation scene; it
 does not add editing UI to the fixed viewers or replace their existing assets.
 See [the shared preparation contract](docs/lighting-scene-interface.md).
+
+The apartment now fades room reflections into the existing hall capture over a
+0.5 m band inside room partition edges. This removes abrupt reflection boundaries
+on continuous surfaces without changing GI or adding captures. The shared hall
+capture is an approximation, including near solid walls; reflection accuracy and
+phone cost remain open.
+
+Probe reflections suppress locally blocked light with 32 fixed GGX visibility
+samples against nearby, verified solid boxes. This began as the comparison
+sphere correction and now applies to all probe receivers under the shared
+graphics policy below. It does not trace the blocker's reflected radiance or
+establish path-traced parity or phone performance.
 
 Comparison scenes use output dithering at intensity 1/255 to reduce dark-gradient
 banding without blurring detail.
@@ -143,12 +155,6 @@ but increases triangle and chart counts; furniture stays unchanged. Existing
 fixed-viewer assets remain unsplit. Rebuild atlas and transfer together for the
 new topology. This changes indirect-light sampling and overall appearance, adds
 cold preparation cost, and does not establish leak-free GI for all geometry.
-
-The apartment now fades room reflections into the existing hall capture over a
-0.5 m band inside room partition edges. This removes abrupt reflection boundaries
-on continuous surfaces without changing GI or adding captures. The shared hall
-capture is an approximation, including near solid walls; reflection accuracy and
-phone cost remain open.
 
 The apartment also enables output dithering at intensity 1/255 in its final
 image-processing pass after bloom. This reduces display colour banding without
@@ -190,17 +196,46 @@ The target is a fully furnished apartment with editing and lighting preparation
 running concurrently. Users should enter 3D quickly. This supersedes the earlier
 assumption that editing finishes before preparation starts.
 
-Inspected [Injaneity Interior](https://github.com/injaneity/interior/tree/9b9eb48e0a44)
-at `9b9eb48e0a44` on 2026-09-18. Its editor debounces edits by 900 ms, cancels
+Shared lighting preparation and its optimizations must support different apartment
+models and changing editor scenes. Derive boundaries and work sizes from geometry,
+without hard-coded room coordinates, mesh indices or furniture counts. Cache reuse
+must validate the inputs relevant to each cached result. Model switches and edits
+must reject stale lighting work. Test different layouts, scales, orientations and
+scene sizes; one apartment benchmark does not establish general support. Keep
+capacity failures explicit rather than assuming every model fits the current
+atlas limits.
+
+Shared preparation now derives the sun/sky tracing distance from each scene's
+opaque geometry bounds, including furniture, and records it in the cache inputs.
+Streaming, refinement and final lighting share that distance. Older prepared
+assets without it retain their 24-metre behavior. The live viewer can replace
+fixtures, sky and saved views through `reset(revision, meshes, settings)` while
+retaining its camera and rejecting old work. Direct-shadow and camera defaults
+remain unchanged at the user's request. Static-mesh and fixture-count limits
+remain out of scope. Architecture still uses one 256×256 region; multiple
+architecture pages at a specified sample density are a proposed next step,
+not an implemented layout change.
+
+Preparation CPU optimization now uses bounding-box trees to limit architecture
+edge and blocker candidates. Exact geometric tests and pair order are retained.
+Progressive packing consumes ranges in existing blocks instead of allocating
+per-row views; visibility extraction uses direct copies, and packed-entry checks
+avoid repeated power calculations. Ray count, refinement stages, atlas layout,
+wall separation, scheduling and cache format remain unchanged. These changes
+must retain exact chart output and final cache bytes in regression checks.
+
+Last inspected [Injaneity Interior](https://github.com/injaneity/interior/tree/2ec2ae09d974076164a8c5fb5d3f82bd00239e2d)
+at `2ec2ae0` on 2026-09-18. Its editor debounces edits by 900 ms, cancels
 obsolete preparation jobs, rejects stale results, and loads completed results
 into a hidden renderer. The initial apartment uses a prepared baseline. Current
 3D entry still waits for the latest revision, lighting, reflections and transition
 warmup. See `src/render-preparation-queue.js`, `walkthrough/app.js` and
 `walkthrough/renderer-entry.js` in that repository.
 
-Interior currently pins renderer `700e160`, before our `d9dd4a9` preparation
-optimizations. Each edited build creates and terminates a worker; the integration
-does not yet pass a persistent atlas cache, furniture groups or previous layout.
+That Interior revision pins renderer `765caa0`, which includes streaming APIs.
+Each edited build creates and terminates a worker. Preparation supplies furniture
+groups and previous layout, but no persistent atlas cache or streaming callbacks.
+The viewer still consumes a complete packaged GLB; live streaming is not connected.
 Future preparation work must support responsive editing, safe cancellation and
 scene snapshots, and fast 3D entry. The local prototype now also tests progressive
 provisional lighting during ray preparation.
@@ -232,8 +267,18 @@ CPU-time-based yields. Pauses, ordered results and bounded cancellation remain;
 checkpoint installation itself still blocks the next pass. The final 1,024-ray
 cache and output remain unchanged.
 This targets earlier whole-scene feedback, not a guaranteed total-time speedup.
-It omits the stock apartment controls, bloom and reflection probes; production
-integration must preserve those paths separately. See
+Live checkpoint and final lighting stages now advance independently of rendered
+frames. Each stage waits for GPU completion and yields before continuing. This
+removes the one-rendered-frame wait per stage, which caused long installations
+when frame gaps approached one second. Existing fixed viewers retain their
+original frame-driven path. The 19-piece IKEA fixture completed locally in
+52.43 s cold and 35.93 s with cached atlas allocations; final installation took
+1.27 s and 1.26 s. Final cache hashes matched the earlier baseline exactly.
+These are local observations with different frame timing from the slow baseline,
+not an isolated percentage-speedup claim or a phone performance guarantee.
+Those timings predate the shared graphics update. The live viewer now includes
+bloom and reflection probes, but omits the stock apartment time/settings controls;
+production integration must preserve those controls. See
 [the integration guide](docs/live-lighting-integration.md).
 The local furnished test retained camera control during preparation and GI
 installation. A repeated build reused all 20 atlas allocations and matched the

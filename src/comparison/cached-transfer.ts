@@ -4,6 +4,7 @@ import {
   type Scene, type WebGPUEngine,
 } from '@babylonjs/core';
 import { transferLayout } from './transfer-layout';
+import { transferRayDistance } from './ray-distance';
 import { pagedTransferSource, splitTransferPages, transferPageOffsets, TRANSFER_PAGE_BYTES, type TransferPage } from './transfer-pages';
 import { geometry, geometryAsync } from './surface-geometry';
 import { validateCheckpoint, type TransferCheckpoint } from './transfer-checkpoint';
@@ -18,6 +19,9 @@ export interface TransferLoadOptions {
   /** Opt-in paced uploads for a live editor. Existing file viewers retain their path. */
   uploadChunkBytes?: number;
   onUpload?: (bytes: number) => void;
+  /** Advance paced GPU stages without waiting for rendered frames. */
+  independentUpdates?: boolean;
+  onUpdated?: () => void;
 }
 
 /** Dense diffuse sampling, with static ray hits combined into exact integer weights. */
@@ -57,11 +61,14 @@ export class CachedTransfer {
   private rejectedSamples = 0;
   private transferPages: (TransferPage & { transfer: StorageBuffer; offsets: StorageBuffer })[] = [];
   private gatherPage = 0;
+  private updateTask?: Promise<void>;
+  private awaitingPublication = false;
 
   constructor(scene: Scene, private engine: WebGPUEngine, private data: SceneData, source: string | ArrayBuffer | null, private fixtureIntensityScale = 1, private blurDiffuse = false, private receivedDiffuse = false, private pageBytes = TRANSFER_PAGE_BYTES, private loadOptions: TransferLoadOptions = {}) {
     const chunk = loadOptions.uploadChunkBytes;
     if (chunk !== undefined && (!Number.isInteger(chunk) || chunk < 4 || chunk % 4)) throw Error('Upload chunk size must be a positive multiple of four.');
     this.layout = transferLayout(data);
+    const rayDistance = transferRayDistance(data);
     this.memoryBytes = this.layout.pixels * 8;
     if (this.layout.height > engine.getCaps().maxTextureSize) throw Error("Lighting atlas exceeds this device texture limit.");
     this.checkpointMode = source === null;
@@ -78,6 +85,7 @@ export class CachedTransfer {
     transferFields.forEach(name => this.params.addUniform(name, 4)); this.params.create();
     this.params.updateFloat4('sky', 0, 0, 0, this.layout.width);
     this.params.updateFloat4('dimensions', this.layout.height, 0, 0, 0);
+    this.params.updateFloat4('origin', 0, 0, 0, rayDistance);
     data.fixtures.slice(0, 2).forEach((lamp, i) => {
       this.params.updateFloat4('lamp' + i, ...lamp.position, lamp.intensity * fixtureIntensityScale);
       this.params.updateFloat4('lampColor' + i, ...lamp.color, 0);
@@ -185,6 +193,8 @@ export class CachedTransfer {
     const cache = await decodeTransfer(bytes, this.data, this.loadOptions.uploadChunkBytes ? () => this.yieldWork() : undefined, this.receivedDiffuse && this.blurDiffuse);
     await this.install(cache, TRANSFER_RAYS);
     this.loading = false;
+    this.scheduleUpdate();
+    if (this.loadOptions.independentUpdates) await this.updateTask;
   }
 
   async updateCheckpoint(checkpoint: TransferCheckpoint) {
@@ -193,7 +203,9 @@ export class CachedTransfer {
     try {
       const cache = await validateCheckpoint(checkpoint, this.data, () => this.yieldWork(), this.receivedDiffuse && this.blurDiffuse);
       await this.install(cache, checkpoint.rays);
-      await new Promise<void>((resolve, reject) => { this.checkpointWait = { resolve, reject }; this.loading = false; });
+      await new Promise<void>((resolve, reject) => {
+        this.checkpointWait = { resolve, reject }; this.loading = false; this.scheduleUpdate();
+      });
     } catch (error) { this.fail(error); throw error; }
     finally { this.operation = false; }
   }
@@ -238,10 +250,36 @@ export class CachedTransfer {
   setLighting(state: ReturnType<typeof lighting>, sky: Vec3, bounces = 4) {
     this.currentLighting = this.pending = { state, sky, bounces: Math.max(1, Math.min(4, Math.round(bounces))) };
     this.dirty = true;
+    this.scheduleUpdate();
   }
 
   tick() {
-    if (this.loading || this.error || !this.dirty || this.disposed) return;
+    if (this.loadOptions.independentUpdates) { this.scheduleUpdate(); return; }
+    if (this.step() && this.awaitingPublication) this.publishUpdate();
+  }
+
+  private scheduleUpdate() {
+    if (!this.loadOptions.independentUpdates || this.updateTask || this.loading || this.error || !this.dirty || this.disposed) return;
+    const task = this.runUpdate(); this.updateTask = task;
+    void task.then(() => {
+      this.updateTask = undefined; this.scheduleUpdate();
+    }, error => { this.updateTask = undefined; this.fail(error); });
+  }
+
+  private async runUpdate() {
+    while (!this.loading && !this.error && this.dirty && !this.disposed) {
+      if (this.step()) {
+        // A four-byte read submits this stage and waits for GPU completion.
+        await this.allocations.surfaceLight.read(0, 4, undefined, true);
+        this.request.signal.throwIfAborted();
+        if (this.awaitingPublication) this.publishUpdate();
+      }
+      if (this.dirty && !this.loading && !this.error && !this.disposed) await this.yieldWork();
+    }
+  }
+
+  private step() {
+    if (this.loading || this.error || !this.dirty || this.disposed) return false;
     if (this.stage === 0 && this.bounce === 0 && this.pending) {
       const { state, sky, bounces } = this.pending;
       this.params.updateFloat4('sun', ...state.direction as Vec3, state.sun);
@@ -261,16 +299,22 @@ export class CachedTransfer {
       this.shaders[name].setStorageBuffer('offsets', page.offsets);
     }
     this.params.update();
-    if (!this.shaders[name].dispatch(Math.ceil(this.layout.pixels / 64))) return;
+    if (!this.shaders[name].dispatch(Math.ceil(this.layout.pixels / 64))) return false;
     if (name === 'gatherTransfer') {
-      if (++this.gatherPage < this.transferPages.length) return;
+      if (++this.gatherPage < this.transferPages.length) return true;
       this.gatherPage = 0;
     }
     if (!filtering) {
-      if (++this.stage < 2) return;
+      if (++this.stage < 2) return true;
       this.stage = 0;
-      if (++this.bounce < this.activeBounces || finalPass) return;
+      if (++this.bounce < this.activeBounces || finalPass) return true;
     }
+    this.awaitingPublication = true;
+    return true;
+  }
+
+  private publishUpdate() {
+    this.awaitingPublication = false;
     this.bounce = 0; this.completedBounces = this.activeBounces;
     this.lastUpdateWallMilliseconds = performance.now() - this.started;
     this.ready = true; this.dirty = !!this.pending; this.revision++;
@@ -279,6 +323,7 @@ export class CachedTransfer {
       for (const name of ['gatherTransfer', 'blurDiffuse', 'publishTransfer']) this.shaders[name]?.setStorageTexture('output', this.targetTexture);
       this.checkpointWait?.resolve(); this.checkpointWait = undefined;
     }
+    if (!this.dirty) this.loadOptions.onUpdated?.();
   }
 
   get status() {

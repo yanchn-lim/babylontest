@@ -41,7 +41,7 @@ fn previewSources(@builtin(global_invocation_id) id:vec3u) {
   let origin=surface.position.xyz+surface.normal.xyz*.004;
   var irradiance=vec3f(0);
   let cosine=max(0.0,dot(surface.normal.xyz,params.sun.xyz));
-  if(params.sun.w>0.0&&cosine>0.0&&trace(origin,params.sun.xyz,24.0).facing==0.0) {
+  if(params.sun.w>0.0&&cosine>0.0&&trace(origin,params.sun.xyz,${data.rayDistance === undefined ? '24.0' : 'params.origin.w'}).facing==0.0) {
     irradiance+=params.sunColor.rgb*params.sun.w*cosine;
   }
   if(params.sunColor.w>.5) {

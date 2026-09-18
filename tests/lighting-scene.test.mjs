@@ -37,6 +37,8 @@ test('one API returns matching triangle-order atlas, transformed geometry and tr
   globalThis.testLightingTransfer = async (data, _engine, progress, signal, options) => {
     assert.equal(data.meshes[0].positions.length, original.indices.length * 3);
     assert.equal(data.meshes[0].uvs.length, original.indices.length * 2);
+    assert.ok(data.rayDistance > Math.sqrt(6), 'Shared preparation derives the scaled box bounds.');
+    assert.ok(data.rayDistance < 3);
     assert.equal(signal, undefined); assert.deepEqual(options, transferOptions); progress(1);
     return { bytes: new Uint8Array([1, 2, 3]), stats: { entries: 3 } };
   };

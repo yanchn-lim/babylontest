@@ -1,4 +1,5 @@
-import { hasLightingArea } from './lighting-geometry';
+// Frozen all-pairs reference for chart membership, order and boundary regression checks.
+import { hasLightingArea } from '../../src/apartment/lighting-geometry';
 
 /** World-space, triangle-order geometry used only for lighting preparation. */
 export interface AtlasGeometry {
@@ -29,49 +30,6 @@ const scale = (a: Point, s: number): Point => [a[0] * s, a[1] * s, a[2] * s];
 const length = (a: Point) => Math.hypot(...a);
 const unit = (a: Point) => scale(a, 1 / length(a));
 
-type Bounds = Face['bounds'];
-interface FaceNode { bounds: Bounds; indices?: number[]; children?: [FaceNode, FaceNode] }
-
-// Broad phase only: retain the exact edge and blocker tests below.
-class FaceIndex {
-  private tree: FaceNode;
-  readonly faces: Face[];
-  constructor(faces: Face[]) {
-    this.faces = faces;
-    const build = (indices: number[]): FaceNode => {
-      const bounds: Bounds = [[Infinity, -Infinity], [Infinity, -Infinity], [Infinity, -Infinity]];
-      for (const i of indices) for (let k = 0; k < 3; k++) {
-        bounds[k][0] = Math.min(bounds[k][0], faces[i].bounds[k][0]);
-        bounds[k][1] = Math.max(bounds[k][1], faces[i].bounds[k][1]);
-      }
-      if (indices.length <= 8) return { bounds, indices };
-      let axis = 0;
-      for (let k = 1; k < 3; k++) if (bounds[k][1] - bounds[k][0] > bounds[axis][1] - bounds[axis][0]) axis = k;
-      indices.sort((a, b) => faces[a].bounds[axis][0] + faces[a].bounds[axis][1]
-        - faces[b].bounds[axis][0] - faces[b].bounds[axis][1]);
-      const middle = indices.length >>> 1;
-      return { bounds, children: [build(indices.slice(0, middle)), build(indices.slice(middle))] };
-    };
-    this.tree = build(faces.map((_, i) => i));
-  }
-  query(bounds: Bounds, before = this.faces.length) {
-    const result: number[] = [];
-    const overlaps = (other: Bounds) => {
-      for (let k = 0; k < 3; k++) {
-        if (bounds[k][0] > other[k][1] + 2e-5 || bounds[k][1] < other[k][0] - 2e-5) return false;
-      }
-      return true;
-    };
-    const visit = (node: FaceNode) => {
-      if (!overlaps(node.bounds)) return;
-      if (node.children) { visit(node.children[0]); visit(node.children[1]); return; }
-      for (const i of node.indices!) if (i < before && overlaps(this.faces[i].bounds)) result.push(i);
-    };
-    visit(this.tree);
-    return result;
-  }
-}
-
 // Includes partial shared edges at T-junctions, as in prepare-apartment-atlas.py.
 function sharedEdge(a: Point[], b: Point[]) {
   for (let i = 0; i < 3; i++) {
@@ -87,10 +45,9 @@ function sharedEdge(a: Point[], b: Point[]) {
   return undefined;
 }
 
-function blocked(edge: Point, normal: Point, blockers: FaceIndex) {
+function blocked(edge: Point, normal: Point, blockers: Face[]) {
   const point = edge.map((v, k) => v + normal[k] * .008) as Point;
-  return blockers.query(point.map(v => [v, v])).some(index => {
-    const face = blockers.faces[index];
+  return blockers.some(face => {
     if (Math.abs(dot(normal, face.normal)) > .9999 || Math.abs(dot(face.normal, point) - face.distance) > 1e-5) return false;
     if (face.bounds.some(([lo, hi], k) => point[k] < lo - 1e-5 || point[k] > hi + 1e-5)) return false;
     // Accept either winding; the receiving normal can oppose the geometric normal.
@@ -118,19 +75,18 @@ export function architecturalCharts(geometry: AtlasGeometry[], furniture: Readon
       const group = groups.get(key) ?? []; group.push(face); groups.set(key, group); blockers.push(face);
     }
   });
-  const charts: LightingChart[] = [], blockerIndex = new FaceIndex(blockers);
+  const charts: LightingChart[] = [];
   for (const faces of groups.values()) {
     signal?.throwIfAborted();
-    const faceIndex = new FaceIndex(faces);
     const parents = faces.map((_, i) => i);
     const root = (index: number) => {
       while (parents[index] !== index) { parents[index] = parents[parents[index]]; index = parents[index]; }
       return index;
     };
-    for (let i = 0; i < faces.length; i++) for (const j of faceIndex.query(faces[i].bounds, i).sort((a, b) => a - b)) {
+    for (let i = 0; i < faces.length; i++) for (let j = 0; j < i; j++) {
       if (root(i) === root(j)) continue;
       const edge = sharedEdge(faces[i].points, faces[j].points);
-      if (edge && !blocked(edge, faces[i].normal, blockerIndex)) parents[root(i)] = root(j);
+      if (edge && !blocked(edge, faces[i].normal, blockers)) parents[root(i)] = root(j);
     }
     const patches = new Map<number, Face[]>();
     faces.forEach((face, i) => { const key = root(i), patch = patches.get(key) ?? []; patch.push(face); patches.set(key, patch); });

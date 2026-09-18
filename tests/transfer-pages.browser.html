@@ -97,11 +97,13 @@ button.onclick=async()=>{
         if(!pipelineAborted)throw Error('Pipeline ignored cancellation');
         results.push({variant,pipelinedExactBytes:true,pipelinedBatches,noDiscardedPreviews:true,noRepeatedPipelineRays:true,pipelineCancellation:true});
         // Independent reference: expand partial integer weights to the fixed 1,024-ray denominator.
-        const early=new CachedTransfer(scene,engine,data,null,1,rectangular,rectangular,4096);
+        let completedUpdates=0, earlyDisposed=false;
+        const early=new CachedTransfer(scene,engine,data,null,1,rectangular,rectangular,4096,
+          {independentUpdates:true,onUpdated:()=>completedUpdates++});
         const pump=async(transfer,promise)=>{
           let done=false,error;promise.then(()=>done=true,e=>{done=true;error=e;});
           const start=performance.now();
-          while(!done){transfer.tick();engine.endFrame();if(transfer.error)throw Error(transfer.error);if(performance.now()-start>30000)throw Error('Checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
+          while(!done){if(transfer!==early){transfer.tick();engine.endFrame();}if(transfer.error)throw Error(transfer.error);if(performance.now()-start>30000)throw Error('Checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
           if(error)throw error;
         };
         const render=async(transfer,hour)=>{
@@ -136,11 +138,16 @@ button.onclick=async()=>{
             finally{reference.dispose();}
           }
           await early.finish(prepared.bytes.buffer);
+          if(early.diagnostics().updating||early.diagnostics().completedBounces!==4)throw Error('Independent final install resolved before GPU completion');
           const final=new CachedTransfer(scene,engine,data,prepared.bytes.buffer,1,rectangular,rectangular,4096);
           try{await render(early,9);await render(final,9);await same(early,final);}finally{final.dispose();}
           if(early.allocations.nodes!==nodes||early.allocations.surfaces!==surfaces)throw Error('Final install recreated geometry');
-          results.push({variant,checkpointExactFullLighting:true,checkpointDayNight:true,staticBuffersReused:true,checkpointFinalExactPixels:true});
-        }finally{early.dispose();}
+          const completed=completedUpdates;
+          early.setLighting(lighting(21,'on'),data.sky,4);early.dispose();earlyDisposed=true;
+          await new Promise(r=>setTimeout(r,40));
+          if(completedUpdates!==completed)throw Error('Disposed GPU update published');
+          results.push({variant,checkpointExactFullLighting:true,checkpointDayNight:true,staticBuffersReused:true,checkpointFinalExactPixels:true,checkpointsWithoutRenderFrames:true,finalGpuCompletion:true,cancelDuringGpuUpdate:true});
+        }finally{if(!earlyDisposed)early.dispose();}
 
       }
       if(repair) {
@@ -204,7 +211,7 @@ button.onclick=async()=>{
             if(live.basis.ready||published.length) throw Error('Cancelled upload published');
             live.apply({...result,revision:2});
             const start=performance.now();
-            while(!live.basis.ready){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-start>30000)throw Error('Live timeout');await new Promise(resolve=>setTimeout(resolve,4));}
+            while(!live.basis.ready){if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-start>30000)throw Error('Live timeout');await new Promise(resolve=>setTimeout(resolve,4));}
             if(published.join(',')!=='2'||live.diagnostics().transfer.completedBounces!==4)throw Error('Published wrong revision or incomplete bounces');
             live.reset(3,renderMeshes);
             if(live.beginStream({...result,revision:2})!==false)throw Error('Stale stream accepted');
@@ -235,7 +242,7 @@ button.onclick=async()=>{
             live.setLighting(lighting(21,'on'),data.sky);
             if(live.basis.ready||live.diagnostics().phase!=='installing')throw Error('Time change cancelled final installation');
             const streamStart=performance.now();
-            while(live.diagnostics().phase!=='ready'){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-streamStart>30000)throw Error('Stream handover timeout');await new Promise(resolve=>setTimeout(resolve,4));}
+            while(live.diagnostics().phase!=='ready'){if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-streamStart>30000)throw Error('Stream handover timeout');await new Promise(resolve=>setTimeout(resolve,4));}
             if(published.join(',')!=='2,3'||live.basis.texture===streamedTexture)throw Error('Final handover failed');
             live.setLighting(lighting(9,'on'),data.sky);live.reset(4,renderMeshes);live.beginStream({...result,revision:4});live.updateStream({...streamChunks[0],revision:4});live.cancelStream(4);
             if(live.basis.ready||live.updateStream({...streamChunks[0],revision:4})!==false)throw Error('Cancelled stream remains visible');
@@ -263,7 +270,7 @@ button.onclick=async()=>{
               const previous=live.basis.texture;let done=false;
               const installing=live.applyCheckpoint({...checkpoint,revision:6}).then(ok=>{if(!ok)throw Error('Checkpoint rejected');done=true;});
               const start=performance.now();
-              while(!done){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-start>30000)throw Error('Live checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
+              while(!done){if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-start>30000)throw Error('Live checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
               await installing;
               if(live.basis.texture===previous||!live.basis.ready||published.length!==2)throw Error('Checkpoint visibility or final callback incorrect');
               if(live.updateStream({...streamChunks[0],revision:6})!==false)throw Error('One-bounce stream replaced full checkpoint');
@@ -272,7 +279,7 @@ button.onclick=async()=>{
             live.apply({...result,revision:6});
             if(live.basis.texture!==previous||!live.basis.ready)throw Error('Final install cleared checkpoint');
             const finalStart=performance.now();
-            while(live.diagnostics().phase!=='ready'){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-finalStart>30000)throw Error('Final checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
+            while(live.diagnostics().phase!=='ready'){if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-finalStart>30000)throw Error('Final checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
             if(published.join(',')!=='2,3,6')throw Error('Final callback was duplicated or missing');
             live.reset(7,renderMeshes);live.beginStream({...result,revision:7,checkpoints:true});
             const cancelled=live.applyCheckpoint({...checkpoints[0],revision:7}).then(()=>false,error=>error.name==='AbortError');
@@ -283,7 +290,7 @@ button.onclick=async()=>{
             const interrupted=live.applyCheckpoint({...checkpoints[0],revision:8}).then(()=>false,error=>error.name==='AbortError');
             live.apply({...result,revision:8});
             if(!await interrupted||!live.diagnostics().error.includes('busy')||published.length!==3)throw Error('Premature final result failed silently');
-            results.push({liveCheckpointsVisible:true,finalCallbackOnce:true,noPreviewRegression:true,checkpointCancellation:true,staleCheckpointRejected:true,prematureFinalReported:true});
+            results.push({liveCheckpointsVisible:true,liveWithoutRenderFrames:true,finalCallbackOnce:true,noPreviewRegression:true,checkpointCancellation:true,staleCheckpointRejected:true,prematureFinalReported:true});
 
           } finally {live.dispose();renderMeshes.forEach(m=>m.dispose());}
         }

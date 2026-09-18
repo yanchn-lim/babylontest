@@ -35,8 +35,8 @@ The apartment keeps its 256×256 GI texture and applies one 3×3 blur after the 
 bounce. The filter stays within connected lighting regions and checks surface
 direction, distance and brightness differences to preserve boundaries. It reuses
 the existing buffers and adds one dispatch per lighting update. It softens sample
-variation but does not repair light leaks. The filter runs only on WebGPU and is
-not applied to the comparison scenes or the original viewer.
+variation but does not repair light leaks. The filter runs only on WebGPU;
+all active cached viewers share it.
 
 The apartment's runtime GI output stores received diffuse light (irradiance / pi),
 before multiplying by the receiving surface's colour. Each propagated bounce
@@ -54,13 +54,14 @@ weight. This prevents mostly embedded samples from darkening visible edges, as
 confirmed at the bedroom ceiling where samples sit behind the adjoining wall.
 Transport remains unchanged. If all four interpolation samples are invalid, the
 result stays dark; this does not repair geometry or guarantee leak-free lighting.
-The mask adds no GPU buffers or dispatches. WebGL retains its baked fallback;
-comparison scenes retain their previous output and sample handling.
+The mask adds no GPU buffers or dispatches. WebGL retains its baked fallback.
+The active cached viewers share received-diffuse material handling; prepared
+geometry and scene-specific sample corrections remain separate inputs.
 
 The apartment adds subtle HDR bloom before ACES tone mapping: strength 0.5,
 threshold 0.7, kernel 32 and half-resolution filtering. The camera retains 4× MSAA.
 Exposure is unchanged. Bloom runs on the camera image, outside reflection capture
-and offline cache preparation. The original viewer and comparison are unchanged.
+and offline cache preparation. All active viewers share these display defaults.
 Phone performance remains untested.
 
 The apartment also enables output dithering at intensity 1/255 in its final
