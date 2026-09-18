@@ -1,0 +1,123 @@
+{
+  "source": "https://github.com/injaneity/interior/blob/9b9eb48e0a44a322abcc55b9deae93637682967c/walkthrough/assets/ikea/catalogue.json",
+  "retrieved": "2026-09-18",
+  "products": [
+    {
+      "article": "80352951",
+      "name": "LACK",
+      "description": "Coffee table",
+      "width": 0.78,
+      "depth": 1.18,
+      "height": 0.45,
+      "triangles": 450,
+      "productUrl": "https://www.ikea.com/sg/en/p/lack-coffee-table-black-brown-80352951/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/80352951-mini.glb",
+      "sha256": "b8179baed311fd596bd7a2dccc3435df4d5970741777844b52b90583931bfdb0",
+      "bytes": 143300
+    },
+    {
+      "article": "80365717",
+      "name": "LISABO",
+      "description": "Table",
+      "width": 0.78,
+      "depth": 1.4,
+      "height": 0.74,
+      "triangles": 448,
+      "productUrl": "https://www.ikea.com/sg/en/p/lisabo-table-ash-veneer-80365717/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/80365717-mini.glb",
+      "sha256": "b852d045f00556b3ab292635ed91e1f9a915a0771d7703ce9c5e8e0920783338",
+      "bytes": 110420
+    },
+    {
+      "article": "10457230",
+      "name": "LISABO",
+      "description": "Chair",
+      "width": 0.46,
+      "depth": 0.51,
+      "height": 0.8,
+      "triangles": 2256,
+      "productUrl": "https://www.ikea.com/sg/en/p/lisabo-chair-black-10457230/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/10457230-mini.glb",
+      "sha256": "6c80a909e3c2b18c797b9d70234b196ad7c8d05a2aa0d69f0a69eee12589901e",
+      "bytes": 322036
+    },
+    {
+      "article": "70571242",
+      "name": "SLATTUM",
+      "description": "Upholstered bed frame",
+      "width": 1.24,
+      "depth": 2.06,
+      "height": 0.85,
+      "triangles": 2988,
+      "productUrl": "https://www.ikea.com/sg/en/p/slattum-upholstered-bed-frame-vissle-dark-grey-70571242/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/70571242-mini.glb",
+      "sha256": "1fab8710a06bceb6b5628926837cff693732389ebe07734cc1f9dbba7ebbccb5",
+      "bytes": 521924
+    },
+    {
+      "article": "10354642",
+      "name": "MALM",
+      "description": "Chest of 2 drawers",
+      "width": 0.402,
+      "depth": 0.482,
+      "height": 0.55,
+      "triangles": 1050,
+      "productUrl": "https://www.ikea.com/sg/en/p/malm-chest-of-2-drawers-white-10354642/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/10354642-mini.glb",
+      "sha256": "a38c1d0537c6e1c7a6fe13c1cdec2e8263aee6cfb1e8e754aafdc5d43a231e53",
+      "bytes": 113868
+    },
+    {
+      "article": "10437237",
+      "name": "KLEPPSTAD",
+      "description": "Wardrobe with 2 doors",
+      "width": 0.794,
+      "depth": 0.55,
+      "height": 1.76,
+      "triangles": 664,
+      "productUrl": "https://www.ikea.com/sg/en/p/kleppstad-wardrobe-with-2-doors-white-10437237/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/10437237-mini.glb",
+      "sha256": "7947165b8f4da95966cf9f41b2561c126d803c5f0c3b1facf7464c0cded82d72",
+      "bytes": 177176
+    },
+    {
+      "article": "79184893",
+      "name": "BESTÅ",
+      "description": "TV bench with drawers",
+      "width": 1.2,
+      "depth": 0.42,
+      "height": 0.48,
+      "triangles": 2174,
+      "productUrl": "https://www.ikea.com/sg/en/p/besta-tv-bench-with-drawers-black-brown-lappviken-stubbarp-black-brown-s79184893/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/79184893-mini.glb",
+      "sha256": "abc5996fad8da290d5565328e6d4399c93fff2eb21d6384c6b94d55aa718d2aa",
+      "bytes": 368956
+    },
+    {
+      "article": "00483263",
+      "name": "VIHALS",
+      "description": "Cabinet with sliding doors",
+      "width": 0.95,
+      "depth": 0.47,
+      "height": 0.9,
+      "triangles": 1782,
+      "productUrl": "https://www.ikea.com/sg/en/p/vihals-cabinet-with-sliding-doors-white-00483263/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/00483263-mini.glb",
+      "sha256": "7e691e74a18462d477f162d93835497a91d014c2a5a38d4a88ac552e3429b0b3",
+      "bytes": 210092
+    },
+    {
+      "article": "19284999",
+      "name": "BESTÅ",
+      "description": "Cabinet unit",
+      "width": 0.6,
+      "depth": 0.4,
+      "height": 2.02,
+      "triangles": 566,
+      "productUrl": "https://www.ikea.com/sg/en/p/besta-cabinet-unit-white-s19284999/",
+      "assetUrl": "https://web-api.ikea.com/sg/en/rotera/static/models/19284999-mini.glb",
+      "sha256": "aa921ea785ce3b9f474fb073152be5a3eb74238b019666e54835a2ed7772ffa1",
+      "bytes": 205444
+    }
+  ]
+}

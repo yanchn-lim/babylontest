@@ -1,5 +1,11 @@
 # Babylon.js apartment lighting lab
 
+The [lighting preparation lab](https://yanchn-lim.github.io/babylontest/preparation.html)
+measures editor rebuilds with the apartment and 19 actual IKEA furniture pieces.
+It includes reusable lighting atlases, active-sample tracing, exact hit packing
+and GPU cache paging. See the [benchmark results](docs/preparation-benchmark.md)
+and [editor integration guide](docs/lighting-scene-interface.md).
+
 An interactive TypeScript and Vite viewer for the Bukit Merah Ridge apartment.
 Built with standard Babylon.js 9.25.0 and a custom FrameGraph renderer.
 

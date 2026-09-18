@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Active transfer GPU checks</title>
+<h1>Active transfer GPU checks</h1>
+<p>Compare full cache bytes on sparse facing surfaces, including high furniture addresses and sample repair.</p>
+<button id="run">Run GPU checks</button><pre id="result" role="status">Ready</pre><canvas id="canvas" width="16" height="16"></canvas>
+<script type="module">
+import { WebGPUEngine } from '@babylonjs/core';
+import { prepareTransfer } from '../src/comparison/prepare-transfer';
+import { decodeTransfer } from '../src/comparison/transfer-data';
+const button=document.getElementById('run'), status=document.getElementById('result');
+button.onclick=async()=>{
+  button.disabled=true; let engine;
+  const results=[];
+  try {
+    engine=new WebGPUEngine(document.getElementById('canvas')); await engine.initAsync();
+    for(const variant of ['legacy-two','repair-two','paged-seven']) {
+      const paged=variant==='paged-seven', repair=variant==='repair-two';
+      const meshes=[0,1].map(i=>({ material:0, positions:[-1,-1,i,1,-1,i,1,1,i,-1,1,i],
+        normals:Array(4).fill([0,0,i?-1:1]).flat(), indices:i?[0,2,1,0,3,2]:[0,1,2,0,2,3],
+        uvs:[16,i?(paged?280:48):16,24,i?(paged?280:48):16,24,i?(paged?288:56):24,16,i?(paged?288:56):24].map(v=>v/256) }));
+      const data={meshes,materials:[{name:'white',color:[.8,.8,.8],roughness:1}],
+        fixtures:Array.from({length:paged?7:2},(_,i)=>({position:[i*.1,0,.5],color:[1,1,1],intensity:1})),sky:[1,1,1],views:{},sunHours:[],references:[],
+        ...(paged?{lightingLayout:{version:1,width:256,height:320,allocations:[{id:'panel',x:0,y:256,size:64}]}}:{}),
+        ...(repair?{sampleRepair:{mesh:0}}:{})};
+      status.textContent=`${variant}: active kernel`;
+      const active=await prepareTransfer(data,engine,()=>{},undefined,{strategy:'active',batchSize:256,pauseMilliseconds:8});
+      status.textContent=`${variant}: reference kernel`;
+      const reference=await prepareTransfer(data,engine,()=>{},undefined,{strategy:'reference',batchSize:4096,pauseMilliseconds:8});
+      if(active.bytes.length!==reference.bytes.length||!active.bytes.every((v,i)=>v===reference.bytes[i])) throw Error(variant+': cache bytes differ');
+      const cache=await decodeTransfer(active.bytes.buffer,active.sceneData??data);
+      if(paged&&!cache.entries.some(v=>(v&2097151)>65535)) throw Error('No high furniture target was traced');
+      if(active.stats.timings.readbackBytes>=reference.stats.timings.readbackBytes) throw Error('Active readback did not shrink');
+      results.push({variant,exactMatch:true,activeSamples:active.stats.activeSurfaces,activeReadback:active.stats.timings.readbackBytes,referenceReadback:reference.stats.timings.readbackBytes});
+    }
+    status.textContent='PASS\n'+JSON.stringify(results,null,2);
+  } catch(error) { status.textContent='FAIL: '+(error.stack??error); }
+  finally { engine?.dispose(); button.disabled=false; }
+};
+</script></html>

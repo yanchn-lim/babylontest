@@ -142,6 +142,59 @@ banding without blurring detail.
 
 ## Device and acceptance
 
+The preparation lab at `/preparation.html` is a controlled optimization scene
+for editor lighting rebuilds. It uses the real apartment and original APPLARYD,
+the shared preparation API and 1,024 rays per active sample.
+Manual short trials and full builds compare batch sizes, pacing, warm worker
+reuse and cache hashes. It does not start preparation on load or placement
+changes. This adds a measurement fixture; it does not establish a speedup or
+change existing viewer quality. See [the lab guide](docs/preparation-benchmark.md).
+
+The next target is a fully furnished apartment after editing has finished.
+Stage one excludes zero-area faces from shared lighting unwrapping and transport
+without changing native meshes. The lab adds the failing sofa rotations, a
+three-detailed-sofa capacity fixture and a mixed 19-piece baseline (one detailed
+sofa plus 18 simple test models). At the user's request, the mixed layout now
+uses original IKEA models from Interior's qualified catalogue. Additional models
+are limited to 3,000 triangles each, with a 36,178-triangle furniture total across
+19 instances including the existing 7,628-triangle sofa. Future furniture
+performance tests should use actual IKEA assets and avoid very high triangle
+counts. The earlier simple-model timings are historical baselines only.
+The actual IKEA chair and cabinet test exposed small valid faces omitted by
+xatlas at metre scale. Furniture unwrap inputs now use millimetres near the
+origin. Native geometry and ray-tracing geometry remain unchanged in metres.
+The real 19-piece IKEA fixture initially exceeded the 128 MiB packed transfer
+buffer limit. Cached transfer now splits complete sample rows across GPU buffers
+of at most 128 MiB. All connections and 1,024-ray weights remain unchanged, and
+each bounce processes every page before the next bounce. The cache file format
+and shared preparation API stay unchanged. This fixture completed in 63.41 s
+on the local desktop and displayed four-bounce GI using two cache pages with
+249.2 MiB of packed entries. Paging removes the single-buffer limit; it does not
+reduce total memory or preparation work. Phone performance remains unverified.
+
+At the user's request, generation now reuses completed architecture and furniture
+unwraps through an optional worker-owned `LightingAtlasCache`. Shared rigid
+placement ancestors are removed only from furniture unwrap inputs; scale,
+reflections and internal part transforms remain. Exact geometry changes invalidate
+reuse. Allocation retries compute charts once, and CPU ray-hit packing uses
+reusable typed counters while preserving entry order and exact weights. Full
+lighting transport still rebuilds after each edit. The same 19-piece IKEA fixture
+completed in 39.55 s cold and 28.52 s repeated on the local desktop, with atlas
+times of 11.85 s and 0.15 s. The repeated cache matched the new cold build exactly.
+Canonical UVs can change newly generated sample layouts, so this does not claim
+byte equality against older world-space unwraps. Existing prepared assets remain
+unchanged. Phone performance and further memory reduction remain open.
+
+The implementation separates the fixed 256×256 architecture region from per-instance
+furniture allocations in a rectangular atlas. Stable instance IDs and a previous
+layout preserve slots. A versioned cache supports the larger sample addresses;
+existing fixed-viewer caches remain compatible. Preparation now traces only
+occupied samples, distributes each sample's rays across GPU lanes, and uses
+larger paced batches in the shared API. Three detailed sofas fit and produce
+identical cache bytes with the reference kernel in the local GPU check. Lighting
+proxies remain unimplemented. Individual allocations and cache memory still have
+limits; this does not establish arbitrary fully furnished or phone performance.
+
 - Primary target: iPhone 14 Pro, Safari on iOS 26 or newer. Support desktop too.
 - Check WebGPU capability and retain the supported WebGL fallback.
 - Stable 30 FPS is a provisional target, not a verified result or agreed hard gate.

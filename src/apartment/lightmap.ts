@@ -14,11 +14,12 @@ export class ApartmentLightmap extends MaterialPluginBase {
   }
   getSamplers(names: string[]) { names.push('diffuseTransfer'); }
   getUniforms(language?: ShaderLanguage) {
-    return { ubo: [{ name: 'transferState', size: 2, type: 'vec2' }],
-      fragment: language === ShaderLanguage.WGSL ? '' : '#ifndef UNIFORMBUFFERS\nuniform vec2 transferState;\n#endif' };
+    return { ubo: [{ name: 'transferState', size: 4, type: 'vec4' }],
+      fragment: language === ShaderLanguage.WGSL ? '' : '#ifndef UNIFORMBUFFERS\nuniform vec4 transferState;\n#endif' };
   }
   bindForSubMesh(buffer: UniformBuffer) {
-    buffer.updateFloat2('transferState', Number(this.state.ready), this.state.sky);
+    const { width, height } = this.state.texture.getSize();
+    buffer.updateFloat4('transferState', Number(this.state.ready), this.state.sky, 1, width / Math.max(1, height));
     buffer.setTexture('diffuseTransfer', this.state.texture);
   }
   getCustomCode(type: string, language?: ShaderLanguage) {
@@ -31,7 +32,7 @@ export class ApartmentLightmap extends MaterialPluginBase {
       CUSTOM_FRAGMENT_BEFORE_FINALCOLORCOMPOSITION: `
         #ifdef LIGHTMAP
         if (${state}.x > 0.5) {
-          lightmapColor = ${wgsl ? 'textureSample(diffuseTransfer, diffuseTransferSampler, fragmentInputs.vMainUV3)' : 'texture2D(diffuseTransfer, vMainUV3)'};
+          lightmapColor = ${wgsl ? 'textureSample(diffuseTransfer, diffuseTransferSampler, fragmentInputs.vMainUV3 * uniforms.transferState.zw)' : 'texture2D(diffuseTransfer, vMainUV3 * transferState.zw)'};
           ${this.receivedDiffuse ? `
           // RGB is premultiplied by sample validity before bilinear filtering.
           lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb / max(lightmapColor.a, 0.0001), 1.0);

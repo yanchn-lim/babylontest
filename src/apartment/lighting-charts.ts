@@ -1,3 +1,5 @@
+import { hasLightingArea } from './lighting-geometry';
+
 /** World-space, triangle-order geometry used only for lighting preparation. */
 export interface AtlasGeometry {
   positions: number[];
@@ -62,7 +64,7 @@ export function architecturalCharts(geometry: AtlasGeometry[], furniture: Readon
     for (let corner = 0; corner < mesh.positions.length / 3; corner += 3) {
       const points = [0, 1, 2].map(j => mesh.positions.slice((corner + j) * 3, (corner + j + 1) * 3) as Point);
       const geometric = cross(subtract(points[1], points[0]), subtract(points[2], points[0]));
-      if (length(geometric) < 1e-10) continue;
+      if (!hasLightingArea(points[0], points[1], points[2])) continue;
       let normal = unit(geometric);
       if (dot(normal, mesh.normals.slice(corner * 3, corner * 3 + 3) as Point) < 0) normal = scale(normal, -1);
       const distance = dot(normal, points[0]);

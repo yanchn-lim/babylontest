@@ -1,18 +1,28 @@
 import { PBRMaterial, type Mesh, type WebGPUEngine } from '@babylonjs/core';
 import type { SceneData } from '../comparison/main';
-import { TRANSFER_SIZE } from '../comparison/transfer-data';
 import { prepareTransfer } from '../comparison/prepare-transfer';
-import { generateLightingAtlas } from './lighting-atlas';
+import type { TransferPreparationOptions } from '../comparison/preparation-schedule';
+import { generateLightingPages } from './lighting-pages';
+import type { LightingLayout } from '../comparison/transfer-layout';
 import { prepareScene } from './prepare-scene';
+import { lightingIndices } from './lighting-geometry';
+import { LightingAtlasCache, furnitureAtlasGeometry } from './lighting-atlas-cache';
+export { LightingAtlasCache } from './lighting-atlas-cache';
 
 export interface LightingSceneInput {
   /** Stable preparation meshes, in the same order used when loading the model. */
   meshes: Mesh[];
   /** Explicit ownership; the renderer does not depend on editor metadata. */
   furnitureMeshes: ReadonlySet<Mesh>;
+  /** Stable instance IDs; each group owns a separate lighting allocation. */
+  furnitureGroups?: ReadonlyMap<string, ReadonlySet<Mesh>>;
+  previousLayout?: LightingLayout;
+  /** Retain in the preparation worker to reuse completed unwraps between builds. */
+  atlasCache?: LightingAtlasCache;
   settings: Pick<SceneData, 'fixtures' | 'views' | 'sky'>;
   engine: WebGPUEngine;
   signal?: AbortSignal;
+  transferOptions?: TransferPreparationOptions;
   onProgress?: (stage: 'scene' | 'atlas' | 'transfer', fraction: number) => void;
 }
 
@@ -43,13 +53,36 @@ export async function prepareLightingScene(input: LightingSceneInput) {
   signal?.throwIfAborted(); onProgress('scene', 1);
   const geometry = sceneData.meshes.map(mesh => ({ positions: mesh.positions, normals: mesh.normals,
     transmitting: !!sceneData.materials[mesh.material].transmitting }));
-  const furniture = new Set(meshes.flatMap((mesh, i) => furnitureMeshes.has(mesh) ? [i] : []));
-  const { atlas, stats: atlasStats } = await generateLightingAtlas(geometry, furniture, {
-    size: TRANSFER_SIZE, signal, onProgress: fraction => onProgress('atlas', fraction),
+  const groups = new Map<string, number[]>();
+  if (input.furnitureGroups) {
+    const assigned = new Set<Mesh>();
+    for (const [id, members] of input.furnitureGroups) {
+      for (const mesh of members) {
+        if (!furnitureMeshes.has(mesh) || assigned.has(mesh)) throw Error('Invalid furniture allocation ownership.');
+        assigned.add(mesh);
+      }
+      groups.set(id, [...members].map(mesh => meshes.indexOf(mesh)));
+    }
+    if (assigned.size !== furnitureMeshes.size) throw Error('Furniture allocation groups must cover every furniture mesh.');
+  } else {
+    meshes.forEach((mesh, i) => { if (furnitureMeshes.has(mesh)) groups.set('mesh-' + i, [i]); });
+  }
+  onProgress('atlas', 0);
+  const furnitureGeometry = new Map([...groups].map(([id, indices]) => [id,
+    furnitureAtlasGeometry(indices.map(i => meshes[i]), indices.map(i => geometry[i]))]));
+  const { atlas, layout, stats: atlasStats } = await generateLightingPages(geometry, groups, {
+    previousLayout: input.previousLayout, atlasCache: input.atlasCache, furnitureGeometry,
+    signal, onProgress: fraction => onProgress('atlas', fraction),
   });
-  sceneData.meshes.forEach((mesh, i) => { mesh.uvs = atlas[i]; });
+  sceneData.lightingLayout = layout;
+  sceneData.meshes.forEach((mesh, i) => {
+    mesh.uvs = atlas[i];
+    mesh.indices = lightingIndices(mesh.positions, mesh.indices);
+  });
   signal?.throwIfAborted(); onProgress('atlas', 1);
-  const transfer = await prepareTransfer(sceneData, engine, fraction => onProgress('transfer', fraction), signal);
+  onProgress('transfer', 0);
+  const transfer = await prepareTransfer(sceneData, engine, fraction => onProgress('transfer', fraction), signal,
+    { batchSize: 1024, pauseMilliseconds: 8, ...input.transferOptions });
   signal?.throwIfAborted();
   return { atlas, sceneData, transferBytes: transfer.bytes,
     stats: { atlas: atlasStats, transfer: transfer.stats } };

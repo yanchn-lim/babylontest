@@ -14,6 +14,7 @@ import './style.css';
 
 type Vec3 = [number, number, number];
 export interface SceneData {
+  lightingLayout?: import('./transfer-layout').LightingLayout;
   surfaceInset?: number;
   sampleRepair?: { mesh: number; remap?: number[] };
   materials: { name: string; color: Vec3; roughness: number; transmitting?: boolean;
@@ -42,6 +43,7 @@ const couchName = couchStudy === 'applaryd' ? 'ÄPPLARYD' : 'KLIPPAN';
 const study = element<HTMLSelectElement>('study');
 study.value = testingCouch ? couchStudy : 'room';
 study.addEventListener('change', () => {
+  if (study.value === 'preparation') { location.assign(new URL('preparation.html', location.href)); return; }
   const url = new URL(location.href);
   url.search = new URLSearchParams({ study: study.value, hour: time.value, lights: lights.value }).toString();
   location.assign(url);

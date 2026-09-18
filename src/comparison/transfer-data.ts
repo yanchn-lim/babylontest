@@ -3,6 +3,7 @@ import source from './transfer-tracing.wgsl?raw';
 import transferSource from './cached-transfer.wgsl?raw';
 import fixedLightsSource from './transfer-lights.wgsl?raw';
 import { repairShader } from './sample-repair';
+import { transferLayout } from './transfer-layout';
 
 export const TRANSFER_SIZE = 256;
 export const TRANSFER_RAYS = 1024;
@@ -11,7 +12,7 @@ export const transferShader = source + '\n' + transferSource;
 export const transferFields = ['sun', 'sunColor', 'sky', 'lamp0', 'lampColor0', 'lamp1', 'lampColor1',
   'origin', 'dimensions', 'range', 'nextDimensions', 'nextRange', 'update', 'bounce'];
 export const transferBindings = ['nodes', 'triangles', 'surfaces', 'params', 'hits', 'surfaceLight',
-  'cascades', 'output', 'bounceLight', 'transfer', 'offsets', 'fixedLights', 'rayOrigins', 'sampleRemap'];
+  'cascades', 'output', 'bounceLight', 'transfer', 'offsets', 'fixedLights', 'rayOrigins', 'sampleRemap', 'activeIndices'];
 
 // Keep the two-light comparison shader and its prepared cache unchanged.
 export function transferSourceFor(data: SceneData, receivedDiffuse = false) {
@@ -25,7 +26,11 @@ export function transferSourceFor(data: SceneData, receivedDiffuse = false) {
   if (data.fixtures.length !== 2) shader = shader
     .replace('fn prepareTransfer(', 'fn prepareTransferTwoLights(')
     .replace('fn shade(', 'fn shadeTwoLights(') + '\n' + fixedLightsSource;
-  return data.sampleRepair ? repairShader(shader) : shader;
+  if (data.sampleRepair) shader = repairShader(shader);
+  if (data.lightingLayout) shader = shader
+    .replaceAll('packed&65535u', 'packed&2097151u').replaceAll('packed>>16u', 'packed>>21u')
+    .replace('vec2f(params.sky.w-1.0)', 'vec2f(params.sky.w-1.0,params.dimensions.x-1.0)');
+  return shader;
 }
 
 export function fixedLightData(data: SceneData, intensityScale = 1) {
@@ -33,15 +38,17 @@ export function fixedLightData(data: SceneData, intensityScale = 1) {
 }
 
 export async function transferFingerprint(data: SceneData) {
+  const layout = transferLayout(data);
   return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
-    JSON.stringify(data) + transferSourceFor(data).replace(/\r\n/g, '\n') + `|atlas=${TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1${data.sampleRepair ? "|sample-repair-v1" : ""}`)));
+    JSON.stringify(data) + transferSourceFor(data).replace(/\r\n/g, '\n') + `|atlas=${data.lightingLayout ? `${layout.width}x${layout.height}|layout=v2` : TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1${data.sampleRepair ? "|sample-repair-v1" : ""}`)));
 }
 
 export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
-  const n = TRANSFER_PIXELS;
+  const layout = transferLayout(data), n = layout.pixels;
   if (bytes.byteLength < 64 + (n + 1) * 4 + n * 16) throw Error('Incomplete diffuse transfer data.');
   const header = new Uint32Array(bytes, 0, 8);
-  if (header[0] !== 0x31544644 || header[1] !== 1 || header[2] !== TRANSFER_SIZE || header[3] !== TRANSFER_RAYS
+  if (header[0] !== 0x31544644 || header[1] !== layout.version || header[2] !== layout.width || header[3] !== TRANSFER_RAYS
+    || (layout.version === 2 && (header[5] !== layout.height || header[6] !== layout.bits))
     || bytes.byteLength !== 64 + (n + 1) * 4 + n * 16 + header[4] * 4) throw Error('Invalid diffuse transfer format.');
   const fingerprint = await transferFingerprint(data);
   if (!fingerprint.every((value, i) => value === new Uint8Array(bytes, 32, 32)[i])) {
@@ -55,7 +62,8 @@ export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData) {
     if (offsets[i] > offsets[i + 1] || offsets[i + 1] > entries.length) throw Error('Invalid diffuse transfer row.');
     let hits = 0;
     for (let j = offsets[i]; j < offsets[i + 1]; j++) {
-      const count = entries[j] >>> 16;
+      const count = entries[j] >>> layout.bits;
+      if ((entries[j] & layout.mask) >= n) throw Error('Invalid diffuse transfer target.');
       if (!count || count > TRANSFER_RAYS) throw Error('Invalid diffuse transfer weight.');
       hits += count;
     }

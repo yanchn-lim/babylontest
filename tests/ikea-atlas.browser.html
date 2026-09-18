@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>IKEA atlas check</title>
+<h1>IKEA atlas check</h1><button id="run">Check IKEA atlas</button><pre id="result">Ready</pre><canvas id="canvas" width="16" height="16"></canvas>
+<script type="module">
+import { WebGPUEngine,Scene } from '@babylonjs/core';
+import { loadFixture } from '../src/preparation/fixture';
+import { prepareScene } from '../src/apartment/prepare-scene';
+import { generateLightingPages } from '../src/apartment/lighting-pages';
+const button=document.getElementById('run'),result=document.getElementById('result');
+button.onclick=async()=>{
+  button.disabled=true; let engine,scene;
+  try {
+    engine=new WebGPUEngine(document.getElementById('canvas')); await engine.initAsync();
+    scene=new Scene(engine); scene.useRightHandedSystem=true;
+    result.textContent='Loading IKEA fixture';
+    const fixture=await loadFixture(scene,new URL('/',location.href).href,true),selected=fixture.select('furnished','original');
+    const data=await prepareScene(selected.meshes,[...new Set(selected.meshes.map(m=>m.material))],selected.settings,selected.meshes.map(m=>Array(m.getTotalIndices()*2).fill(0)));
+    const checked=new Set(),reports=[];
+    for(const [id,members] of selected.furnitureGroups) {
+      const name=[...members][0].parent?.parent?.name??id;
+      const article=name.match(/\b\d{8}\b/)?.[0]??id;
+      if(checked.has(article)) continue; checked.add(article);
+      const indices=[...members].map(m=>selected.meshes.indexOf(m));
+      const geometry=indices.map(i=>({...data.meshes[i],transmitting:!!data.materials[data.meshes[i].material].transmitting}));
+      const report={id,name}; result.textContent='Checking '+name;
+      try { const atlas=await generateLightingPages(geometry,new Map([[id,geometry.map((_,i)=>i)]]),{}); report.stats=atlas.stats; }
+      catch(error) {
+        report.error=error.message;
+        const match=error.message.match(/mesh (\d+), face (\d+)/);
+        if(match) {
+          const positions=geometry[Number(match[1])].positions,face=Number(match[2]);
+          report.positions=positions.slice(face*9,face*9+9); report.float32=Array.from(Float32Array.from(report.positions));
+        }
+      }
+      reports.push(report);
+    }
+    result.textContent=JSON.stringify(reports,null,2);
+  } catch(error) {result.textContent=error.stack??String(error);}
+  finally {scene?.dispose();engine?.dispose();button.disabled=false;}
+};
+</script></html>

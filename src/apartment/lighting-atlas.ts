@@ -1,5 +1,6 @@
 import createXAtlas, { type XAtlasModule } from 'xatlas-wasm';
 import { architecturalCharts, chartCoordinates, type AtlasGeometry } from './lighting-charts';
+import { hasLightingArea, lightingIndices } from './lighting-geometry';
 
 let modulePromise: Promise<XAtlasModule> | undefined;
 
@@ -14,15 +15,12 @@ export function validateLightingAtlas(geometry: AtlasGeometry[], atlas: number[]
       || uv.some(v => !Number.isFinite(v) || v < 0 || v > 1)) throw Error('Invalid lighting coordinates.');
     if (mesh.transmitting) return;
     for (let face = 0; face < ids.length; face++) {
-      if (ids[face] < 0) {
-        const [p, q, r] = [0, 1, 2].map(j => mesh.positions.slice((face * 3 + j) * 3, (face * 3 + j + 1) * 3));
-        const a = q.map((v, k) => v - p[k]), b = r.map((v, k) => v - p[k]);
-        if (Math.hypot(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]) > 1e-10) throw Error('A surface has no lighting chart.');
-        continue;
-      }
+      const [p, q, r] = [0, 1, 2].map(j => mesh.positions.slice((face * 3 + j) * 3, (face * 3 + j + 1) * 3));
+      if (!hasLightingArea(p, q, r)) continue;
+      if (ids[face] < 0) throw Error(`A surface has no lighting chart (mesh ${index}, face ${face}).`);
       const [a, b, c] = [0, 1, 2].map(j => uv.slice((face * 3 + j) * 2, (face * 3 + j + 1) * 2).map(v => v * size));
       const area = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-      if (Math.abs(area) < 1e-10) throw Error('A lighting triangle has collapsed.');
+      if (Math.abs(area) < 1e-10) throw Error(`A lighting triangle has collapsed (mesh ${index}, face ${face}).`);
       const lo = [0, 1].map(k => Math.max(0, Math.floor(Math.min(a[k], b[k], c[k]))));
       const hi = [0, 1].map(k => Math.min(size - 1, Math.ceil(Math.max(a[k], b[k], c[k]))));
       for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) {
@@ -39,10 +37,11 @@ export function validateLightingAtlas(geometry: AtlasGeometry[], atlas: number[]
 
 /** Returns triangle-order UVs. Does not change model geometry, materials or native UVs. */
 export async function generateLightingAtlas(geometry: AtlasGeometry[], furniture: ReadonlySet<number>, options: {
-  size: number; signal?: AbortSignal; onProgress?: (fraction: number) => void;
+  size: number; maxSize?: number; signal?: AbortSignal; onProgress?: (fraction: number) => void;
 }) {
-  const { size, signal, onProgress = () => {} } = options;
-  if (!Number.isInteger(size) || size < 8) throw Error('Invalid lighting atlas resolution.');
+  const { signal, onProgress = () => {}, maxSize = options.size } = options;
+  let size = options.size;
+  if (!Number.isInteger(size) || size < 8 || !Number.isInteger(maxSize) || maxSize < size) throw Error('Invalid lighting atlas resolution.');
   signal?.throwIfAborted();
   if ([...furniture].some(i => !Number.isInteger(i) || i < 0 || i >= geometry.length)) throw Error('Invalid furniture mesh index.');
   for (const mesh of geometry) {
@@ -56,7 +55,10 @@ export async function generateLightingAtlas(geometry: AtlasGeometry[], furniture
   const module = await (modulePromise ??= createXAtlas()), packed = module.createAtlas();
   const atlas = geometry.map(mesh => new Array<number>(mesh.positions.length / 3 * 2).fill(0));
   const chartIds = geometry.map(mesh => new Array<number>(mesh.positions.length / 9).fill(-1));
-  const furnitureIndices = [...furniture].filter(i => !geometry[i].transmitting);
+  const validCorners = geometry.map(mesh => mesh.transmitting ? [] : lightingIndices(mesh.positions,
+    Array.from({ length: mesh.positions.length / 3 }, (_, i) => i)));
+  const ignoredTriangles = geometry.reduce((count, mesh, i) => count + (mesh.transmitting ? 0 : (mesh.positions.length / 3 - validCorners[i].length) / 3), 0);
+  const furnitureIndices = [...furniture].filter(i => validCorners[i].length);
   try {
     packed.setProgressCallback((_stage, progress) => { onProgress(progress / 100); return !signal?.aborted; });
     for (const chart of charts) {
@@ -68,20 +70,26 @@ export async function generateLightingAtlas(geometry: AtlasGeometry[], furniture
     }
     for (const i of furnitureIndices) {
       signal?.throwIfAborted();
-      if (packed.addMesh({ positions: Float32Array.from(geometry[i].positions), normals: Float32Array.from(geometry[i].normals) })) throw Error('Could not unwrap furniture mesh ' + i);
+      const corners = validCorners[i];
+      if (packed.addMesh({ positions: Float32Array.from(corners.flatMap(corner => geometry[i].positions.slice(corner * 3, corner * 3 + 3))),
+        normals: Float32Array.from(corners.flatMap(corner => geometry[i].normals.slice(corner * 3, corner * 3 + 3))) })) throw Error('Could not unwrap furniture mesh ' + i);
     }
     if (!packed.meshCount && !charts.length && !furnitureIndices.length) throw Error('No opaque lighting geometry.');
     packed.computeCharts({});
     signal?.throwIfAborted();
-    packed.packCharts({ resolution: size, padding: 2, bilinear: true });
-    signal?.throwIfAborted();
-    let density = packed.texelsPerUnit;
-    for (let attempt = 0; attempt < 24 && (packed.atlasCount !== 1 || packed.width > size || packed.height > size); attempt++) {
-      density *= .8;
-      packed.packCharts({ resolution: size, texelsPerUnit: density, padding: 2, bilinear: true });
+    let packingAttempts = 0;
+    for (; size <= maxSize; size *= 2) {
+      packed.packCharts({ resolution: size, padding: 2, bilinear: true }); packingAttempts++;
       signal?.throwIfAborted();
+      let density = packed.texelsPerUnit;
+      for (let attempt = 0; attempt < 24 && (packed.atlasCount !== 1 || packed.width > size || packed.height > size); attempt++) {
+        density *= .8;
+        packed.packCharts({ resolution: size, texelsPerUnit: density, padding: 2, bilinear: true }); packingAttempts++;
+        signal?.throwIfAborted();
+      }
+      if (packed.atlasCount === 1 && packed.width <= size && packed.height <= size) break;
     }
-    if (packed.atlasCount !== 1 || packed.width > size || packed.height > size) throw Error(`This scene exceeds the ${size}px lighting atlas capacity.`);
+    if (size > maxSize) throw Error(`This scene exceeds the ${maxSize}px lighting atlas capacity.`);
     charts.forEach((chart, i) => {
       const output = packed.getMesh(i), corners = [0, 1, 3].map(id => output.vertices.find(v => v.xref === id));
       if (output.chartCount !== 1 || corners.some(v => !v || v.atlasIndex !== 0)) throw Error('Architectural chart was split during packing.');
@@ -96,10 +104,12 @@ export async function generateLightingAtlas(geometry: AtlasGeometry[], furniture
     });
     furnitureIndices.forEach((mesh, i) => {
       const output = packed.getMesh(charts.length + i);
-      if (output.indices.length * 3 !== geometry[mesh].positions.length) throw Error('Furniture triangle count changed during unwrapping.');
-      output.indices.forEach((index, corner) => {
+      const corners = validCorners[mesh];
+      if (output.indices.length !== corners.length) throw Error('Furniture triangle count changed during unwrapping.');
+      output.indices.forEach((index, compactCorner) => {
         const vertex = output.vertices[index];
-        if (vertex.xref !== corner) throw Error('Furniture triangle order changed during unwrapping.');
+        if (vertex.xref !== compactCorner) throw Error('Furniture triangle order changed during unwrapping.');
+        const corner = corners[compactCorner];
         if (vertex.atlasIndex < 0) return;
         if (vertex.atlasIndex !== 0) throw Error('Furniture lies outside the lighting atlas.');
         atlas[mesh][corner * 2] = vertex.uv[0] / size; atlas[mesh][corner * 2 + 1] = vertex.uv[1] / size;
@@ -107,6 +117,6 @@ export async function generateLightingAtlas(geometry: AtlasGeometry[], furniture
       });
     });
     validateLightingAtlas(geometry, atlas, chartIds, size);
-    return { atlas, stats: { architectureCharts: charts.length, charts: packed.chartCount, size } };
+    return { atlas, stats: { architectureCharts: charts.length, charts: packed.chartCount, size, ignoredTriangles, packingAttempts } };
   } finally { packed.destroy(); }
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { NullEngine, Scene, MeshBuilder, PBRMaterial, Vector3 } from '@babylonjs/core';
+import { NullEngine, Scene, MeshBuilder, PBRMaterial, Vector3, TransformNode } from '@babylonjs/core';
 
 // Only GPU execution is replaced here; scene extraction, transforms and xatlas are real.
 registerHooks({ resolve(specifier, context, next) {
@@ -19,6 +19,7 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { prepareLightingScene } = await import('../src/apartment/prepare-lighting-scene.ts');
 const { prepareScene } = await import('../src/apartment/prepare-scene.ts');
+const { LightingAtlasCache, furnitureAtlasGeometry } = await import('../src/apartment/lighting-atlas-cache.ts');
 const settings = { sky: [.48, .65, 1], fixtures: [{ position: [0, 2, 0], color: [1, .72, .45], intensity: 7 }], views: {} };
 
 async function setup(run) {
@@ -32,14 +33,15 @@ async function setup(run) {
 test('one API returns matching triangle-order atlas, transformed geometry and transfer bytes', () => setup(async mesh => {
   const original = { position: [...mesh.getVerticesData('position')], uv: [...mesh.getVerticesData('uv')], indices: [...mesh.getIndices()] };
   const stages = [];
-  globalThis.testLightingTransfer = async (data, _engine, progress, signal) => {
+  const transferOptions = { batchSize: 1024, pauseMilliseconds: 8 };
+  globalThis.testLightingTransfer = async (data, _engine, progress, signal, options) => {
     assert.equal(data.meshes[0].positions.length, original.indices.length * 3);
     assert.equal(data.meshes[0].uvs.length, original.indices.length * 2);
-    assert.equal(signal, undefined); progress(1);
+    assert.equal(signal, undefined); assert.deepEqual(options, transferOptions); progress(1);
     return { bytes: new Uint8Array([1, 2, 3]), stats: { entries: 3 } };
   };
   const result = await prepareLightingScene({ meshes: [mesh], furnitureMeshes: new Set([mesh]), settings,
-    engine: { isWebGPU: true }, onProgress: stage => stages.push(stage) });
+    engine: { isWebGPU: true }, transferOptions, onProgress: stage => stages.push(stage) });
   assert.deepEqual(result.atlas[0], result.sceneData.meshes[0].uvs);
   assert.deepEqual(result.transferBytes, new Uint8Array([1, 2, 3]));
   assert.deepEqual([...new Set(stages)], ['scene', 'atlas', 'transfer']);
@@ -73,9 +75,54 @@ test('unsupported engines and invalid ownership fail before GPU preparation', ()
   await assert.rejects(prepareLightingScene({ ...input, engine: { isWebGPU: true }, settings: { ...settings, fixtures: [] } }), /one to eight/);
 }));
 
+test('shared cache reuses rigidly placed furniture but invalidates scale and shape', () => setup(async (mesh,scene) => {
+  const root=new TransformNode('Placement',scene); mesh.parent=root;
+  const atlasCache=new LightingAtlasCache();
+  const input={meshes:[mesh],furnitureMeshes:new Set([mesh]),settings,engine:{isWebGPU:true},atlasCache};
+  globalThis.testLightingTransfer=async()=>({bytes:new Uint8Array([1]),stats:{}});
+  const first=await prepareLightingScene(input);
+  root.position.set(10,3,-8);root.rotation.y=.73;
+  const moved=await prepareLightingScene({...input,previousLayout:first.sceneData.lightingLayout});
+  assert.equal(moved.stats.atlas.atlasCacheHits,1);assert.equal(moved.stats.atlas.atlasBuilds,0);
+  assert.deepEqual(moved.atlas,first.atlas);
+  assert.notDeepEqual(moved.sceneData.meshes[0].positions,first.sceneData.meshes[0].positions);
+  root.scaling.x=2;
+  const scaled=await prepareLightingScene(input); assert.equal(scaled.stats.atlas.atlasBuilds,1);
+  const positions=[...mesh.getVerticesData('position')];positions[0]+=.25;mesh.setVerticesData('position',positions);
+  assert.equal((await prepareLightingScene(input)).stats.atlas.atlasBuilds,1);
+}));
+
+test('canonical furniture keeps internal part transforms and reflected scale', () => setup(async (mesh,scene) => {
+  const root=new TransformNode('Placement',scene); mesh.parent=root;
+  const copy=mesh.clone('Part',root);copy.position.x+=2;
+  const fallback=[mesh,copy].map(()=>({positions:[],normals:[],transmitting:false}));
+  const before=furnitureAtlasGeometry([mesh,copy],fallback);
+  root.position.z=8;root.rotation.y=1.2;
+  assert.deepEqual(furnitureAtlasGeometry([mesh,copy],fallback),before);
+  copy.position.x+=1;
+  assert.notDeepEqual(furnitureAtlasGeometry([mesh,copy],fallback),before);
+  root.scaling.z=-1;
+  assert.notDeepEqual(furnitureAtlasGeometry([mesh,copy],fallback),before);
+}));
+
 test('existing prepareScene callers keep their indexed uv3 contract', () => setup(async mesh => {
   const uv = [...mesh.getVerticesData('uv')]; mesh.setVerticesData('uv3', uv);
   const result = await prepareScene([mesh], [mesh.material], settings);
   assert.equal(result.meshes[0].positions.length, mesh.getVerticesData('position').length);
   assert.deepEqual(result.meshes[0].uvs, uv);
+}));
+
+test('shared preparation removes zero-area lighting indices without changing native mesh or atlas ordering', () => setup(async mesh => {
+  const original = [...mesh.getIndices(), 0, 0, 1]; mesh.setIndices(original);
+  globalThis.testLightingTransfer = async data => {
+    assert.equal(data.meshes[0].indices.length, original.length - 3);
+    assert.equal(data.meshes[0].positions.length, original.length * 3);
+    assert.equal(data.meshes[0].uvs.length, original.length * 2);
+    assert.deepEqual(data.meshes[0].uvs.slice(-6), [0,0,0,0,0,0]);
+    return { bytes: new Uint8Array([1]), stats: {} };
+  };
+  const result = await prepareLightingScene({ meshes: [mesh], furnitureMeshes: new Set([mesh]), settings, engine: { isWebGPU: true } });
+  assert.equal(result.stats.atlas.ignoredTriangles, 1);
+  assert.deepEqual([...mesh.getIndices()], original);
+  assert.equal(mesh.getVerticesData('uv3'), null);
 }));

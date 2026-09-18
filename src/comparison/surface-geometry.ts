@@ -1,6 +1,7 @@
 import { Texture } from '@babylonjs/core';
 import { buildBvh, packBvh, type Triangle } from '../interior-lighting/bvh';
 import type { SceneData } from './main';
+import { transferLayout } from './transfer-layout';
 type Vec3 = [number, number, number];
 const SIZE = 256;
 
@@ -22,10 +23,11 @@ function lightingCharts(mesh: SceneData['meshes'][number]) {
 }
 
 export function geometry(data: SceneData, labelCharts = false) {
-  const rayOrigins = data.sampleRepair ? new Float32Array(SIZE * SIZE * 4) : undefined;
-  const sampleFaces = new Int32Array(SIZE * SIZE).fill(-1);
-  const surfaces = new Float32Array(SIZE * SIZE * 12);
-  const distances = new Float32Array(SIZE * SIZE).fill(Infinity);
+  const { pixels, height } = transferLayout(data);
+  const rayOrigins = data.sampleRepair ? new Float32Array(pixels * 4) : undefined;
+  const sampleFaces = new Int32Array(pixels).fill(-1);
+  const surfaces = new Float32Array(pixels * 12);
+  const distances = new Float32Array(pixels).fill(Infinity);
   const triangles: Triangle[] = [];
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
   let chartOffset = 1;
@@ -55,7 +57,7 @@ export function geometry(data: SceneData, labelCharts = false) {
       const area = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
       if (Math.abs(area) < 1e-8) continue;
       const lo = [0, 1].map(k => Math.max(0, Math.floor(Math.min(a[k], b[k], c[k]) - 2)));
-      const hi = [0, 1].map(k => Math.min(SIZE - 1, Math.ceil(Math.max(a[k], b[k], c[k]) + 2)));
+      const hi = [0, 1].map(k => Math.min((k ? height : SIZE) - 1, Math.ceil(Math.max(a[k], b[k], c[k]) + 2)));
       for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) {
         const u = ((b[1] - c[1]) * (x + .5 - c[0]) + (c[0] - b[0]) * (y + .5 - c[1])) / area;
         const v = ((c[1] - a[1]) * (x + .5 - c[0]) + (a[0] - c[0]) * (y + .5 - c[1])) / area;

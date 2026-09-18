@@ -47,6 +47,42 @@ test('validation rejects overlapping chart interiors and non-finite coordinates'
   assert.throws(() => validateLightingAtlas(geometry, [uv, uv], [[0, 0], [1, 1]], 256), /overlap/);
   assert.throws(() => validateLightingAtlas([geometry[0]], [[NaN, ...uv.slice(1)]], [[0, 0]], 256), /Invalid/);
   assert.throws(() => validateLightingAtlas([geometry[0]], [new Array(12).fill(0)], [[-1, -1]], 256), /no lighting chart/);
+  assert.throws(() => validateLightingAtlas([geometry[0]], [new Array(12).fill(0)], [[0, 0]], 256), /collapsed.*mesh 0, face 0/);
+});
+
+test('zero-area furniture faces keep their UV slots without displacing valid faces', async () => {
+  const positions = [0,0,0, 1,0,0, 0,0,1, 2,0,0, 3,0,0, 4,0,0, 5,0,0, 6,0,0, 5,0,1];
+  const mesh = { positions, normals: Array.from({ length: 9 }, () => [0,1,0]).flat(), transmitting: false };
+  const before = structuredClone(mesh);
+  const result = await generateLightingAtlas([mesh], new Set([0]), { size: 256 });
+  assert.equal(result.stats.ignoredTriangles, 1);
+  assert.equal(result.atlas[0].length, 18);
+  assert.deepEqual(result.atlas[0].slice(6, 12), [0,0,0,0,0,0]);
+  assert.ok(result.atlas[0].slice(0, 6).some(v => v > 0));
+  assert.ok(result.atlas[0].slice(12).some(v => v > 0));
+  assert.deepEqual(mesh, before);
+  const empty = { ...mesh, positions: positions.slice(9, 18), normals: mesh.normals.slice(9, 18) };
+  await assert.rejects(generateLightingAtlas([empty], new Set([0]), { size: 256 }), /No opaque lighting geometry/);
+  const mixed = await generateLightingAtlas([empty, mesh], new Set([0, 1]), { size: 256 });
+  assert.deepEqual(mixed.atlas[0], [0,0,0,0,0,0]);
+  assert.equal(mixed.stats.ignoredTriangles, 2);
+});
+
+test('original APPLARYD at the two failing rotations retains all UV slots and excludes five zero-area faces', async () => {
+  const data = JSON.parse(readFileSync(new URL('../public/comparison/applaryd/scene.json', import.meta.url)));
+  for (const angle of [30, 135]) {
+    const c = Math.cos(angle * Math.PI / 180), s = Math.sin(angle * Math.PI / 180);
+    const rotate = ([x,y,z], translate) => [x*c+z*s+(translate ? 10 : 0), y, -x*s+z*c-(translate ? 7 : 0)];
+    const geometry = data.meshes.slice(2).map(mesh => ({
+      positions: mesh.indices.flatMap(i => rotate(mesh.positions.slice(i*3,i*3+3), true)),
+      normals: mesh.indices.flatMap(i => rotate(mesh.normals.slice(i*3,i*3+3), false)), transmitting: false,
+    }));
+    const before = structuredClone(geometry);
+    const result = await generateLightingAtlas(geometry, new Set(geometry.map((_,i) => i)), { size: 256 });
+    assert.equal(result.stats.ignoredTriangles, 5);
+    assert.deepEqual(geometry, before);
+    result.atlas.forEach((uv,i) => assert.equal(uv.length, geometry[i].positions.length / 3 * 2));
+  }
 });
 
 test('insufficient atlas space fails instead of removing chart padding', async () => {

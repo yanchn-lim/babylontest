@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>Babylon · Lighting preparation lab</title></head>
+<body>
+  <header><div><p class="eyebrow">BABYLON / PREPARATION LAB</p><h1>Build light. Measure the cost.</h1><p>Apartment + ÄPPLARYD · Separate atlas allocations · 1,024 rays per active sample.</p></div><nav><a href="./comparison.html">Lighting comparison ↗</a><br><a href="./apartment.html">Apartment study ↗</a></nav></header>
+  <main>
+    <section class="toolbar" aria-label="Preparation settings">
+      <label>Furniture layout<select id="layout" disabled><option value="single">One detailed sofa</option><option value="two">Two detailed sofas</option><option value="three">Three detailed sofas</option><option value="furnished">IKEA furnished · 19 pieces</option></select></label>
+      <label>First sofa placement<select id="placement" disabled><option value="original">Original</option><option value="moved">Moved 60 cm</option><option value="rotated">Rotated 90°</option><option value="rotated30">Rotated 30° · regression</option><option value="rotated135">Rotated 135° · regression</option></select></label>
+      <label>Preparation kernel<select id="strategy" disabled><option value="active">Active samples · parallel rays</option><option value="reference">Reference · full atlas</option></select></label>
+      <label>Samples per batch<select id="batch" disabled><option>64</option><option>128</option><option>256</option><option>512</option><option selected>1024</option><option>2048</option></select></label>
+      <label>Pause between batches<select id="pause" disabled><option value="0">0 ms · baseline</option><option value="8" selected>8 ms</option><option value="16">16 ms</option><option value="32">32 ms</option></select></label>
+      <button id="trial" disabled>Short trial</button><button id="full" disabled>Build full lighting</button><button id="stop" disabled>Stop</button>
+    </section>
+    <p class="note">Short trials process 4,096 active samples or reference atlas slots. These are different workloads. Full builds cover the same lighting samples and display the result. Moving the sofa does not start a build.</p>
+    <p id="scene-counts" class="note"></p>
+    <p class="note">The furnished layout uses 19 real IKEA products: the 7,628-triangle ÄPPLARYD plus tables, chairs, bed frames and cabinets with 448–2,988 triangles each. The apartment has a reserved 256×256 region. Each furniture instance gets a separate allocation. The atlas grows as needed. Lighting proxies are not implemented.</p>
+    <div class="progress"><progress id="progress" value="0" max="1"></progress><p id="status" role="status">Loading the scene…</p></div>
+    <section class="lab">
+      <figure><figcaption><strong>Apartment + ÄPPLARYD</strong><span id="preview-status">Loading preview</span></figcaption><div class="frame"><canvas id="scene" tabindex="0" aria-label="Interactive preparation scene"></canvas><div id="move-stick" aria-label="Drag to walk"><span id="stick-thumb"></span></div><div id="paused" hidden>Preview paused while preparing</div></div></figure>
+      <aside><h2>Latest measurement</h2><dl id="metrics"><dt>No run yet</dt><dd>Start with a short trial.</dd></dl><p class="note">Readback time includes GPU execution, driver waits and copying. Frame gap measures this page’s responsiveness, not whole-PC lag.</p><button id="reset-worker" disabled>Reset worker for a cold run</button><button id="download" disabled>Download results</button></aside>
+    </section>
+    <div class="toolbar"><button id="reset-camera" disabled>Reset camera</button><span>Drag to look · W A S D to walk · touch pad to move.</span></div>
+    <h2>Run history</h2><div class="history"><table><thead><tr><th>Run</th><th>Placement</th><th>Batch / pause</th><th>Worker</th><th>Total</th><th>Transfer</th><th>Max frame gap</th><th>Cache bytes</th></tr></thead><tbody id="history"></tbody></table></div>
+    <p class="note">Compare the same placement and run type. Repeat warm runs to reduce loading and compilation effects. Trials cover only part of the atlas and do not predict full-scene speed reliably. Full runs compare cache hashes for identical lighting inputs.</p>
+    <details><summary>What this scene measures</summary><p>This scene uses the shared renderer preparation interface, the apartment model and our original 7,628-triangle ÄPPLARYD. The additional models use the same original IKEA asset URLs as the editor’s qualified catalogue. It does not reproduce the editor UI. The worker and model remain loaded between runs. Material extraction, atlas generation and transfer tracing run again each time.</p><p>The preview stops during each run to avoid competing for the GPU. The ray count and lighting inputs stay fixed between kernels. Batch size changes GPU scheduling and readback frequency. Pauses can improve responsiveness but add time. Opening this scene never starts a bake. Hiding the page stops the current job after its pending GPU batch.</p><p>The preview shows direct light until a full build completes, then four diffuse bounces. It has no reflection probes or bloom. It is a preparation test scene, not a final visual reference.</p></details>
+  </main><script type="module" src="/src/preparation/main.ts"></script>
+</body></html>

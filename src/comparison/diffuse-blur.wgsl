@@ -2,7 +2,8 @@
 @compute @workgroup_size(64)
 fn blurDiffuse(@builtin(global_invocation_id) id:vec3u) {
   let size=i32(params.sky.w);
-  if(id.x>=u32(size*size)){return;}
+  let height=i32(textureDimensions(output).y);
+  if(id.x>=u32(size*height)){return;}
   let pixel=vec2i(i32(id.x)%size,i32(id.x)/size);
   let center=surfaces[id.x];
   if(params.update.w>.5 && (center.position.w==0.0 || center.normal.w<.5)) {
@@ -19,7 +20,7 @@ fn blurDiffuse(@builtin(global_invocation_id) id:vec3u) {
       for(var x=-1;x<=1;x++) {
         if(x==0&&y==0){continue;}
         let point=pixel+vec2i(x,y);
-        if(any(point<vec2i(0))||any(point>=vec2i(size))){continue;}
+        if(any(point<vec2i(0))||any(point>=vec2i(size,height))){continue;}
         let index=u32(point.y*size+point.x);
         let sample=surfaces[index];
         let delta=sample.position.xyz-center.position.xyz;
