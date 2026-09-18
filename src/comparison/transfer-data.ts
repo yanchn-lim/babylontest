@@ -1,3 +1,4 @@
+import { workBudget } from './work-budget';
 import type { SceneData } from './main';
 import source from './transfer-tracing.wgsl?raw';
 import transferSource from './cached-transfer.wgsl?raw';
@@ -43,7 +44,7 @@ export async function transferFingerprint(data: SceneData) {
     JSON.stringify(data) + transferSourceFor(data).replace(/\r\n/g, '\n') + `|atlas=${data.lightingLayout ? `${layout.width}x${layout.height}|layout=v2` : TRANSFER_SIZE}|rays=${TRANSFER_RAYS}|padding=closest-edge-v1${data.sampleRepair ? "|sample-repair-v1" : ""}`)));
 }
 
-export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData, yieldWork?: () => Promise<void>) {
+export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData, yieldWork?: () => Promise<void>, countHits = false) {
   const layout = transferLayout(data), n = layout.pixels;
   if (bytes.byteLength < 64 + (n + 1) * 4 + n * 16) throw Error('Incomplete diffuse transfer data.');
   const header = new Uint32Array(bytes, 0, 8);
@@ -58,8 +59,9 @@ export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData, yieldW
   const visibility = new Float32Array(bytes, 64 + offsets.byteLength, n * 4);
   const entries = new Uint32Array(bytes, 64 + offsets.byteLength + visibility.byteLength, header[4]);
   if (offsets[0] !== 0 || offsets[n] !== entries.length) throw Error('Invalid diffuse transfer offsets.');
+  const frontHits = countHits ? new Uint16Array(n) : undefined, pause = workBudget(yieldWork);
   for (let i = 0; i < n; i++) {
-    if (yieldWork && i % 2048 === 0) await yieldWork();
+    if (yieldWork && i % 128 === 0) { const pending = pause(); if (pending) await pending; }
     if (offsets[i] > offsets[i + 1] || offsets[i + 1] > entries.length) throw Error('Invalid diffuse transfer row.');
     let hits = 0;
     for (let j = offsets[i]; j < offsets[i + 1]; j++) {
@@ -69,12 +71,15 @@ export async function decodeTransfer(bytes: ArrayBuffer, data: SceneData, yieldW
       hits += count;
     }
     if (hits > TRANSFER_RAYS) throw Error('Diffuse transfer exceeds sample energy.');
+    if (frontHits) frontHits[i] = hits;
+    for (let c = 0; c < 4; c++) {
+      const v = visibility[i * 4 + c];
+      if (!Number.isFinite(v) || v < 0 || v > (c === 3 && data.fixtures.length !== 2 ? 255 : 1)) throw Error('Invalid cached visibility.');
+    }
   }
-  if (!visibility.every((v, i) => Number.isFinite(v) && v >= 0 && v <=
-    (i % 4 === 3 && data.fixtures.length !== 2 ? 255 : 1))) throw Error('Invalid cached visibility.');
   const remap = data.sampleRepair?.remap;
   if (data.sampleRepair && (!remap || remap.length !== n || remap.some(value => !Number.isInteger(value) || value < 0 || value >= n))) {
     throw Error('Invalid surface repair map. Regenerate the scene transfer.');
   }
-  return { offsets, visibility, entries };
+  return { offsets, visibility, entries, frontHits };
 }

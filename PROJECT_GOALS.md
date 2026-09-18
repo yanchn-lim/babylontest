@@ -184,6 +184,19 @@ Stream starts include their lighting state, mismatched delayed starts are reject
 and host state mutation cannot hide a lighting change. Downloaded lab reports keep
 first-stream and final-installation measurements. This remains opt-in and local,
 not a deployed Interior update.
+The local lab now experiments with optional 64, 128, 256, 512 and 1,024-ray whole-scene
+refinement. It retains the same atlas and original directions, accumulates compact
+partial hit counts, and installs the final cache once. At atlas readiness the
+viewer prepares static resources. Complete 64-, 128-, 256- and 512-ray checkpoints then
+use the final four-bounce lighting model and filter. Each checkpoint retains the
+previous completed image until ready; later one-bounce patches cannot replace
+it. After that first acknowledgement the worker stops generating provisional
+patches. Later passes alternate two result buffers to overlap one GPU batch with
+CPU packing. Checkpoint validation retains hit totals for installation, with
+CPU-time-based yields. Pauses, ordered results and bounded cancellation remain;
+checkpoint installation itself still blocks the next pass. The final 1,024-ray
+cache and output remain unchanged.
+This targets earlier whole-scene feedback, not a guaranteed total-time speedup.
 It omits the stock apartment controls, bloom and reflection probes; production
 integration must preserve those paths separately. See
 [the integration guide](docs/live-lighting-integration.md).

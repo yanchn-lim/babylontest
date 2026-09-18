@@ -5,10 +5,11 @@ import type { SceneData } from '../comparison/main';
 import type { lighting } from '../comparison/lighting';
 import type { ApartmentLightmapState } from './lightmap';
 import type { LightingPreviewChunk, LightingPreviewState } from '../comparison/streaming-preview';
+import type { TransferCheckpoint } from '../comparison/transfer-checkpoint';
 import { transferLayout } from '../comparison/transfer-layout';
 
 export type LiveLightingSnapshot = Pick<LiveLightingResult, 'revision' | 'atlas' | 'sceneData'>;
-export type LiveLightingStream = LiveLightingSnapshot & { lighting: LightingPreviewState };
+export type LiveLightingStream = LiveLightingSnapshot & { lighting: LightingPreviewState; checkpoints?: boolean };
 
 export interface LiveLightingResult {
   revision: number;
@@ -28,6 +29,9 @@ export class LiveLighting {
   private error = '';
   private uploadedBytes = 0;
   private published = false;
+  private checkpoints = false;
+  private finalRequested = false;
+  private displayedRevision = 0;
   private stream?: RawTexture;
   private streamSequence = 0;
   private streamFraction = 0;
@@ -52,6 +56,7 @@ export class LiveLighting {
     this.stream?.dispose(); this.stream = undefined;
     this.streamSequence = 0; this.streamFraction = 0;
     this.error = ''; this.uploadedBytes = 0; this.published = false;
+    this.checkpoints = false; this.finalRequested = false; this.displayedRevision = 0;
   }
 
   setLighting(state: ReturnType<typeof lighting>, sky: [number, number, number]) {
@@ -99,11 +104,24 @@ export class LiveLighting {
     this.stream.gammaSpace = false;
     this.stream.wrapU = this.stream.wrapV = Constants.TEXTURE_CLAMP_ADDRESSMODE;
     this.meshes.forEach((mesh, i) => mesh.setVerticesData('uv3', snapshot.atlas[i]));
+    if (snapshot.checkpoints) {
+      this.checkpoints = true;
+      this.transfer = new CachedTransfer(this.scene, this.engine, snapshot.sceneData, null, .35, true, true, undefined,
+        { uploadChunkBytes: 4 * 1024 * 1024, onUpload: bytes => { this.uploadedBytes = bytes; } });
+      this.transfer.setLighting(this.state!, this.sky, 4);
+    }
     return true;
   }
 
+  async applyCheckpoint(checkpoint: TransferCheckpoint & { revision: number }) {
+    if (this.disposed || checkpoint.revision !== this.revision || !this.checkpoints || this.finalRequested) return false;
+    const transfer = this.transfer!;
+    await transfer.updateCheckpoint(checkpoint);
+    return !this.disposed && checkpoint.revision === this.revision && transfer === this.transfer;
+  }
+
   updateStream(chunk: LightingPreviewChunk & { revision: number }) {
-    if (this.disposed || chunk.revision !== this.revision || !this.stream || this.transfer) return false;
+    if (this.disposed || chunk.revision !== this.revision || !this.stream || this.finalRequested || this.displayedRevision) return false;
     if (chunk.sequence <= this.streamSequence) return false;
     const rows = chunk.pixels.length / (256 * 4);
     if (chunk.sequence !== this.streamSequence + 1 || !Number.isInteger(chunk.firstRow) || chunk.firstRow < 0
@@ -118,15 +136,26 @@ export class LiveLighting {
   }
 
   cancelStream(revision: number) {
-    if (revision === this.revision && this.stream && !this.transfer) this.clear();
+    if (revision === this.revision && !this.finalRequested) this.clear();
   }
 
   apply(result: LiveLightingResult) {
     if (this.disposed || result.revision !== this.revision) return false;
     this.validate(result);
     const { atlas, sceneData, transferBytes } = result;
+    if (this.checkpoints && this.transfer) {
+      if (this.finalRequested) return false;
+      this.finalRequested = true;
+      const transfer = this.transfer;
+      void transfer.finish(transferBytes).catch(error => {
+        if (this.transfer !== transfer) return;
+        this.clear(); this.error = String(error);
+      });
+      return true;
+    }
     if (!this.stream) this.clear();
     else { this.transfer?.dispose(); this.transfer = undefined; this.uploadedBytes = 0; this.published = false; }
+    this.finalRequested = true;
     this.meshes.forEach((mesh, i) => mesh.setVerticesData('uv3', atlas[i]));
     this.transfer = new CachedTransfer(this.scene, this.engine, sceneData, transferBytes, .35, true, true, undefined,
       { uploadChunkBytes: 4 * 1024 * 1024, onUpload: bytes => { this.uploadedBytes = bytes; } });
@@ -141,15 +170,16 @@ export class LiveLighting {
     if (transfer.error) {
       const error = transfer.error; this.clear(); this.error = error; return;
     }
-    if (!this.published && transfer.ready && !transfer.diagnostics().updating) {
-      this.basis.texture = transfer.texture; this.basis.ready = true; this.published = true;
+    if (transfer.ready && !transfer.diagnostics().updating && transfer.revision !== this.displayedRevision) {
+      this.displayedRevision = transfer.revision;
+      this.basis.texture = transfer.texture; this.basis.ready = true;
       this.stream?.dispose(); this.stream = undefined;
-      this.onReady(this.revision);
+      if (this.finalRequested && !this.published) { this.published = true; this.onReady(this.revision); }
     }
   }
 
   diagnostics() {
-    return { revision: this.revision, phase: this.error ? 'error' : this.published ? 'ready' : this.transfer ? 'installing' : this.streamSequence ? 'streaming' : 'preview',
+    return { revision: this.revision, phase: this.error ? 'error' : this.published ? 'ready' : this.checkpoints && !this.finalRequested ? 'refining' : this.transfer ? 'installing' : this.streamSequence ? 'streaming' : 'preview',
       streamUpdates: this.streamSequence, streamFraction: this.streamFraction,
       error: this.error, uploadedBytes: this.uploadedBytes, transfer: this.transfer?.diagnostics() };
   }

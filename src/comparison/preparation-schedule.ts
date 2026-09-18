@@ -14,6 +14,10 @@ export interface PreparationTimings {
   atlasPixels: number;
   activeSamples: number;
   readbackBytes: number;
+  pipelinedBatches?: number;
+  previewSamples?: number;
+  refinementRays?: number;
+  refinementPasses?: { rays: number; milliseconds: number }[];
 }
 
 export interface TransferPreparationOptions {

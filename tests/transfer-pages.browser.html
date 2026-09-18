@@ -33,7 +33,7 @@ button.onclick=async()=>{
       status.textContent=variant+': preparing test cache';
       const prepared=await prepareTransfer(data,engine,()=>{},undefined,{strategy:'active',batchSize:256,pauseMilliseconds:8});
       data=prepared.sceneData??data;
-      const streamChunks=[];
+      const streamChunks=[], checkpoints=[];
       if(!repair) {
         let finished=false;
         const streamed=await prepareTransfer(data,engine,()=>{},undefined,{batchSize:64,preview:{state:lighting(9,'on'),fixtureIntensityScale:.35,
@@ -52,6 +52,96 @@ button.onclick=async()=>{
         }
         if(!streamChunks.some(c=>c.fraction<1&&c.pixels.some((v,i)=>i%4!==3&&v>0)))throw Error('No early provisional lighting');
         results.push({variant,streamingExactBytes:true,earlyLighting:true,streamUpdates:streamChunks.length});
+        const refinedChunks=[], coverage=[]; let batches=0;
+        const refined=await prepareTransfer(data,engine,()=>{},undefined,{batchSize:256,
+          schedule:()=>({batchSize:++batches%2?64:256,pauseMilliseconds:0}),
+          preview:{state:lighting(9,'on'),fixtureIntensityScale:.35,progressive:true,onChunk:async chunk=>{
+            if(chunk.sequence!==refinedChunks.length+1||chunk.fraction<(refinedChunks.at(-1)?.fraction??0))throw Error('Invalid refinement order');
+            if(!chunk.pixels.every(Number.isFinite)||chunk.pixels.length>256*64*4)throw Error('Invalid refinement patch');
+            if(!coverage.includes(chunk.raysPerSample))coverage.push(chunk.raysPerSample);
+            refinedChunks.push(chunk);
+          }}});
+        if(refined.bytes.length!==prepared.bytes.length||!prepared.bytes.every((v,i)=>v===refined.bytes[i]))throw Error('Progressive cache differs');
+        if(coverage.join(',')!=='64,128,256,512,1024')throw Error('Missing refinement passes');
+        if(refined.stats.timings.readbackBytes!==prepared.stats.timings.readbackBytes)throw Error('Progressive rays repeated');
+        const pixelsFor=chunks=>{const p=new Float32Array((rectangular?320:256)*256*4);for(const c of chunks)p.set(c.pixels,c.firstRow*256*4);return p;};
+        const regionalPixels=pixelsFor(streamChunks), refinedPixels=pixelsFor(refinedChunks);
+        if(!regionalPixels.every((v,i)=>v===refinedPixels[i]))throw Error('Final progressive preview differs');
+        const occupied=geometry(data).surfaces;
+        for(const rays of [64,128,256,512,1024]) {
+          const covered=new Set();
+          for(const chunk of refinedChunks.filter(c=>c.raysPerSample===rays))for(let i=0;i<chunk.pixels.length/4;i++)covered.add(chunk.firstRow*256+i);
+          for(let i=0;i<occupied.length/12;i++)if(occupied[i*12+3]&&!covered.has(i))throw Error('Incomplete whole-scene pass');
+        }
+        const abort=new AbortController();let aborted=false;
+        try{await prepareTransfer(data,engine,()=>{},abort.signal,{batchSize:256,preview:{state:lighting(9,'on'),fixtureIntensityScale:.35,progressive:true,
+          onChunk:async()=>abort.abort()}});}catch(error){aborted=error.name==='AbortError';}
+        if(!aborted)throw Error('Progressive cancellation ignored');
+        results.push({variant,progressiveExactBytes:true,progressiveExactFinalPreview:true,wholeScenePasses:coverage,noRepeatedRays:true,cancelled:true});
+        let checkpointReady=false, pipelinedBatches=0, schedules=0;
+        const optimized=await prepareTransfer(data,engine,()=>{},undefined,{batchSize:128,
+          schedule:()=>({batchSize:++schedules%2?64:128,pauseMilliseconds:1}),
+          onBatch:timings=>{pipelinedBatches=timings.pipelinedBatches;},
+          preview:{state:lighting(9,'on'),fixtureIntensityScale:.35,progressive:true,
+            onChunk:async chunk=>{if(checkpointReady||chunk.raysPerSample!==64)throw Error('Generated discarded preview');},
+            onCheckpoint:async checkpoint=>{checkpointReady=true;checkpoints.push(checkpoint);}}});
+        if(!pipelinedBatches)throw Error('No batches were overlapped');
+        if(optimized.bytes.length!==refined.bytes.length||!optimized.bytes.every((v,i)=>v===refined.bytes[i]))throw Error('Pipeline changed cache bytes');
+        if(optimized.stats.timings.previewSamples!==optimized.stats.activeSurfaces)throw Error('Preview calculated after first pass');
+        if(optimized.stats.timings.readbackBytes!==refined.stats.timings.readbackBytes)throw Error('Pipeline repeated rays');
+        const cancelPipeline=new AbortController();let pipelineAborted=false;
+        try{await prepareTransfer(data,engine,()=>{},cancelPipeline.signal,{batchSize:64,
+          onBatch:t=>{if(t.pipelinedBatches>0)cancelPipeline.abort();},
+          preview:{state:lighting(9,'on'),fixtureIntensityScale:.35,progressive:true,onChunk:async()=>{},onCheckpoint:async()=>{}}});}
+        catch(error){pipelineAborted=error.name==='AbortError';}
+        if(!pipelineAborted)throw Error('Pipeline ignored cancellation');
+        results.push({variant,pipelinedExactBytes:true,pipelinedBatches,noDiscardedPreviews:true,noRepeatedPipelineRays:true,pipelineCancellation:true});
+        // Independent reference: expand partial integer weights to the fixed 1,024-ray denominator.
+        const early=new CachedTransfer(scene,engine,data,null,1,rectangular,rectangular,4096);
+        const pump=async(transfer,promise)=>{
+          let done=false,error;promise.then(()=>done=true,e=>{done=true;error=e;});
+          const start=performance.now();
+          while(!done){transfer.tick();engine.endFrame();if(transfer.error)throw Error(transfer.error);if(performance.now()-start>30000)throw Error('Checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
+          if(error)throw error;
+        };
+        const render=async(transfer,hour)=>{
+          const revision=transfer.revision;transfer.setLighting(lighting(hour,'on'),data.sky,4);
+          await pump(transfer,(async()=>{while(transfer.revision===revision)await new Promise(r=>setTimeout(r,4));})());
+        };
+        const same=async(a,b)=>{
+          const pixels=await Promise.all([a.texture.readPixels(),b.texture.readPixels()]);
+          if(pixels[0].length!==pixels[1].length||!pixels[0].every((v,i)=>v===pixels[1][i]))throw Error('Checkpoint full-lighting pixels differ');
+        };
+        try {
+          early.setLighting(lighting(9,'on'),data.sky,4);
+          let nodes, surfaces;
+          if(checkpoints.map(c=>c.rays).join(',')!=='64,128,256,512')throw Error('Missing checkpoints');
+          for(const checkpoint of checkpoints) {
+            const before=early.texture;
+            const installing=early.updateCheckpoint(checkpoint);
+            if(early.texture!==before)throw Error('Checkpoint discarded previous image');
+            await pump(early,installing);
+            if(early.texture===before||early.diagnostics().completedBounces!==4)throw Error('Checkpoint not published after four bounces');
+            if(nodes&&early.allocations.nodes!==nodes||surfaces&&early.allocations.surfaces!==surfaces)throw Error('Static GPU buffers recreated');
+            nodes=early.allocations.nodes;surfaces=early.allocations.surfaces;
+            const bytes=new Uint8Array(64+checkpoint.offsets.byteLength+checkpoint.visibility.byteLength+checkpoint.entries.byteLength);
+            bytes.set(prepared.bytes.subarray(0,64));new Uint32Array(bytes.buffer)[4]=checkpoint.entries.length;
+            bytes.set(new Uint8Array(checkpoint.offsets.buffer),64);
+            bytes.set(new Uint8Array(checkpoint.visibility.buffer),64+checkpoint.offsets.byteLength);
+            const bits=rectangular?21:16,mask=2**bits-1;
+            const scaled=Uint32Array.from(checkpoint.entries,v=>(v&mask)|((v>>>bits)*(1024/checkpoint.rays)<<bits));
+            bytes.set(new Uint8Array(scaled.buffer),64+checkpoint.offsets.byteLength+checkpoint.visibility.byteLength);
+            const reference=new CachedTransfer(scene,engine,data,bytes.buffer,1,rectangular,rectangular,4096);
+            try {for(const hour of [9,21]){await render(early,hour);await render(reference,hour);await same(early,reference);}}
+            finally{reference.dispose();}
+          }
+          await early.finish(prepared.bytes.buffer);
+          const final=new CachedTransfer(scene,engine,data,prepared.bytes.buffer,1,rectangular,rectangular,4096);
+          try{await render(early,9);await render(final,9);await same(early,final);}finally{final.dispose();}
+          if(early.allocations.nodes!==nodes||early.allocations.surfaces!==surfaces)throw Error('Final install recreated geometry');
+          results.push({variant,checkpointExactFullLighting:true,checkpointDayNight:true,staticBuffersReused:true,checkpointFinalExactPixels:true});
+        }finally{early.dispose();}
+
       }
       if(repair) {
         const cache=await decodeTransfer(prepared.bytes.buffer,data);
@@ -166,6 +256,35 @@ button.onclick=async()=>{
             while(!live.diagnostics().error){live.tick();engine.endFrame();if(performance.now()-failureStart>10000)throw Error('Missing fingerprint error');await new Promise(resolve=>setTimeout(resolve,4));}
             if(live.basis.ready||published.length!==2)throw Error('Invalid cache became visible');
             results.push({liveRevisionSafety:true,cancelDuringUpload:true,invalidAtlasRejected:true,invalidGeometryRejected:true,invalidCacheKeepsPreview:true,completedBounces:4});
+            live.reset(6,renderMeshes);live.setLighting(lighting(9,'on'),data.sky);
+            live.beginStream({...result,revision:6,checkpoints:true});
+            live.updateStream({...streamChunks[0],revision:6});
+            for(const checkpoint of checkpoints) {
+              const previous=live.basis.texture;let done=false;
+              const installing=live.applyCheckpoint({...checkpoint,revision:6}).then(ok=>{if(!ok)throw Error('Checkpoint rejected');done=true;});
+              const start=performance.now();
+              while(!done){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-start>30000)throw Error('Live checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
+              await installing;
+              if(live.basis.texture===previous||!live.basis.ready||published.length!==2)throw Error('Checkpoint visibility or final callback incorrect');
+              if(live.updateStream({...streamChunks[0],revision:6})!==false)throw Error('One-bounce stream replaced full checkpoint');
+            }
+            const previous=live.basis.texture;
+            live.apply({...result,revision:6});
+            if(live.basis.texture!==previous||!live.basis.ready)throw Error('Final install cleared checkpoint');
+            const finalStart=performance.now();
+            while(live.diagnostics().phase!=='ready'){live.tick();engine.endFrame();if(live.diagnostics().error)throw Error(live.diagnostics().error);if(performance.now()-finalStart>30000)throw Error('Final checkpoint timeout');await new Promise(r=>setTimeout(r,4));}
+            if(published.join(',')!=='2,3,6')throw Error('Final callback was duplicated or missing');
+            live.reset(7,renderMeshes);live.beginStream({...result,revision:7,checkpoints:true});
+            const cancelled=live.applyCheckpoint({...checkpoints[0],revision:7}).then(()=>false,error=>error.name==='AbortError');
+            live.cancelStream(7);
+            if(!await cancelled||live.basis.ready)throw Error('Checkpoint cancellation failed');
+            if(await live.applyCheckpoint({...checkpoints[0],revision:6})!==false)throw Error('Stale checkpoint accepted');
+            live.reset(8,renderMeshes);live.beginStream({...result,revision:8,checkpoints:true});
+            const interrupted=live.applyCheckpoint({...checkpoints[0],revision:8}).then(()=>false,error=>error.name==='AbortError');
+            live.apply({...result,revision:8});
+            if(!await interrupted||!live.diagnostics().error.includes('busy')||published.length!==3)throw Error('Premature final result failed silently');
+            results.push({liveCheckpointsVisible:true,finalCallbackOnce:true,noPreviewRegression:true,checkpointCancellation:true,staleCheckpointRejected:true,prematureFinalReported:true});
+
           } finally {live.dispose();renderMeshes.forEach(m=>m.dispose());}
         }
       } finally {single.dispose();paged.dispose();raw.dispose();URL.revokeObjectURL(url);}

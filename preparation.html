@@ -12,6 +12,7 @@
       <label>Pause between batches<select id="pause" disabled><option value="0">0 ms · baseline</option><option value="8" selected>8 ms</option><option value="16">16 ms</option><option value="32">32 ms</option></select></label>
       <label><input id="interactive" type="checkbox" checked disabled> Adapt preparation to frame time</label>
       <label><input id="streaming" type="checkbox" checked disabled> Stream provisional lighting</label>
+      <label><input id="progressive" type="checkbox" checked disabled> Refine whole scene · 64 → 128 → 256 → 512 → 1,024 rays</label>
       <label><input id="automatic" type="checkbox" checked disabled> Prepare after placement changes</label>
       <button id="trial" disabled>Short trial</button><button id="full" disabled>Build full lighting</button><button id="stop" disabled>Stop</button>
     </section>

@@ -2,6 +2,7 @@ import { Color3, Constants, DirectionalLight, ImageProcessingConfiguration, Ligh
   Scene, ShadowGenerator, UniversalCamera, Vector3, WebGPUEngine, type Mesh } from '@babylonjs/core';
 import { ApartmentLightmap } from './lightmap';
 import { LiveLighting, type LiveLightingResult, type LiveLightingStream } from './live-lighting';
+import type { TransferCheckpoint } from '../comparison/transfer-checkpoint';
 import type { LightingPreviewChunk } from '../comparison/streaming-preview';
 import { lighting } from '../comparison/lighting';
 import { navigation } from '../comparison/navigation';
@@ -82,6 +83,8 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
     const info = live.diagnostics(), cache = info.transfer;
     const text = info.error ? 'Direct light · ' + info.error : info.phase === 'ready'
       ? `Fresh GI · 4 bounces · ${cache!.transferPages} cache pages · ${(cache!.transferBytes / 2 ** 20).toFixed(1)} MiB entries`
+      : info.phase === 'refining' ? cache?.ready ? `${cache.checkpointRays}-ray GI · 4 bounces · Refining lighting`
+        : `Streaming provisional GI · Preparing full lighting · ${info.streamUpdates} updates`
       : info.phase === 'installing' ? `${basis.ready ? 'Provisional GI' : 'Direct light'} · Installing GI · ${(info.uploadedBytes / 2 ** 20).toFixed(1)} MiB uploaded`
       : info.phase === 'streaming' ? `Streaming provisional GI · ${Math.round(info.streamFraction * 100)}% · ${info.streamUpdates} updates`
       : 'Direct light · Ready to explore';
@@ -110,6 +113,7 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
     updateStream: (chunk: LightingPreviewChunk & { revision: number }) => live.updateStream(chunk),
     cancelStream: (revision: number) => live.cancelStream(revision),
     pause(paused: boolean) { if (paused) engine.stopRenderLoop(render); else engine.runRenderLoop(render); },
+    applyCheckpoint(checkpoint: TransferCheckpoint & { revision: number }) { return live.applyCheckpoint(checkpoint); },
     apply(result: LiveLightingResult) {
       if (result.revision !== live.diagnostics().revision) return false;
       if (JSON.stringify(result.sceneData.fixtures) !== JSON.stringify(settings.fixtures)) throw Error('Lighting fixtures do not match the viewer.');

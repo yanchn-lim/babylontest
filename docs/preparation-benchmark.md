@@ -376,3 +376,190 @@ fixture-scale and sky mismatches, rejected retries and mutable lighting inputs.
 Final cache bytes and all six final pixel comparisons remain unchanged. The
 production editor, iframe relay, reflections and phone performance still need
 integration verification.
+
+## Whole-scene ray refinement (local experiment)
+
+Enable **Stream provisional lighting** and **Refine whole scene**, then use
+**Build full lighting** with the active-sample kernel. The atlas stays fixed.
+Each active sample receives 64 rays, then another 192, then another 768. Patches
+continue during each pass. The progress bar measures ray work: whole-scene
+64-ray coverage is 6.25%, and 256-ray coverage is 25%. Short trials do not run
+refinement. Uncheck **Refine whole scene** to compare the prior regional stream.
+
+Intermediate passes use the existing measured-sky/one-bounce preview. The full
+four-bounce cache installs once. Compact partial hit counts retain each target's
+earliest original ray; fixed ray slots restore final entry order without sorting
+every row. This uses additional CPU memory and merging work. It is intended to
+improve early whole-scene feedback, not reduce the final ray count or guarantee
+a faster complete bake.
+
+Verification: 110 local tests, TypeScript and the production build passed.
+After replacing per-row sorting, the three new unit tests and GPU checks passed
+again. GPU checks cover all three whole-scene passes, changing batch boundaries,
+cancellation, unchanged ray readback, byte-identical final caches and identical
+final provisional pixels for two- and seven-light scenes. Existing six day/night
+final-output comparisons remain pixel-identical. Phone performance and peak
+memory are unmeasured. Existing build warnings remain.
+
+Final-version observations used the 19-piece IKEA scene, rotated 30 degrees,
+fixed 512-sample ray budgets and an 8 ms pause, with adaptive pacing disabled:
+
+| Measurement | Cold worker | Warm worker |
+| --- | ---: | ---: |
+| First streamed patch, from run start | 17.11 s | 2.80 s |
+| 64-ray coverage, from transfer start | 6.15 s | 5.60 s |
+| 256-ray coverage, from transfer start | 13.06 s | 12.45 s |
+| 1,024-ray coverage, from transfer start | 38.15 s | 38.67 s |
+| Atlas generation | 11.68 s | 0.16 s |
+| Worker total | 53.03 s | 40.78 s |
+| Complete four-bounce GI, from run start | 64.39 s | 50.77 s |
+| CPU hit packing | 8.87 s | 9.04 s |
+| Largest preparation frame gap | 125 ms | 117 ms |
+| Largest installation frame gap | 383 ms | 367 ms |
+
+The warm run reused all 20 atlas allocations. Its whole-scene 64-ray pass
+completed roughly 6.4 s after the run started, including material/atlas work.
+Both final caches matched the prior regional-stream baseline hash exactly for
+the same scene. Ray readback remained 1,177.8 MiB, with 301,505 active samples
+in a 256 x 2304 atlas and two final transfer pages. Cold/warm runs emitted 145
+and 146 patches. Navigation and final handover remained usable; no browser
+errors were reported. These are individual desktop observations, not a total
+speedup claim or a phone responsiveness guarantee.
+
+
+## Early four-bounce checkpoints (local experiment)
+
+Whole-scene refinement now prepares viewer resources as soon as the atlas is
+ready. Completed 64-ray and 256-ray transport checkpoints use the same four
+bounces, bounced sky and filter as final lighting. The viewer retains the previous
+image during each upload and calculation. It ignores subsequent one-bounce
+patches. The worker waits for each checkpoint to be published before continuing.
+Geometry, static GPU buffers and shaders are reused for the final cache.
+
+The same 19-piece IKEA fixture, rotated 30 degrees, used fixed 512-sample ray
+budgets, 8 ms pauses and no adaptive pacing. Times are individual desktop runs:
+
+| Measurement | Cold worker | Warm worker |
+| --- | ---: | ---: |
+| First provisional patch, from run start | 17.41 s | 3.13 s |
+| 64-ray four-bounce GI visible, from run start | 24.86 s | 10.77 s |
+| 256-ray four-bounce GI visible, from run start | 36.16 s | 21.41 s |
+| Final 1,024-ray GI, from run start | 66.99 s | 52.46 s |
+| Worker total, including checkpoint waits | 61.42 s | 47.98 s |
+| Final installation | 4.43 s | 4.36 s |
+| Largest preparation frame gap | 392 ms | 417 ms |
+| Largest final installation frame gap | 275 ms | 283 ms |
+
+Compared with the preceding progressive-only run, warm final installation fell
+from 9.89 s to 4.36 s, while total time increased from 50.77 s to 52.46 s. Cold
+total increased from 64.39 s to 66.99 s. Checkpoints add copying, validation,
+uploads and lighting calculations. Their benefit is earlier full-model lighting
+and a smaller final installation, not a lower total ray count or total-time
+speedup. Preparation frame gaps increased as installation work moved earlier.
+The change does not remove every visible quality transition or main-thread hitch.
+
+Both final caches exactly matched the prior progressive and regional-stream
+baseline (input hash `60ee2d18d2cc90797735aff75345d8c9e1d0a9da23e5f95407630e4d3cbbd690`,
+output hash `e532f62b840abdb47d03d4e40b91ecfd43a885d2c13c3bba53d923f4639f9576`).
+The warm run reused all 20 atlas allocations. Final entries remain 249.9 MiB
+across two pages; the atlas remains 256 x 2304. No browser errors were reported.
+
+Verification: 112 local tests, TypeScript and the production build passed.
+The existing large-chunk and xatlas Node-module build warnings remain.
+GPU checks compare 64-ray
+and 256-ray output with independently normalized fixed-denominator reference
+caches at day and night, with and without filtering. Final pixels remain exact.
+They verify static GPU buffer reuse, publication only after four bounces,
+retention during updates, rejection of later provisional patches, one final
+ready callback, stale revisions, cancellation and premature-final error reporting.
+The existing six raw/gzip and paged/single-buffer comparisons also remain exact.
+Phone performance, peak memory and production Interior integration remain unverified.
+
+
+## Refinement overhead reduction (local experiment)
+
+The first full-lighting checkpoint now ends provisional preview generation.
+Later passes alternate two ray-result buffers, submitting at most one batch
+ahead of CPU packing. Configured pauses remain. Checkpoint and final validation
+retain hit totals for receiving-sample rejection, avoiding a second connection
+scan. Validation and atlas installation yield according to a 4 ms CPU work
+budget checked between small blocks. GPU uploads still yield between bounded
+writes. Checkpoint installation remains sequential with the next ray pass.
+
+Measured with the same 19-piece IKEA fixture, 30-degree sofa rotation, fixed
+512-sample budgets and 8 ms pauses, with adaptive pacing disabled. Times below
+are from run start except the installation duration:
+
+| Measurement | Previous cold | New cold | Previous warm | New warm |
+| --- | ---: | ---: | ---: | ---: |
+| First provisional patch | 17.41 s | 18.83 s | 3.13 s | 3.62 s |
+| 64-ray four-bounce GI visible | 24.86 s | 23.47 s | 10.77 s | 8.49 s |
+| 256-ray four-bounce GI visible | 36.16 s | 28.38 s | 21.41 s | 13.42 s |
+| Final 1,024-ray GI | 66.99 s | 48.61 s | 52.46 s | 34.76 s |
+| Final installation duration | 4.43 s | 1.61 s | 4.36 s | 1.83 s |
+| Largest preparation frame gap | 392 ms | 400 ms | 417 ms | 400 ms |
+| Largest installation frame gap | 275 ms | 342 ms | 283 ms | 408 ms |
+
+Warm completion time fell by 33.7%; cold completion time fell by 27.4%. These
+are individual desktop runs, not device-wide guarantees. Initial patches did
+not arrive earlier, and frame hitches remain. The warm gap between the 64-ray
+and 256-ray images fell from 10.64 s to 4.93 s.
+
+Each run overlapped 583 of 659 batches. Provisional lighting was calculated for
+301,505 samples, only the first pass. Raw ray readback stayed at 1,177.8 MiB.
+The warm run reused all 20 atlas allocations and spent 0.24 s on the atlas.
+CPU packing took 7.39 s; the 11.13 s readback counter now measures the remaining
+awaited time after overlapping CPU work, not total GPU execution time. Intentional
+pauses remained 5.83 s. The extra GPU ray-result buffer is 2 MiB at these settings;
+readback storage also increases while one batch is in flight. Peak memory was
+not measured. Final transport remains 249.9 MiB over two GPU pages.
+
+Both completed cache hashes match the prior checkpoint, progressive and regional
+baselines exactly for the same input. Browser logs contained no errors or warnings.
+Verification passed: 113 local tests, TypeScript, the production build and GPU
+checks. Added coverage verifies timed CPU yields, retained validation hit counts,
+unchanged final bytes under changing batch sizes, no discarded preview generation,
+no repeated rays and cancellation with an overlapped batch in flight. Existing
+checkpoint day/night, filtering, final-pixel, lifecycle and legacy-cache checks
+remain exact. The existing large-chunk and xatlas Node-module build warnings
+remain. Phone performance and production Interior integration remain unverified.
+
+
+## Five refinement stages (local experiment)
+
+At the user's request the sequence is now 64, 128, 256, 512 and 1,024 total rays.
+Each pass reuses earlier results and adds 64, 64, 128, 256 and 512 new rays.
+The four intermediate checkpoints all use four bounces and final filtering.
+Only the first pass generates provisional patches. Later passes retain bounded
+GPU/CPU overlap and each checkpoint still waits for viewer acknowledgement.
+
+Measured with the same 19-piece IKEA fixture, 30-degree sofa rotation, fixed
+512-sample ray budgets and 8 ms pauses, with adaptive pacing disabled:
+
+| Visible lighting, from run start | Cold worker | Warm worker |
+| --- | ---: | ---: |
+| 64 rays | 23.22 s | 8.27 s |
+| 128 rays | 25.96 s | 10.78 s |
+| 256 rays | 29.35 s | 14.17 s |
+| 512 rays | 35.38 s | 20.96 s |
+| Final 1,024 rays | 48.25 s | 34.69 s |
+
+The previous three-pass totals were 48.61 s cold and 34.76 s warm, so total time
+was similar in these individual runs. The warm 256-ray checkpoint arrived
+slightly later (14.17 s versus 13.42 s), with a new 128-ray update in between.
+These observations do not establish that additional checkpoints are free: they
+add packing, transport upload and lighting work, while changing batch sizes and
+CPU/GPU overlap. Peak memory and phone behavior remain unmeasured.
+
+Both final cache hashes exactly match the preceding three-pass runs. Raw ray
+readback remains 1,177.8 MiB, so no rays were repeated. The warm run reused all
+20 atlas allocations. Preparation frame gaps reached 417 ms cold and 433 ms
+warm; installation gaps reached 292 ms and 383 ms. No browser errors or warnings
+were recorded. Final transport still occupies two pages with 249.9 MiB entries.
+
+Verification: six targeted tests, TypeScript, the production build and GPU
+checks passed. Checks cover all five pass prefixes, exact packing for both
+address widths, all four checkpoint ray counts, whole-scene coverage, unchanged
+final cache bytes, checkpoint day/night pixels and final pixels, cancellation,
+changing batch sizes and the existing live-viewer lifecycle. Existing build
+warnings remain. Production Interior integration remains unverified.

@@ -3,18 +3,22 @@ import type { SceneData } from './main';
 import type { lighting } from './lighting';
 import { transferBindings, transferSourceFor } from './transfer-data';
 import { transferLayout } from './transfer-layout';
+import type { TransferCheckpoint } from './transfer-checkpoint';
 
 export interface LightingPreviewChunk {
   sequence: number;
   firstRow: number;
   pixels: Float32Array;
   fraction: number;
+  raysPerSample?: number;
 }
 export interface LightingPreviewState {
   state: ReturnType<typeof lighting>;
   fixtureIntensityScale: number;
 }
 export interface LightingPreviewOptions extends LightingPreviewState {
+  progressive?: boolean;
+  onCheckpoint?: (checkpoint: TransferCheckpoint) => Promise<void>;
   onChunk: (chunk: LightingPreviewChunk) => Promise<void>;
 }
 
@@ -87,28 +91,32 @@ export class StreamingPreview {
   private sky: number[];
   private sources: Float32Array;
   private frontHits: Uint16Array;
+  private rayCounts: Uint16Array;
 
   constructor(data: SceneData, sources: Float32Array, skyScale: number) {
     const layout = transferLayout(data);
     this.pixels = new Float32Array(layout.pixels * 4);
     this.frontHits = new Uint16Array(layout.pixels);
+    this.rayCounts = new Uint16Array(layout.pixels);
     this.bits = layout.bits; this.mask = layout.mask; this.sources = sources;
     this.sky = data.sky.map(v => v * skyScale);
   }
 
-  add(index: number, packed: Uint32Array, start: number, count: number, frontHits: number) {
+  add(index: number, packed: Uint32Array, start: number, count: number, frontHits: number, rays = 1024) {
     this.first = Math.min(this.first, index); this.last = Math.max(this.last, index);
     this.frontHits[index] = frontHits;
+    this.rayCounts[index] = rays;
     const offset = index * 4;
+    this.pixels.fill(0, offset, offset + 4);
     for (let j = start; j < start + count; j++) {
-      const target = (packed[j] & this.mask) * 8, weight = (packed[j] >>> this.bits) / 1024;
+      const target = (packed[j] & this.mask) * 8, weight = (packed[j] >>> this.bits) / rays;
       for (let c = 0; c < 3; c++) this.pixels[offset + c] += this.sources[target + c] * weight;
     }
     this.pixels[offset + 3] = 1;
   }
 
-  async flush(surfaceLight: StorageBuffer, fraction: number, emit: LightingPreviewOptions['onChunk'], signal?: AbortSignal) {
-    if (this.last < 0 || (fraction < 1 && performance.now() - this.emitted < 400)) return;
+  async flush(surfaceLight: StorageBuffer, fraction: number, emit: LightingPreviewOptions['onChunk'], signal?: AbortSignal, force = false, raysPerSample = 1024) {
+    if (this.last < 0 || (!force && fraction < 1 && performance.now() - this.emitted < 400)) return;
     const first = Math.floor(this.first / 256), last = Math.floor(this.last / 256) + 1;
     for (let row = first; row < last; row += 64) {
       signal?.throwIfAborted();
@@ -120,10 +128,11 @@ export class StreamingPreview {
         if (!pixels[i * 4 + 3]) continue;
         const open = visibility[i * 8 + 4];
         // Match the final renderer's rejection of mostly back-facing samples.
-        if (this.frontHits[row * 256 + i] + open * 1024 < 1024 * .25) { pixels.fill(0, i * 4, i * 4 + 4); continue; }
+        const rays = this.rayCounts[row * 256 + i];
+        if (this.frontHits[row * 256 + i] + open * rays < rays * .25) { pixels.fill(0, i * 4, i * 4 + 4); continue; }
         for (let c = 0; c < 3; c++) pixels[i * 4 + c] += this.sky[c] * open;
       }
-      await emit({ sequence: ++this.sequence, firstRow: row, pixels, fraction });
+      await emit({ sequence: ++this.sequence, firstRow: row, pixels, fraction, raysPerSample });
     }
     this.first = Infinity; this.last = -1; this.emitted = performance.now();
   }

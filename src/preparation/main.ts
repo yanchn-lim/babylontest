@@ -14,14 +14,16 @@ let preview: Awaited<ReturnType<typeof createPreview>>, worker: Worker | undefin
 let trialRun = false, revision = 0;
 const interactive = element<HTMLInputElement>('interactive'), automatic = element<HTMLInputElement>('automatic');
 const streaming = element<HTMLInputElement>('streaming');
+const progressive = element<HTMLInputElement>('progressive');
 let firstStream = 0;
+let checkpoints: { rays: number; milliseconds: number }[] = [];
 let budgetFrame = 0, budgetAt = 0;
 let completed: { revision: number; started: number; installationStarted: number; report: Report } | undefined;
 let installationGap = 0, installationFrame = 0, installationRequest = 0;
 let frameGap = 0, previousFrame = 0, frameRequest = 0, runStarted = 0;
 const references = new Map<string, string>();
 type Report = RunReport & { frameGapMilliseconds: number; comparison: string; firstStreamMilliseconds?: number; streamUpdates: number;
-  completeGIMilliseconds?: number; installationMilliseconds?: number; installationFrameGapMilliseconds?: number };
+  checkpoints: { rays: number; milliseconds: number }[]; completeGIMilliseconds?: number; installationMilliseconds?: number; installationFrameGapMilliseconds?: number };
 const reports: Report[] = [];
 const seconds = (value: number) => (value / 1000).toFixed(2) + ' s';
 function setBusy(value: boolean) {
@@ -29,6 +31,7 @@ function setBusy(value: boolean) {
   for (const name of ['batch', 'pause', 'strategy', 'interactive', 'streaming', 'reset-worker']) (element(name) as HTMLButtonElement).disabled = value;
   for (const name of ['trial', 'full', 'layout', 'placement', 'automatic']) (element(name) as HTMLButtonElement).disabled = false;
   element<HTMLButtonElement>('stop').disabled = !value;
+  progressive.disabled = value || !streaming.checked || strategy.value !== 'active';
   preview.pause(document.hidden);
 }
 function heartbeat(now: number) {
@@ -57,8 +60,11 @@ function metrics(report: Report) {
     ['Dispatch / compilation', seconds(t.dispatchMilliseconds)], ['Intentional pauses', seconds(t.pauseMilliseconds)],
     ['Largest batch', seconds(t.maxBatchMilliseconds)], ['Work items processed', t.processedSamples.toLocaleString()], ['Total atlas slots', t.atlasPixels.toLocaleString()],
     ['Active samples processed', t.activeSamples.toLocaleString()], ['Ray readback', (t.readbackBytes / 1048576).toFixed(1) + ' MiB']);
+  if (t?.pipelinedBatches !== undefined) values.push(['Overlapped batches', String(t.pipelinedBatches)], ['Provisional samples calculated', String(t.previewSamples)]);
   values.push(['Largest page frame gap', report.frameGapMilliseconds.toFixed(0) + ' ms']);
   if (report.firstStreamMilliseconds !== undefined) values.push(['First streamed lighting', seconds(report.firstStreamMilliseconds)], ['Stream updates', String(report.streamUpdates)]);
+  for (const pass of t?.refinementPasses ?? []) values.push([`${pass.rays}-ray coverage (since transfer start)`, seconds(pass.milliseconds)]);
+  for (const checkpoint of report.checkpoints) values.push([`${checkpoint.rays}-ray four-bounce GI visible`, seconds(checkpoint.milliseconds)]);
   if (report.completeGIMilliseconds !== undefined) values.push(['Time to complete GI', seconds(report.completeGIMilliseconds)],
     ['Lighting installation', seconds(report.installationMilliseconds!)], ['Largest installation frame gap', report.installationFrameGapMilliseconds!.toFixed(0) + ' ms']);
   element('metrics').replaceChildren(...values.flatMap(([name, value]) => {
@@ -90,12 +96,24 @@ function prepare(snapshot: Snapshot, signal: AbortSignal): Promise<Result> {
     };
     signal.addEventListener('abort', cancel, { once: true });
     current.onerror = event => { current.terminate(); if (worker === current) worker = undefined; done(Error(event.message || 'Preparation worker failed.')); };
-    current.onmessage = ({ data }: MessageEvent<WorkerReply>) => {
+    current.onmessage = async ({ data }: MessageEvent<WorkerReply>) => {
       if (data.id !== jobId || settled) return;
+      if (data.type === 'checkpoint') {
+        try {
+          if (!signal.aborted && snapshot.revision === revision && await preview.applyCheckpoint({ revision: snapshot.revision, ...data })) {
+            checkpoints.push({ rays: data.rays, milliseconds: performance.now() - runStarted });
+          }
+        } catch (error) {
+          if (!settled && !signal.aborted) { current.terminate(); if (worker === current) worker = undefined; done(error); }
+        } finally {
+          if (!settled && !signal.aborted) current.postMessage({ type: 'checkpoint-ack', id: jobId, rays: data.rays } satisfies WorkerRequest);
+        }
+        return;
+      }
       if (data.type === 'stream-start' || data.type === 'stream-chunk') {
         try {
           if (!signal.aborted && snapshot.revision === revision) {
-            if (data.type === 'stream-start') preview.beginStream({ revision, atlas: data.atlas, sceneData: data.sceneData, lighting: data.lighting });
+            if (data.type === 'stream-start') preview.beginStream({ revision, atlas: data.atlas, sceneData: data.sceneData, lighting: data.lighting, checkpoints: data.checkpoints });
             else if (preview.updateStream({ revision, ...data }) && !firstStream) firstStream = performance.now() - runStarted;
           }
         } catch (error) {
@@ -108,12 +126,12 @@ function prepare(snapshot: Snapshot, signal: AbortSignal): Promise<Result> {
       if (data.type === 'progress') {
         if (signal.aborted) return;
         progress.value = Math.min(1, trialRun && data.stage === 'Transfer' && data.timings ? data.timings.processedSamples / 4096 : data.fraction);
-        status.textContent = `${data.stage} · ${Math.round(progress.value * 100)}% · ${seconds(performance.now() - runStarted)}`;
+        status.textContent = `${data.stage}${data.stage === 'Transfer' && data.timings?.refinementRays ? ` · ${data.timings.refinementRays} rays/sample` : ''} · ${Math.round(progress.value * 100)}% · ${seconds(performance.now() - runStarted)}`;
       } else if (data.type === 'error') done(Error(data.message));
       else done(undefined, data);
     };
     trialRun = snapshot.settings.trial; setBusy(true);
-    frameGap = 0; firstStream = 0; previousFrame = 0; budgetFrame = 0; budgetAt = 0; runStarted = performance.now(); progress.value = 0;
+    frameGap = 0; firstStream = 0; checkpoints = []; previousFrame = 0; budgetFrame = 0; budgetAt = 0; runStarted = performance.now(); progress.value = 0;
     status.textContent = 'Preparing lighting · navigation and placement remain available';
     frameRequest = requestAnimationFrame(heartbeat);
     current.postMessage({ type: 'run', id: jobId, base, settings: snapshot.settings } satisfies WorkerRequest);
@@ -123,14 +141,14 @@ function receive(data: Result, snapshot: Snapshot) {
   if (snapshot.revision !== revision) return;
   const comparison = compareResult(data.report, references);
   const report: Report = { ...data.report, frameGapMilliseconds: frameGap, comparison, firstStreamMilliseconds: firstStream || undefined,
-    streamUpdates: firstStream ? preview.diagnostics().streamUpdates : 0 };
+    streamUpdates: firstStream ? preview.diagnostics().streamUpdates : 0, checkpoints: [...checkpoints] };
   reports.unshift(report); reports.splice(10);
   metrics(report); progress.value = ['cancelled', 'failed'].includes(data.report.outcome) ? 0 : 1;
   status.textContent = `${data.report.error || (data.report.outcome === 'complete' ? 'Prepared · installing GI' : data.report.outcome === 'trial' ? 'Short trial complete · no cache applied' : 'Stopped')} · ${seconds(data.report.totalMilliseconds)} · ${comparison}`;
   element('history').replaceChildren(...reports.map((report, index) => {
     const row = document.createElement('tr');
     for (const text of [`${reports.length - index} · ${report.outcome}`, `${layoutLabels[report.layout]} / ${report.placement}`, `${report.strategy} · ${report.batchSize} / ${report.pauseMilliseconds} ms${report.interactive ? ' adaptive' : ''}`,
-      report.warm ? 'Warm' : 'Cold', seconds(report.totalMilliseconds), seconds(report.stages.Transfer ?? 0), `${report.frameGapMilliseconds.toFixed(0)} ms`, report.comparison + (report.streaming && !report.trial ? ' · streamed' : '')]) {
+      report.warm ? 'Warm' : 'Cold', seconds(report.totalMilliseconds), seconds(report.stages.Transfer ?? 0), `${report.frameGapMilliseconds.toFixed(0)} ms`, report.comparison + (report.progressive ? ' · progressive' : report.streaming && !report.trial ? ' · streamed' : '')]) {
       const cell = document.createElement('td'); cell.textContent = text; row.append(cell);
     }
     return row;
@@ -153,7 +171,7 @@ function run(trial: boolean, delay = 0) {
   completed = undefined; cancelAnimationFrame(installationRequest);
   queue.request({ revision, settings: { layout: layout.value as Layout, placement: placement.value as Placement,
     strategy: strategy.value as 'active' | 'reference', batchSize: Number(batch.value), pauseMilliseconds: Number(pause.value),
-    interactive: interactive.checked, streaming: streaming.checked, trial } }, delay);
+    interactive: interactive.checked, streaming: streaming.checked, progressive: progressive.checked && streaming.checked && strategy.value === 'active' && !trial, trial } }, delay);
   element<HTMLButtonElement>('stop').disabled = false;
   status.textContent = delay ? 'Layout changed · lighting queued' : 'Starting preparation…';
 }
@@ -163,6 +181,7 @@ function stop() {
   status.textContent = 'Preparation stopped · scene remains available';
 }
 element('trial').onclick = () => run(true); element('full').onclick = () => run(false); element('stop').onclick = stop;
+streaming.onchange = strategy.onchange = () => { progressive.disabled = busy || !streaming.checked || strategy.value !== 'active'; };
 element('reset-worker').onclick = () => {
   queue.cancel(); worker?.terminate(); worker = undefined;
   status.textContent = 'Worker reset. The next run will be cold.';

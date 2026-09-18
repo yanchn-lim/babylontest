@@ -14,11 +14,12 @@ const atlasCache = new LightingAtlasCache();
 const send = (message: WorkerReply) => self.postMessage(message);
 const hex = (bytes: Uint8Array) => Array.from(bytes, v => v.toString(16).padStart(2, '0')).join('');
 let activeId = -1, frameMilliseconds = 16;
-let acknowledgement: { sequence: number; resolve: () => void } | undefined;
+let acknowledgement: { key: string; resolve: () => void } | undefined;
 
 self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
-  if (data.type === 'stream-ack') {
-    if (data.id === activeId && data.sequence === acknowledgement?.sequence) acknowledgement.resolve();
+  if (data.type === 'stream-ack' || data.type === 'checkpoint-ack') {
+    const key = data.type === 'stream-ack' ? `stream-${data.sequence}` : `checkpoint-${data.rays}`;
+    if (data.id === activeId && key === acknowledgement?.key) acknowledgement.resolve();
     return;
   }
   if (data.type === 'cancel') { if (data.id === activeId) controller?.abort(); return; }
@@ -46,19 +47,29 @@ self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
     const selected = fixture.select(settings.layout, settings.placement); counts = selected.counts;
     const previewLighting = { state: lighting(9, 'on'), fixtureIntensityScale: .35 };
     const prepared = await prepareLightingScene({ ...selected, previousLayout, atlasCache, engine: engine!, signal: abort.signal,
-      onAtlasReady: settings.streaming && !settings.trial ? (atlas, sceneData) => send({ type: 'stream-start', id, atlas, sceneData, lighting: previewLighting }) : undefined,
+      onAtlasReady: settings.streaming && !settings.trial ? (atlas, sceneData) => send({ type: 'stream-start', id, atlas, sceneData, lighting: previewLighting, checkpoints: settings.progressive }) : undefined,
       onProgress: (name, fraction) => progress({ scene: 'Materials', atlas: 'Atlas', transfer: 'Transfer' }[name], fraction),
       transferOptions: { strategy: settings.strategy, batchSize: settings.batchSize, pauseMilliseconds: settings.pauseMilliseconds,
-        preview: settings.streaming && !settings.trial ? { ...previewLighting,
+        preview: settings.streaming && !settings.trial ? { ...previewLighting, progressive: settings.progressive,
           onChunk: chunk => new Promise<void>((resolve, reject) => {
             abort.signal.throwIfAborted();
             const cancel = () => { acknowledgement = undefined; reject(abort.signal.reason); };
             abort.signal.addEventListener('abort', cancel, { once: true });
-            acknowledgement = { sequence: chunk.sequence, resolve: () => {
+            acknowledgement = { key: `stream-${chunk.sequence}`, resolve: () => {
               abort.signal.removeEventListener('abort', cancel); acknowledgement = undefined; resolve();
             } };
             self.postMessage({ type: 'stream-chunk', id, ...chunk } satisfies WorkerReply, { transfer: [chunk.pixels.buffer] });
           }),
+          onCheckpoint: settings.progressive ? checkpoint => new Promise<void>((resolve, reject) => {
+            abort.signal.throwIfAborted();
+            const cancel = () => { acknowledgement = undefined; reject(abort.signal.reason); };
+            abort.signal.addEventListener('abort', cancel, { once: true });
+            acknowledgement = { key: `checkpoint-${checkpoint.rays}`, resolve: () => {
+              abort.signal.removeEventListener('abort', cancel); acknowledgement = undefined; resolve();
+            } };
+            self.postMessage({ type: 'checkpoint', id, ...checkpoint } satisfies WorkerReply,
+              { transfer: [checkpoint.offsets.buffer, checkpoint.entries.buffer, checkpoint.visibility.buffer] });
+          }) : undefined,
         } : undefined,
         schedule: settings.interactive ? () => interactiveSchedule(frameMilliseconds, settings.batchSize, settings.pauseMilliseconds) : undefined,
         onBatch(value) {

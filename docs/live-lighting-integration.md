@@ -24,7 +24,7 @@ also removes the previous geometry revision's GI immediately.
   disabling and disposing obsolete geometry. Pass source meshes in the same
   import order used by the isolated preparation scene. Do not pass reflection
   partition output as if it were the original source meshes.
-- `viewer.beginStream({ revision, atlas, sceneData, lighting })`: validate the matching
+- `viewer.beginStream({ revision, atlas, sceneData, lighting, checkpoints? })`: validate the matching
   geometry and install its atlas with an empty provisional texture. Call after
   `prepareLightingScene.onAtlasReady`; it does not wait for ray preparation.
   `lighting` is `{ state, fixtureIntensityScale }`, exactly as passed to
@@ -35,7 +35,11 @@ also removes the previous geometry revision's GI immediately.
   apply one provisional texture region. Returns false for stale revisions,
   duplicates, cancelled streams and patches arriving after final installation
   starts. Missing sequence numbers, invalid bounds and non-finite values throw.
-- `viewer.cancelStream(revision)`: remove provisional lighting for that revision.
+- `viewer.applyCheckpoint({ revision, rays, offsets, entries, visibility })`: with
+  `checkpoints: true`, await a complete 64-, 128-, 256- or 512-ray four-bounce image.
+  Returns false for a stale revision; cancellation during installation rejects.
+  Call in increasing ray order and await each call before sending another.
+- `viewer.cancelStream(revision)`: remove provisional and checkpoint lighting for that revision.
   Editing must still call `reset` with an increased revision.
 - `viewer.apply({ revision, atlas, sceneData, transferBytes })`: accepts a complete
   result, with raw `ArrayBuffer` bytes. Returns false for an obsolete revision.
@@ -43,11 +47,11 @@ also removes the previous geometry revision's GI immediately.
   positions and fixture settings are checked; cache decoding verifies the scene
   and shader fingerprint. The host must advance revisions for material, topology,
   transform and other preparation-input changes, even when vertex counts match.
-- `viewer.diagnostics()`: scene revision, phase (`preview`, `streaming`, `installing`,
+- `viewer.diagnostics()`: scene revision, phase (`preview`, `streaming`, `refining`, `installing`,
   `ready` or `error`), stream update count/fraction, error text, uploaded bytes and
   transfer diagnostics.
-- `callbacks.onReady(revision)`: emitted after the initial four-bounce result is
-  published. This is lighting readiness, not geometry readiness. Use it to start
+- `callbacks.onReady(revision)`: emitted once after the final 1,024-ray four-bounce result is
+  published. Intermediate checkpoints do not trigger this callback. This is lighting readiness, not geometry readiness. Use it to start
   dependent work such as reflection refreshes, without gating navigation.
 - `viewer.pause(boolean)`, `resetCamera()` and `dispose()` control lifecycle.
   `viewer.scene`, `engine` and `camera` are available to the host adapter.
@@ -64,7 +68,7 @@ this prototype.
 
 `LiveLighting` in `src/apartment/live-lighting.ts` is the lower-level component
 for that production entry. It exposes `basis` for `ApartmentLightmap`, `reset`,
-`beginStream`, `updateStream`, `cancelStream`, `apply`, `setLighting`, `tick`,
+`beginStream`, `updateStream`, `applyCheckpoint`, `cancelStream`, `apply`, `setLighting`, `tick`,
 `diagnostics` and `dispose`. Call `tick()` before
 rendering. Use its `basis` on all relevant material plugins. Keep a permanent
 black fallback texture on the material while `basis.ready` is false. Preserve
@@ -81,7 +85,8 @@ viewer now uses the normal apartment's direct-shadow settings; additional shadow
 quality changes are outside this streaming handoff.
 
 The final sequence is: display geometry/direct light; finish the atlas; apply
-acknowledged provisional patches; install the complete raw cache; publish the
+acknowledged provisional patches; publish optional 64-, 128-, 256- and 512-ray
+four-bounce checkpoints; install the complete raw cache; publish the final
 filtered four-bounce result. The camera and scene stay alive throughout. Do not
 make 3D entry wait for the last step. Keep scene revision and job ID checks in the
 host: retrying a job can reuse a scene revision, but an older job must not publish.
@@ -247,6 +252,124 @@ supported when preview is omitted. The lab disables streaming for short trials.
 
 ## Scheduling and memory
 
+### Optional whole-scene refinement
+
+Set `transferOptions.preview.progressive: true` with the active-sample kernel
+to refine every active lighting sample through 64, 128, 256, 512 and 1,024 total rays.
+The lab enables this with **Refine whole scene**. Uncheck it to compare the
+previous regional stream. Short trials and the reference kernel do not enable
+refinement. Legacy sample-repair profiles remain unsupported by the preview.
+
+The passes add 64, 64, 128, 256 and 512 new rays respectively, for 1,024 total.
+The atlas and the final 1,024 ray directions stay fixed. The first passes visit
+spread-out subsets; subsequent passes trace only the remaining directions.
+Compact hit counts and earliest original ray indices survive between passes.
+Consumed partial blocks are released as the next pass advances. This adds
+temporary CPU memory and merging work, but does not retain every raw ray result
+or perform five separate complete bakes. Final entries return to original
+first-hit order, preserving the existing cache format and fingerprint.
+
+Patches use the same acknowledgement and revision protocol. Optional
+`raysPerSample` identifies the current pass (64, 128, 256, 512 or 1,024); a patch can include
+neighbouring rows still at the preceding quality. `fraction` counts completed
+ray work, so full passes reach 6.25%, 12.5%, 25%, 50% and 100% respectively.
+Coverage means the samples were evaluated; invalid receiving samples still have
+zero alpha. Early patches retain measured sky and one sun/lamp bounce. With
+`onCheckpoint`, full four-bounce GI replaces these patches after the first pass.
+The final cache still installs once, after the last pass.
+
+Early passes process more surface samples within the configured ray budget,
+up to 4,096 surfaces per batch. A scheduled batch of 512 therefore represents
+the ray budget of 512 full-quality samples, not always 512 surfaces. Reports
+include cumulative pass completion times measured from transfer preparation
+start (including surface/source preparation). Atlas generation still precedes
+the first pass. Lower-sample lighting can fluctuate, and this mode targets earlier
+whole-scene feedback rather than a guaranteed reduction in total bake time.
+
+### Early full-lighting checkpoints
+
+The lab enables these with whole-scene refinement. At atlas readiness, pass
+`checkpoints: true` to `viewer.beginStream`. This prepares geometry, static GPU
+buffers and shaders while the worker traces its first pass. Add this callback:
+
+```ts
+preview: {
+  ...previewLighting,
+  progressive: true,
+  onChunk: chunk => sendPatchAndWaitForViewerAck({ jobId, revision, ...chunk }),
+  onCheckpoint: checkpoint => sendCheckpointAndWaitForViewerAck({
+    jobId, revision, ...checkpoint,
+  }),
+}
+```
+
+A checkpoint contains `rays: 64 | 128 | 256 | 512`, atlas-wide `offsets: Uint32Array`,
+packed `entries: Uint32Array`, and `visibility: Float32Array`. These are transient
+partial transport data, not a final cache file. Transfer the three buffers to
+the viewer without JSON conversion. After checking origin, source, job ID and
+scene revision, the viewer-side handler is:
+
+```ts
+await viewer.applyCheckpoint({ revision, rays, offsets, entries, visibility });
+acknowledgeCheckpoint(jobId, rays);
+```
+
+The lab protocol uses `checkpoint` and `checkpoint-ack` messages. The worker
+waits until the four-bounce image is published before starting the next pass.
+Keep rendering while awaiting the promise; `LiveLighting.tick()` advances it.
+An obsolete message may return false; acknowledge it only for its original job,
+or cancel that job. Handle rejection during cancellation without failing the
+newer job. Never send the final result while a checkpoint is still installing.
+
+Each checkpoint uses its actual ray count for normalization, the same four
+bounces (including bounced sky), receiving-sample rejection and final filter.
+The previous completed image stays visible until the new image is complete.
+After the first checkpoint is acknowledged, preparation stops calculating and
+sending one-bounce patches. The viewer also rejects late patches, so they cannot
+overwrite better lighting.
+The viewer reuses static GPU buffers and shaders; it replaces the growing
+transport buffers. `viewer.apply(finalResult)` reuses that prepared renderer.
+Final decoding still requires the original 1,024-ray format and fingerprint.
+
+This moves the change in lighting model to the 64-ray stage. Sampling noise,
+small-face validity and shadow detail can still change at later stages. It does
+not guarantee an invisible final transition. Each checkpoint adds a CPU copy,
+validation, transport upload and four-bounce calculation. Two output textures
+keep updates atomic. Final cache memory is unchanged; peak memory and phone
+performance still need measurement. Reports include checkpoint visibility times
+from run start, separately from worker ray-coverage times.
+
+### Refinement work reuse
+
+With progressive checkpoints, the first 64-ray pass retains its sequential
+preview stream. After its checkpoint callback resolves, the worker releases the
+preview state. The 128-, 256-, 512- and 1,024-ray passes then alternate two ray-result
+buffers: batch B starts before the CPU packs batch A. There is at most one batch
+ahead of CPU packing. Batch order and original hit ordering remain unchanged.
+Configured pauses remain, and cancellation drains the one submitted read before
+disposing its buffers. A worker termination still uses the host's existing
+cancellation timeout.
+
+Checkpoint installation retains per-sample hit totals from validation. It uses
+these totals for the receiving-sample mask instead of scanning all connections
+again. Validation and atlas preparation check a 4 ms CPU work budget between
+small blocks; they no longer sleep after every fixed block of empty atlas slots.
+GPU uploads retain their existing bounded writes and yields.
+
+No new host option is required. Existing callers without `onCheckpoint` keep
+all their provisional passes and sequential preparation. Checkpoint publication
+still blocks the next ray pass; overlapping checkpoint installation is separate
+work. GPU hit packing is also unchanged. The extra GPU result buffer is
+`batchSize * 1024 * 4` bytes (2 MiB for the measured 512-sample setting), plus
+bounded readback storage. This does not reduce final-cache memory.
+
+Reports expose `pipelinedBatches` and `previewSamples`. `readbackMilliseconds`
+measures time awaiting results that CPU work has not hidden, rather than total
+GPU execution time. Overlapped batch durations can overlap each other and must
+not be summed to infer total time. The ray readback byte count is unchanged.
+
+### Preparation pacing
+
 `prepareLightingScene` accepts `transferOptions.schedule`, a callback read
 between ray batches. Return `{ batchSize, pauseMilliseconds }`. Batch size must
 be a multiple of 64, no larger than the initial allocated batch; pause must be
@@ -265,7 +388,8 @@ or transfer the buffer away while the receiving viewer is loading it. Handoff
 from worker to parent and then parent to iframe can each transfer ownership.
 Keeping a second export copy adds approximately the full raw cache size to memory.
 
-`CachedTransfer` now accepts either its original gzip URL or a raw `ArrayBuffer`.
+`CachedTransfer` accepts its original gzip URL, a raw `ArrayBuffer`, or `null`
+for checkpoint preparation. The live component owns the checkpoint lifecycle.
 Its optional final argument controls `uploadChunkBytes` and `onUpload(bytes)`.
 The live component uploads at most 4 MiB per write and yields between writes;
 validation, surface rasterization and validity-mask loops also yield. It still
