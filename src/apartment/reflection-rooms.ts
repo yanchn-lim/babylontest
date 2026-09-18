@@ -1,4 +1,5 @@
 import { Mesh, Vector3, type PBRMaterial } from '@babylonjs/core';
+import { ApartmentReflectionBlend } from './reflection-blend';
 import type { ReflectionRoom } from '../comparison/reflections';
 
 // X/Z room limits also partition the shared floor and wall meshes for local maps.
@@ -97,5 +98,8 @@ export function apartmentReflectionRooms(sources: Mesh[], sourceMaterials: PBRMa
     source.dispose(false, false);
   }
   sourceMaterials.forEach(material => material.dispose(false, false));
+  const hall = () => rooms[rooms.length - 1].materials[0]?.reflectionTexture ?? null;
+  regions.forEach((region, i) => rooms[i].materials.forEach(material =>
+    new ApartmentReflectionBlend(material, region.bounds, hall)));
   return { meshes, materials, rooms };
 }

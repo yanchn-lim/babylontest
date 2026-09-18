@@ -150,6 +150,16 @@ fixed-viewer assets remain unsplit. Rebuild atlas and transfer together for the
 new topology. This changes indirect-light sampling and overall appearance, adds
 cold preparation cost, and does not establish leak-free GI for all geometry.
 
+The apartment now fades room reflections into the existing hall capture over a
+0.5 m band inside room partition edges. This removes abrupt reflection boundaries
+on continuous surfaces without changing GI or adding captures. The shared hall
+capture is an approximation, including near solid walls; reflection accuracy and
+phone cost remain open.
+
+The apartment also enables output dithering at intensity 1/255 in its final
+image-processing pass after bloom. This reduces display colour banding without
+changing GI or adding blur.
+
 ## Device and acceptance
 
 The preparation lab at `/preparation.html` is a controlled optimization scene

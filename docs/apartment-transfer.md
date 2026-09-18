@@ -59,6 +59,10 @@ Exposure is unchanged. Bloom runs on the camera image, outside reflection captur
 and offline cache preparation. The original viewer and comparison are unchanged.
 Phone performance remains untested.
 
+The apartment also enables output dithering at intensity 1/255 in its final
+image-processing pass after bloom. This reduces display colour banding without
+changing GI or adding blur.
+
 The Bloom settings panel offers live strength (0–1), threshold (0–3) and spread
 (8–128) sliders. Strength 0 removes the glow. Lower threshold includes dimmer
 surfaces; spread controls the blur kernel width. Reload restores the defaults.
@@ -123,6 +127,16 @@ output texture, excluding model textures and shadow maps. A four-bounce update
 uses nine dispatch stages, including the final blur. Reflection-room partitioning still divides the render
 meshes to assign local probes; it does not change the prepared GI geometry.
 Desktop timing is not a GPU completion or phone measurement.
+
+The apartment blends each room probe into the existing hall probe within 0.5 m
+of its X/Z partition edges. Both sides meet at the same capture, removing abrupt
+reflection brightness changes across the continuous floor. The blend uses each
+probe's box projection and the existing roughness filtering. It changes only
+specular radiance; GI, textures, geometry and the nine captures stay unchanged.
+It adds one cubemap binding per room material and one extra lookup inside the
+transition band. This is a simple shared-boundary approximation: the hall capture
+also influences surfaces near solid room edges and is not an accurate reflection
+of every neighbouring room. Phone cost has not been measured.
 
 ## Regenerate the apartment cache
 

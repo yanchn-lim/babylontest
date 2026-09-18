@@ -45,6 +45,8 @@ async function start() {
   const display = scene.imageProcessingConfiguration;
   display.toneMappingEnabled = true; display.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
   display.exposure = 1 / .6;
+  display.ditheringEnabled = true;
+  display.ditheringIntensity = 1 / 255;
   const camera = new UniversalCamera('Apartment camera', Vector3.Zero(), scene);
   camera.inputs.clear(); camera.inertia = 0; camera.minZ = .05; camera.maxZ = 60;
   camera.checkCollisions = true; camera.ellipsoid.set(.18, .75, .18); camera.ellipsoidOffset.set(0, -.09, 0);
