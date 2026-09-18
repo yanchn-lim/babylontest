@@ -86,6 +86,8 @@ async function start() {
   display.toneMappingEnabled = true;
   display.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
   display.exposure = 1 / .6;
+  display.ditheringEnabled = true;
+  display.ditheringIntensity = 1 / 255;
   const camera = new UniversalCamera('Comparison camera', Vector3.Zero(), scene);
   camera.inputs.clear();
   camera.inertia = 0;

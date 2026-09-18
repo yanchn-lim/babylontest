@@ -50,6 +50,9 @@ Other prepared scenes retain their tested geometry/shader behavior. No offline
 reference exists for the couches. Cycles parity, phone performance and final
 download/memory budgets remain unverified.
 
+Comparison scenes use output dithering at intensity 1/255 to reduce dark-gradient
+banding without blurring detail.
+
 ## Preparation and checks
 
 Use `scripts/prepare-comparison.py` with Blender to prepare the original room and

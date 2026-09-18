@@ -137,6 +137,9 @@ material UVs unchanged. It requires WebGPU and a static preparation scene; it
 does not add editing UI to the fixed viewers or replace their existing assets.
 See [the shared preparation contract](docs/lighting-scene-interface.md).
 
+Comparison scenes use output dithering at intensity 1/255 to reduce dark-gradient
+banding without blurring detail.
+
 ## Device and acceptance
 
 - Primary target: iPhone 14 Pro, Safari on iOS 26 or newer. Support desktop too.
