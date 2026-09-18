@@ -1,6 +1,7 @@
 import { Mesh, PBRMaterial, TransformNode, type Scene } from '@babylonjs/core';
 import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader';
 import '@babylonjs/loaders/glTF';
+import { partitionLightingArchitecture } from '../apartment/lighting-intersections';
 import type { SceneData } from '../comparison/main';
 import { createFurnishings, layoutLabels, type Layout } from './furnishings';
 
@@ -26,6 +27,7 @@ export async function loadFixture(scene: Scene, base: string, preparation: boole
   for (const node of sofa.meshes) if (!node.parent) node.parent = root;
   const eligible = (mesh: unknown): mesh is Mesh => mesh instanceof Mesh && mesh.getTotalVertices() > 0 && mesh.material instanceof PBRMaterial;
   const apartmentMeshes = apartment.meshes.filter(eligible), sofaMeshes = sofa.meshes.filter(eligible);
+  partitionLightingArchitecture(apartmentMeshes);
   const sofaRoots = [root];
   const copies = [[root, sofaMeshes]] as [TransformNode, Mesh[]][];
   for (const [index, x] of [1.5, 4.5].entries()) {

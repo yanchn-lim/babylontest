@@ -140,6 +140,16 @@ See [the shared preparation contract](docs/lighting-scene-interface.md).
 Comparison scenes use output dithering at intensity 1/255 to reduce dark-gradient
 banding without blurring detail.
 
+The live preparation lab now splits static architecture at opaque surface
+intersections before generating lighting charts. This fixes the observed bright
+living-room corner seam caused by indoor/outdoor samples sharing a wall chart.
+The shared `partitionLightingArchitecture` helper must run once on matching
+worker and display copies. It preserves surface shape and material coordinates
+but increases triangle and chart counts; furniture stays unchanged. Existing
+fixed-viewer assets remain unsplit. Rebuild atlas and transfer together for the
+new topology. This changes indirect-light sampling and overall appearance, adds
+cold preparation cost, and does not establish leak-free GI for all geometry.
+
 ## Device and acceptance
 
 The preparation lab at `/preparation.html` is a controlled optimization scene

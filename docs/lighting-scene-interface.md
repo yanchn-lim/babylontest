@@ -57,6 +57,44 @@ const transferBytes = prepared.transferBytes; // Raw bytes; gzip for transfer.bi
 - The function does not change input geometry, native UVs or `uv3`, dispose caller
   resources, export a GLB, or install results in a running viewer.
 
+## Wall intersections
+
+`partitionLightingArchitecture(architectureMeshes)` is exported from the same
+module. Call it once after importing each static architecture snapshot, before
+`prepareLightingScene` in the worker and before `createLiveViewer` returns from
+`loadScene` in the display scene. Pass the same architecture meshes in the same
+order with the same world transforms on both sides. Exclude all furniture.
+
+```ts
+import { partitionLightingArchitecture } from './src/apartment/prepare-lighting-scene';
+
+// Apply separately to the worker and viewer copies, once per fresh architecture.
+const partition = partitionLightingArchitecture(architectureMeshes);
+```
+
+This explicit helper changes triangle topology in place. It interpolates native
+vertex attributes, including material UVs, while retaining the surface shape,
+mesh order, materials and transforms. Transparent PBR meshes are excluded.
+Unlike this helper, `prepareLightingScene` itself still leaves its input meshes
+unchanged. Keep authoring originals separately if the editor needs them. Rebuild
+fresh architecture copies after architecture edits instead of repeatedly cutting
+already prepared meshes. Moving furniture does not require another subdivision.
+
+A wall can cross the middle of another wall's triangles. Without subdivision,
+one lighting chart can span both sides of that wall. Bilinear sampling can then
+blend outdoor light into an indoor corner. The added edges let the existing
+chart separator create padded regions on each side. More ray samples cannot
+repair this spatial boundary error.
+
+Regenerate atlas, scene data and transfer together. Old atlases do not match the
+new vertex counts. Export the matching subdivided geometry if exporting a model
+with this lighting; do not attach its UVs to the original unsplit GLB. The lab
+uses this helper on architecture only. Existing fixed-viewer assets are unchanged.
+Subdivision adds triangles, atlas charts and cold preparation work. It retains
+the 256x256 architecture allocation, so it can reduce spatial lighting detail or
+reach its capacity limit on other models. Repeat builds reuse the completed atlas.
+It does not guarantee that all other lighting leaks are removed.
+
 ## Atlas rules
 
 Architecture uses connected coplanar charts. Shared edges include T-junctions.
@@ -125,8 +163,8 @@ No furniture simplification or lighting-proxy generation is included.
 Validation checks array sizes, finite coordinates, collapsed mapped triangles
 and collisions between chart interiors at the renderer's resolution. It is not
 a proof of watertight geometry or leak-free GI. Like the existing Blender rule,
-wall separation follows existing triangle edges; this API does not cut triangles
-where a wall crosses their interior. Transparent materials remain excluded from
+wall separation follows existing triangle edges. Use the explicit intersection
+helper above when walls cross triangle interiors. Transparent materials remain excluded from
 opaque diffuse transport. The separate APPLARYD comparison sample-repair profile
 is not automatically applied to arbitrary furniture.
 

@@ -18,7 +18,7 @@
     </section>
     <p class="note">Short trials process 4,096 active samples or reference atlas slots. These are different workloads. Full builds cover the same lighting samples and display the result. Placement changes queue a build after 900 ms when automatic preparation is enabled. Navigation remains available throughout.</p>
     <p id="scene-counts" class="note"></p>
-    <p class="note">The furnished layout uses 19 real IKEA products: the 7,628-triangle ÄPPLARYD plus tables, chairs, bed frames and cabinets with 448–2,988 triangles each. The apartment has a reserved 256×256 region. Each furniture instance gets a separate allocation. The atlas grows as needed. Lighting proxies are not implemented.</p>
+    <p class="note">The furnished layout uses 19 real IKEA products: the 7,628-triangle ÄPPLARYD plus tables, chairs, bed frames and cabinets with 448–2,988 triangles each. The apartment has a reserved 256×256 region. Its triangles are split at wall intersections before baking to prevent indoor/outdoor light mixing; furniture triangles are unchanged. Each furniture instance gets a separate allocation. The atlas grows as needed. Lighting proxies are not implemented.</p>
     <div class="progress"><progress id="progress" value="0" max="1"></progress><p id="status" role="status">Loading the scene…</p></div>
     <section class="lab">
       <figure><figcaption><strong>Apartment + ÄPPLARYD</strong><span id="preview-status">Loading preview</span></figcaption><div class="frame"><canvas id="scene" tabindex="0" aria-label="Interactive preparation scene"></canvas><div id="move-stick" aria-label="Drag to walk"><span id="stick-thumb"></span></div></div></figure>

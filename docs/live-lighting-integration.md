@@ -10,6 +10,19 @@ queue a full build after 900 ms. Navigation and placement controls remain active
 The initial page load does not start a bake. Stop cancels preparation; an edit
 also removes the previous geometry revision's GI immediately.
 
+## Architecture boundaries
+
+The preparation lab now calls `partitionLightingArchitecture` once during
+architecture loading, on both its worker and viewer copies. Integrators must
+make the same call before preparation and before returning display meshes from
+`loadScene`. It adds triangle edges at opaque wall intersections so the atlas can
+separate indoor and outdoor light. Furniture is excluded. This changes vertex
+counts: rebuild the atlas and transfer, and preserve the matching geometry in
+exports and reflection mappings. Keep both copies in the same mesh order and
+world transforms. See [the helper contract](lighting-scene-interface.md#wall-intersections).
+Do not repeat this operation for furniture placement changes. Cold preparation
+and triangle counts increase; the atlas cache retains the completed unwrap.
+
 ## Renderer interfaces
 
 - `src/apartment/live-viewer.ts`: `createLiveViewer(canvas, loadScene, callbacks)`.

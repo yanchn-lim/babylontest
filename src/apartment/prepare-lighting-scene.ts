@@ -8,6 +8,7 @@ import { prepareScene } from './prepare-scene';
 import { lightingIndices } from './lighting-geometry';
 import { LightingAtlasCache, furnitureAtlasGeometry } from './lighting-atlas-cache';
 export { LightingAtlasCache } from './lighting-atlas-cache';
+export { partitionLightingArchitecture } from './lighting-intersections';
 
 export interface LightingSceneInput {
   /** Stable preparation meshes, in the same order used when loading the model. */

@@ -563,3 +563,42 @@ address widths, all four checkpoint ray counts, whole-scene coverage, unchanged
 final cache bytes, checkpoint day/night pixels and final pixels, cancellation,
 changing batch sizes and the existing live-viewer lifecycle. Existing build
 warnings remain. Production Interior integration remains unverified.
+
+
+## Wall-intersection leak regression
+
+The lab now calls `partitionLightingArchitecture` once on its architecture in
+both the viewer and worker. It preserves visible shape and native material UVs,
+but adds edges where opaque surfaces intersect triangle interiors. The living
+room's right wall extends behind its window wall. Before subdivision, adjacent
+samples on that single wall chart lay on opposite sides of the window wall;
+the outdoor sample saw approximately 43% sky while the indoor sample saw none.
+Bilinear filtering blended exterior light into a bright indoor corner seam.
+Separate padded charts now keep all four interpolation samples inside the room.
+
+The same 19-piece IKEA fixture with a 30-degree sofa rotation, 512-sample batches
+and 8 ms pauses completed the repaired warm build in 36.05 s. It reused all 20
+atlas allocations (0.22 s atlas work), showed its first provisional patch at
+4.24 s, and displayed four-bounce checkpoints at 8.22, 10.73, 14.73 and 21.45 s.
+The final cache exactly matched the repaired cold build. The full atlas remained
+256x2304; the architecture region remained 256x256. Total triangles rose from
+38,338 to 49,090; furniture retained its original 36,178 triangles. Final entries
+were 158.9 MiB across two pages. The largest warm preparation frame gap was
+550 ms; the largest final-installation gap was 441 ms. Phone performance is untested.
+
+The cold run took 68.08 s, including 23.71 s atlas work. A CPU regression test
+ran concurrently during part of that run, so this is not an isolated performance
+comparison. Subdivision adds cold preparation work and increases atlas chart
+count. It changes lighting sample locations and overall indirect brightness;
+it is not a pixel-identical correction outside the observed seam. The fixed
+architecture resolution can lose spatial detail as more charts share it.
+
+The completed GPU view was checked with all lights and indirect light alone;
+the bright vertical seam was absent. The geometry regression checks material UV
+interpolation and that glass and excluded furniture remain unchanged. The actual
+apartment regression checks the four bilinear sample positions at several heights
+along the corner. This does not establish leak-free lighting for every scene.
+See [the integration requirement](lighting-scene-interface.md#wall-intersections).
+
+Verification: 115 local tests, TypeScript and the production build passed.
+The existing xatlas browser-module and large-bundle warnings remain.
