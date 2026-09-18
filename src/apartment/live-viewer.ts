@@ -1,5 +1,7 @@
-import { Color3, Constants, DirectionalLight, ImageProcessingConfiguration, Light, PBRMaterial, PointLight,
+import { Color3, Color4, Constants, DirectionalLight, Light, PBRMaterial, PointLight,
   Scene, ShadowGenerator, UniversalCamera, Vector3, WebGPUEngine, type Mesh } from '@babylonjs/core';
+import { configureDisplay, createBloom } from '../graphics/display';
+import { LiveReflections, type ReflectionRegion } from '../graphics/live-reflections';
 import { ApartmentLightmap } from './lightmap';
 import { LiveLighting, type LiveLightingResult, type LiveLightingStream } from './live-lighting';
 import type { TransferCheckpoint } from '../comparison/transfer-checkpoint';
@@ -10,7 +12,7 @@ import type { SceneData } from '../comparison/main';
 
 export interface LiveViewerInput {
   meshes: Mesh[];
-  settings: Pick<SceneData, 'fixtures' | 'sky' | 'views'>;
+  settings: Pick<SceneData, 'fixtures' | 'sky' | 'views'> & { reflectionRooms?: ReflectionRegion[] };
 }
 
 /** Direct-light apartment viewer; loadScene supplies native materials and geometry. */
@@ -20,13 +22,12 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
   const engine = new WebGPUEngine(canvas, { antialias: true, useExactSrgbConversions: true });
   try { await engine.initAsync(); } catch (error) { engine.dispose(); throw error; }
   const scene = new Scene(engine); scene.useRightHandedSystem = true; scene.collisionsEnabled = true;
-  scene.imageProcessingConfiguration.toneMappingEnabled = true;
-  scene.imageProcessingConfiguration.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
-  scene.imageProcessingConfiguration.exposure = 1 / .6;
+  configureDisplay(scene);
   let input: LiveViewerInput;
   try { input = await loadScene(scene); } catch (error) { scene.dispose(); engine.dispose(); throw error; }
   const { settings } = input;
   const camera = new UniversalCamera('Apartment camera', Vector3.Zero(), scene);
+  const bloom = createBloom(scene, camera), reflections = new LiveReflections(scene);
   camera.inputs.clear(); camera.inertia = 0; camera.minZ = .05; camera.maxZ = 60;
   camera.checkCollisions = true; camera.ellipsoid.set(.18, .75, .18); camera.ellipsoidOffset.set(0, -.09, 0);
   const resetCamera = () => {
@@ -52,6 +53,7 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
       material.lightmapTexture = basis.texture; new ApartmentLightmap(material, basis, true);
     }
   };
+  reflections.reset(input.meshes, settings.reflectionRooms);
   initialize(input.meshes);
   const state = lighting(9, 'on'), shadows: ShadowGenerator[] = [];
   const sun = new DirectionalLight('Sun', new Vector3(...state.direction.map(v => -v)), scene);
@@ -77,6 +79,7 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
     light.intensity = source.intensity * .35; light.shadowMinZ = .05; light.shadowMaxZ = 18; addShadow(light, 1024);
   });
   live.setLighting(state, settings.sky);
+  scene.clearColor = new Color4(...settings.sky.map(v => v * state.sky) as [number, number, number], 1);
   let frames = 0;
   const render = () => {
     live.tick();
@@ -89,10 +92,14 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
       : info.phase === 'streaming' ? `Streaming provisional GI · ${Math.round(info.streamFraction * 100)}% · ${info.streamUpdates} updates`
       : 'Direct light · Ready to explore';
     callbacks.onStatus?.(text);
+    const reflectionKey = info.revision < 0 ? '' : info.phase === 'ready' ? `${info.revision}:gi:${cache?.revision}`
+      : info.phase === 'preview' ? `${info.revision}:direct` : '';
+    reflections.tick(reflectionKey, settings.sky.map(value => value * state.sky));
     scene.render(); frames++;
   };
   const reset = (revision: number, meshes: Mesh[]) => {
-    live.reset(revision, meshes); initialize(meshes);
+    live.reset(revision, meshes);
+    reflections.reset(meshes, settings.reflectionRooms); initialize(meshes);
     for (const shadow of shadows) {
       shadow.getShadowMap()!.renderList = meshes.filter(mesh => !mesh.material!.needAlphaBlending());
       shadow.getShadowMap()!.resetRefreshCounter();
@@ -119,7 +126,7 @@ export async function createLiveViewer(canvas: HTMLCanvasElement, loadScene: (sc
       if (JSON.stringify(result.sceneData.fixtures) !== JSON.stringify(settings.fixtures)) throw Error('Lighting fixtures do not match the viewer.');
       return live.apply(result);
     },
-    dispose() { window.removeEventListener('resize', resize); engine.stopRenderLoop(render); live.dispose(); scene.dispose(); engine.dispose(); },
-    diagnostics: () => ({ ...live.diagnostics(), frames, camera: camera.position.asArray() }),
+    dispose() { window.removeEventListener('resize', resize); engine.stopRenderLoop(render); live.dispose(); reflections.dispose(); bloom.dispose(); scene.dispose(); engine.dispose(); },
+    diagnostics: () => ({ ...live.diagnostics(), frames, camera: camera.position.asArray(), reflections: reflections.diagnostics(), dithering: scene.imageProcessingConfiguration.ditheringEnabled }),
   };
 }

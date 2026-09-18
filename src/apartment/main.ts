@@ -1,7 +1,9 @@
 import {
-  Color3, Color4, Constants, DefaultRenderingPipeline, DirectionalLight, Engine, ImageProcessingConfiguration, Light,
+  Color3, Color4, Constants, DirectionalLight, Engine, Light,
   PointLight, Scene, ShadowGenerator, Texture, UniversalCamera, Vector3, WebGPUEngine,
 } from '@babylonjs/core';
+import { configureDisplay, createBloom } from '../graphics/display';
+import { collectReflectionBoxes } from '../graphics/reflection-geometry';
 import { loadApartment } from '../interior-lighting/apartment';
 import { CachedTransfer } from '../comparison/cached-transfer';
 import { lighting, skyDisplay, type SwitchMode } from '../comparison/lighting';
@@ -42,23 +44,12 @@ async function start() {
   engine ??= new Engine(canvas, true, { useExactSrgbConversions: true });
   const activeEngine = engine, scene = new Scene(engine);
   scene.useRightHandedSystem = true; scene.collisionsEnabled = true;
-  const display = scene.imageProcessingConfiguration;
-  display.toneMappingEnabled = true; display.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
-  display.exposure = 1 / .6;
-  display.ditheringEnabled = true;
-  display.ditheringIntensity = 1 / 255;
+  const display = configureDisplay(scene);
   const camera = new UniversalCamera('Apartment camera', Vector3.Zero(), scene);
   camera.inputs.clear(); camera.inertia = 0; camera.minZ = .05; camera.maxZ = 60;
   camera.checkCollisions = true; camera.ellipsoid.set(.18, .75, .18); camera.ellipsoidOffset.set(0, -.09, 0);
-  const bloom = !preparing
-    ? new DefaultRenderingPipeline('Apartment bloom', true, scene, [camera], false)
-    : undefined;
+  const bloom = preparing ? undefined : createBloom(scene, camera);
   if (bloom) {
-    bloom.bloomEnabled = true;
-    bloom.bloomWeight = .5; bloom.bloomThreshold = .7;
-    bloom.bloomKernel = 32; bloom.bloomScale = .5;
-    bloom.samples = 4;
-    bloom.prepare();
     for (const [id, property, digits] of [
       ['bloom-strength', 'bloomWeight', 2],
       ['bloom-threshold', 'bloomThreshold', 2],
@@ -84,6 +75,7 @@ async function start() {
     if (atlas[index]?.length !== mesh.getTotalVertices() * 2) throw Error('Apartment lighting atlas does not match the model.');
     mesh.setVerticesData('uv3', atlas[index]);
   });
+  const reflectionBoxes = preparing ? [] : collectReflectionBoxes(meshes);
   let rooms: ReflectionRoom[] = [];
   if (!preparing) ({ meshes, materials, rooms } = apartmentReflectionRooms(meshes, materials));
   const baked = new Texture(base + 'models/bukit-merah/pbr/indirect.png', scene, false, false);
@@ -114,7 +106,7 @@ async function start() {
     opaque.forEach(mesh => shadow.addShadowCaster(mesh)); shadow.getShadowMap()!.refreshRate = 0;
     return light;
   });
-  const reflections = new RoomReflections(scene, meshes, rooms, materials);
+  const reflections = new RoomReflections(scene, meshes, rooms, materials, reflectionBoxes);
   const reflectionControl = element<HTMLSelectElement>('reflections');
   if (preparing) { reflectionControl.value = 'off'; reflections.setEnabled(false); }
   reflectionControl.addEventListener('change', () => reflections.setEnabled(reflectionControl.value === 'on'));

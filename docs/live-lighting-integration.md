@@ -1,5 +1,9 @@
 # Live lighting integration for Interior
 
+Approved display and reflection changes now use shared defaults across all active
+viewers. See [the current graphics policy](../PROJECT_GOALS.md#shared-graphics-defaults).
+The original viewer is retired; `/` opens the current apartment.
+
 This opt-in local implementation lets users explore the current geometry while a separate
 worker prepares lighting. Completed GI installs into the same scene, without a
 GLB reload or a camera reset. The optional stream now displays provisional

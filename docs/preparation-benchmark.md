@@ -1,5 +1,9 @@
 # Lighting preparation lab
 
+Approved display and reflection changes now use shared defaults across all active
+viewers. See [the current graphics policy](../PROJECT_GOALS.md#shared-graphics-defaults).
+The original viewer is retired; `/` opens the current apartment.
+
 Open `/preparation.html`, or select **Preparation lab** in the comparison scene.
 This is a local optimization fixture for the shared `prepareLightingScene` API.
 It loads the apartment, the original 7,628-triangle APPLARYD, and low-triangle

@@ -1,4 +1,7 @@
-# Babylon.js apartment lighting lab
+# Babylon apartment and lighting comparison
+
+This project has three supported viewers, built with Babylon.js 9.25.0,
+TypeScript and Vite.
 
 The [lighting preparation lab](https://yanchn-lim.github.io/babylontest/preparation.html)
 measures editor rebuilds with the apartment and 19 actual IKEA furniture pieces.
@@ -6,200 +9,91 @@ It includes reusable lighting atlases, active-sample tracing, exact hit packing
 and GPU cache paging. See the [benchmark results](docs/preparation-benchmark.md)
 and [editor integration guide](docs/lighting-scene-interface.md).
 
-An interactive TypeScript and Vite viewer for the Bukit Merah Ridge apartment.
-Built with standard Babylon.js 9.25.0 and a custom FrameGraph renderer.
+[Open the published lighting comparison](https://yanchn-lim.github.io/babylontest/comparison.html).
 
-[Open the apartment](https://yanchn-lim.github.io/babylontest/?scene=bukit-merah)
+| Viewer | Local route | Purpose |
+| --- | --- | --- |
+| Lighting comparison | `/comparison.html` | Compare a small real-time scene against matched offline Cycles renders. |
+| Apartment lighting study | `/apartment.html` | Walk through the fixed apartment with cached diffuse lighting, four bounces and time-of-day controls. |
+| Lighting preparation lab | `/preparation.html` | Measure apartment + furniture rebuilds with manual trials, batch controls and cache checks. |
 
-[Open the apartment lighting study](https://yanchn-lim.github.io/babylontest/apartment.html)
-for the comparison renderer applied to the fixed apartment: cached diffuse lighting,
-four bounces, walking, time of day and fixed Auto / On / Off room lights. The
-original viewer stays available. See the [apartment study guide](docs/apartment-transfer.md).
+[Open the apartment lighting study](https://yanchn-lim.github.io/babylontest/apartment.html).
+See the [apartment study guide](docs/apartment-transfer.md) for preparation and limits.
+See the [preparation lab guide](docs/preparation-benchmark.md) for rebuild measurements.
 
-[Open the lighting comparison](https://yanchn-lim.github.io/babylontest/comparison.html)
-to compare the small Babylon scene against matched offline Cycles references.
-Select cached dense diffuse lighting, radiance cascades or the baked baseline, change time and interior
-lights, and compare saved views side by side or with an overlay. WebGL uses the
-baked fallback. See the [comparison guide](docs/remake-comparison.md) for controls,
-implementation limits and asset preparation.
+The root route `/` redirects to the current apartment viewer. The original viewer is retired.
+All active viewers share the approved graphics defaults in `src/graphics/`.
+The comparison uses cached diffuse GI with four bounces, live direct lighting
+and shadows. Controls cover scene selection, time of day, Auto / On / Off interior
+lights, walking, saved cameras, and side-by-side or overlay offline comparison.
+The room falls back to baked lighting on WebGL; furniture GI requires WebGPU.
 
-Furniture checks are available in the comparison page's Study menu:
+Furniture scenes are available in the Scene menu:
 
-- [KLIPPAN couch · metallic-texture fix](https://yanchn-lim.github.io/babylontest/comparison.html?study=couch&lights=on)
-- [Dense furniture · GI offsets](https://yanchn-lim.github.io/babylontest/comparison.html?study=offsets&lights=on)
+- [KLIPPAN](https://yanchn-lim.github.io/babylontest/comparison.html?study=couch&lights=on)
+- [ÄPPLARYD](https://yanchn-lim.github.io/babylontest/comparison.html?study=applaryd&lights=on)
 
-The viewer includes PBR materials, movable sunlight, shadows, bloom, light shafts,
-and an artistic day/night cycle. The apartment supports baked lighting and
-experimental WebGPU probe global illumination (GI). WebGPU is preferred when
-initialization succeeds; WebGL provides the baked-lighting fallback. No SSGI is used.
+ÄPPLARYD uses the tested correction for ray origins and invalid lighting samples.
+Some cushion seams remain unresolved. Old renderer, offset and material A/B
+variants have been removed; earlier versions remain in Git checkpoints.
+
+The comparison is an experiment. GI artifacts, reflection accuracy and actual
+phone performance remain open.
+See [project goals](PROJECT_GOALS.md).
 
 ## Run locally
 
-From the repository root in PowerShell:
+Use the Windows launcher to select the project's Node 24 runtime:
 
 ```powershell
 .\run.ps1 setup
 .\run.ps1 dev
 ```
 
-The launcher downloads a SHA-256-checked Node.js 24.19.0 runtime into the ignored
-`.tools` directory without replacing your system Node installation. Setup installs
-pinned dependencies and downloads the environment lighting.
-Open the address printed by Vite. Stop the server with Ctrl+C.
+Setup installs pinned dependencies and downloads the apartment environment
+texture and its attribution. Apartment and comparison assets are already in
+`public`. Open the address printed by Vite, then use either route above.
 
-With your own Node installation, use Node 24 to match CI:
+With Node 24 already on PATH:
 
 ```powershell
 npm ci
-npm run assets
 npm run dev
 ```
 
-Open `/?scene=bukit-merah` for the apartment. The apartment assets are committed
-under `public/models/bukit-merah`; `npm run assets` does not generate them.
+## Check and build
 
-## Environment controls
+```powershell
+.\run.ps1 check
+.\run.ps1 build
+.\run.ps1 preview
+```
 
-Select **Controls** to open the inspector. It starts closed, opens on the right on
-desktop, and uses a bottom sheet on portrait phones. **Expand** provides more space;
-**Close** or Escape returns to the scene. The canvas stays full-size.
+`npm test` runs the remaining unit and asset checks with Node 24. Browser checks
+are separate; they require Playwright and Edge. Run only the checks relevant to
+the change. The comparison check and its environment variables are documented
+in [the comparison guide](docs/remake-comparison.md).
 
-| Category | Controls |
+## Project map
+
+| Path | Responsibility |
 | --- | --- |
-| Environment | Time of day, presets, playback, sun brightness and warmth, manual direction, GI mode and strength |
-| Lights | Session-only lamps and downlights, on/off, brightness, temperature, position, rotation, beam angle, removal |
-| Materials | Material selection, wall color, roughness, texture detail, reflections, metallic level, material reset |
-| Image | Exposure, contrast, bloom, light shafts |
-| Quality | Render scale, anti-aliasing, shadow resolution, method, filtering, softness, bias |
-| Camera | Walk/Fly, mouse capture, navigation help, session reset, panel appearance, attribution |
+| `src/graphics/` | Shared display defaults and local reflection visibility. |
+| `src/interior-lighting/` | Original apartment probe GI, fixtures and geometry preparation. |
+| `src/comparison/` | Comparison renderer, lighting controls, lightmaps and navigation. |
+| `public/models/bukit-merah/` | Original apartment assets, source attribution and bake metadata. |
+| `public/comparison/` | Comparison geometry, lighting maps, references and provenance. |
+| `scripts/` | Asset preparation and focused checks for the active viewers. |
+| `tests/` | Unit and asset tests; retained regression data lives in `tests/fixtures/`. |
+| `.tools/` | Ignored local runtimes, intermediate renders, captures and logs. |
 
-Advanced tuning is collapsed initially. Panel opacity is adjustable from 70–100%
-under **Camera → UI appearance**, with an 88% default and solid control fields.
-Category, expansion, and opacity preferences are stored separately from graphics
-settings. These UI changes do not invalidate a benchmark or rebuild the render graph.
+## Guides
 
-Graphics settings persist across scenes. Material adjustments are saved per scene
-and affect every surface using the selected material. Fixtures are session-only.
-Use the material reset for one material, or **Camera → Session** for the global reset.
+- [Current goals and scope](PROJECT_GOALS.md)
+- [Original apartment bake workflow](docs/lighting-workflow.md)
+- [Comparison scene and reference preparation](docs/remake-comparison.md)
+- [Apartment source and attribution](public/models/bukit-merah/SOURCE.md)
+- [Environment attribution](public/LICENSES/BabylonAssets.txt)
 
-## Navigation
-
-- Click or drag the scene to look. Use WASD or arrow keys to move; Shift moves faster.
-- Apartment **Walk** mode uses adjustable eye height (1.5 m by default) and wall and door collisions.
-  It assumes a level floor and does not simulate stairs or gravity.
-- **Fly** follows the camera direction without collisions. E rises and Q descends.
-- On touch screens, use the movement stick and drag the scene to look. Fly mode
-  also provides Up and Down controls.
-- **Capture mouse** enables continuous mouse look; Escape releases it.
-
-Opening the inspector clears held movement. Editing controls does not move the
-camera, and closing the inspector does not resume stale input. Movement also stops
-on focus loss or when the page is hidden.
-
-## Lighting modes
-
-**Baked** is the default. It combines fixed diffuse skylight and ambient occlusion
-with real-time direct sunlight and shadows. The apartment also supports directional
-baked response for material normals. Moving the sun does not rebake these textures.
-
-**Real-time probe GI** requires WebGPU. It prepares visibility data for the existing
-apartment and refines indirect lighting after lighting or material edits. Refinement
-stops after convergence; the PBR shading pass continues to sample GI while settled.
-Switching back to Baked restores the baked-lighting path. GI remains experimental,
-with known coverage and reflection limitations.
-
-Enable **Use time of day** in Environment to scrub the clock or use daylight presets.
-Playback starts paused after reload. Disable time of day to restore the saved manual
-sun direction and warmth. The cycle is artistic, not a location/date-accurate daylight
-study. Brightness controls are artistic multipliers, not calibrated measurements.
-Sun color also drives the light-shaft tint.
-
-## Debug and benchmarks
-
-**Debug** starts off on every load. It reveals a compact overlay with FPS, frame
-interval, render dimensions, renderer, and GI state, plus a Debug category containing
-benchmarks, probe diagnostics, indirect-only inspection, and Babylon Inspector.
-
-Hiding Debug restores combined rendering and closes Babylon Inspector. An active
-benchmark keeps its progress and Stop control available until the run ends.
-
-Benchmark runs warm up for 15 seconds, then measure for 60 seconds. Exported results
-include settings, camera state, render dimensions, revision, frame statistics,
-available GPU timings, and shadow/render-graph diagnostics.
-
-For comparable results, keep the device, camera route, viewport, render scale,
-exposure, and lighting settings fixed. Test moving sunlight separately and repeat
-after sustained device use. Keep Babylon Inspector closed during measurement.
-
-- Frame interval is not GPU execution time.
-- **Last GI dispatch** is a retained refinement measurement, not current whole-frame
-  GPU cost. Unsupported measurements are shown as unavailable.
-- The revision field identifies source HEAD; it does not identify uncommitted source
-  used in a local build.
-- Native-resolution 60 FPS on the user's iPhone remains an acceptance target, not a
-  verified result. Desktop timings and emulated phone layouts do not establish it.
-- Full eight-fixture acceptance is not established; prior stress testing encountered
-  shader sampler and native light-count limits.
-
-## Checks and production build
-
-```powershell
-npm test
-npm run check
-npm run build
-npm run preview
-```
-
-The build includes TypeScript checking and writes `dist`. The Windows launcher also
-supports `check`, `build`, and `preview`. Tests cover navigation, lighting, geometry,
-materials, and rendering behavior.
-
-Browser UI checks are available in `scripts/check-scene-ui-layout.cjs`,
-`scripts/check-scene-ui-interaction.cjs`, and `scripts/check-scene-ui-touch.cjs`.
-They require Playwright and Microsoft Edge. Set `PLAYWRIGHT_MODULE` if Playwright is
-outside the project, `UI_URL` to the running viewer, and optionally `UI_OUTPUT` for
-screenshots and JSON reports. For example:
-
-```powershell
-$env:UI_URL = 'http://127.0.0.1:5173/?scene=bukit-merah'
-node scripts/check-scene-ui-layout.cjs
-node scripts/check-scene-ui-interaction.cjs
-node scripts/check-scene-ui-touch.cjs
-```
-
-Use the actual port printed by Vite. The layout check covers desktop, tablet,
-portrait phone, and short landscape sizes. Real-device testing is still required.
-
-## Assets and baking
-
-The apartment preserves the supplied model's geometry and door positions, with a
-visible ceiling and PBR paint, tile, veneer, glass, and metal. Active assets are in
-`public/models/bukit-merah/pbr`; the supplied model and earlier baked assets are retained.
-
-See the [apartment baked-lighting workflow](docs/lighting-workflow.md) for material
-preparation, Blender baking, directional lightmaps, denoising, and asset verification.
-That guide describes the baked path, not runtime probe GI. Review staged outputs
-before replacing public assets. Material changes require a rebake for the baked path;
-changing direct sun direction does not.
-
-Asset sources and licenses:
-
-- [Environment source](https://github.com/BabylonJS/Assets/tree/8be9384c7f8728cb45d27975ac92a412f97a98dd/environments)
-- [Supplied licenses](public/LICENSES)
-- [Asset revisions](public/ASSET-SOURCES.json)
-- [Apartment material sources and hashes](public/models/bukit-merah/pbr/sources.json)
-
-## Deployment and project notes
-
-[GitHub Actions](.github/workflows/pages.yml) tests, builds, and publishes committed
-source and assets to GitHub Pages on pushes to `main`. Repository Pages settings must
-use GitHub Actions as the source. Vite uses relative asset URLs for deployment under
-the repository subdirectory; CI uses the committed assets rather than downloading them.
-
-The separate [GI preview](https://yanchn-lim.github.io/babylontest-probe-preview/?scene=bukit-merah)
-has its own static-output repository and release history. Publishing it does not
-update production.
-
-Historical implementation and performance reports under `docs` describe the state
-at the time of each experiment; their UI names and deployment claims may be outdated.
-See [AGENTS.md](AGENTS.md) for project editing instructions.
+Asset generation is a separate offline step. A normal build uses the existing
+assets and does not launch Blender or rebake lighting.

@@ -5,6 +5,7 @@ export class ApartmentReflectionBlend extends MaterialPluginBase {
   constructor(material: PBRMaterial, private bounds: number[], private hall: () => BaseTexture | null) {
     super(material, 'ApartmentReflectionBlend', 220, { APARTMENT_REFLECTION_BLEND: true }, true, true);
   }
+  setBounds(bounds: number[]) { this.bounds = bounds; }
   isCompatible() { return true; }
   getSamplers(names: string[]) { names.push('boundaryReflection'); }
   getUniforms(language?: ShaderLanguage) {
@@ -22,7 +23,7 @@ export class ApartmentReflectionBlend extends MaterialPluginBase {
   }
   bindForSubMesh(buffer: UniformBuffer) {
     const texture = this.hall() as RenderTargetTexture | null;
-    buffer.updateFloat4('reflectionBounds', this.bounds[0], this.bounds[1], this.bounds[2], this.bounds[3]);
+    buffer.updateFloat4('reflectionBounds', this.bounds[0] ?? -1e20, this.bounds[1] ?? 1e20, this.bounds[2] ?? -1e20, this.bounds[3] ?? 1e20);
     buffer.updateFloat('boundaryReady', Number(!!texture));
     if (!texture) return;
     buffer.updateVector3('boundaryPosition', texture.boundingBoxPosition);

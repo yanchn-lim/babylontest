@@ -1,6 +1,9 @@
 import { Color4, HDRFiltering, ReflectionProbe, SphericalPolynomial, Vector3,
   type Mesh, type PBRMaterial, type Scene } from '@babylonjs/core';
 import { LocalReflectionFilter } from './reflection-filter';
+import { LocalSpecularOcclusion } from '../graphics/specular-occlusion';
+import { collectReflectionBoxes, reflectionBoxLookup } from '../graphics/reflection-geometry';
+import type { ReflectionBox } from '../graphics/reflection-boxes';
 
 export interface ReflectionRoom {
   name: string;
@@ -23,9 +26,17 @@ export class RoomReflections {
   private updateMilliseconds = 0;
 
   constructor(private scene: Scene, private meshes: Mesh[], private rooms: ReflectionRoom[],
-    private materials: PBRMaterial[]) {
-    materials.forEach(material => new LocalReflectionFilter(material));
+    private materials: PBRMaterial[], boxes: ReflectionBox[] = collectReflectionBoxes(meshes)) {
+    const lookup = reflectionBoxLookup(boxes);
+    materials.forEach(material => {
+      if (!material.pluginManager?.getPlugin('LocalReflectionFilter')) new LocalReflectionFilter(material);
+      if (material.needAlphaBlending()) return;
+      const occlusion = material.pluginManager?.getPlugin('LocalSpecularOcclusion') as LocalSpecularOcclusion | undefined;
+      if (occlusion) occlusion.updateBoxes(lookup); else new LocalSpecularOcclusion(material, lookup);
+    });
   }
+
+  texture(index: number) { return this.probes[index]?.cubeTexture ?? null; }
 
   setEnabled(enabled: boolean) {
     this.enabled = enabled;

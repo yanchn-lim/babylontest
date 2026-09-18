@@ -4,16 +4,10 @@ Updated: 2026-09-18
 
 ## Current focus
 
-Maintain two Babylon implementations:
-
-1. The original apartment viewer at `/`, including its existing navigation,
-   baked lighting, probe GI, fixtures, materials and graphics controls.
-2. The remake comparison scene at `/comparison.html`, used to evaluate a new
-   lighting approach before extending it to the apartment.
-
-Other viewers, retired experiments, their tests and historical reports are
-outside scope and have been removed. Keep the two supported implementations
-distinct.
+Maintain the apartment, comparison and preparation/live viewers. The original
+viewer is retired; `/` redirects to `/apartment.html`. Approved graphics changes
+are shared defaults for all active viewers, not scene-specific opt-ins. The active cached viewers share diffuse blur and native material-detail handling. Scene
+lighting, model data and geometry-dependent corrections can still differ.
 
 ## Remake requirements
 
@@ -21,7 +15,7 @@ distinct.
 - Fixed interior lights have automatic and manual switching. Auto follows time
   of day; On and Off override it.
 - Apartment, furniture, material and light-property editing are not required
-  for the remake. Existing controls in the original viewer remain supported.
+  for the remake. The original viewer and its controls are retired.
 - Aim for convincing realism approaching an offline path-traced render while
   keeping navigation and time changes responsive.
 - Keep navigation sharp and stable. Camera movement must not restart lighting
@@ -82,7 +76,7 @@ See [the comparison guide](docs/remake-comparison.md).
 At the user's request, `/apartment.html` now extends the cached dense diffuse
 prototype to the fixed apartment. It retains the native materials, adds a padded
 lighting atlas, and uses seven fixed room lights with Auto / On / Off controls.
-The original viewer remains separate. This extension does not establish Cycles
+The original viewer is now retired. This extension does not establish Cycles
 parity, phone performance or a final GI method. See
 [the apartment study guide](docs/apartment-transfer.md).
 
@@ -159,6 +153,27 @@ phone cost remain open.
 The apartment also enables output dithering at intensity 1/255 in its final
 image-processing pass after bloom. This reduces display colour banding without
 changing GI or adding blur.
+
+## Shared graphics defaults
+
+This supersedes earlier notes that limited approved display and reflection fixes
+to individual viewers. All active viewers use ACES, exposure 1/0.6, dithering
+1/255, and bloom strength 0.5, threshold 0.7, kernel 32, with 4x MSAA. Offline
+lighting preparation omits camera bloom. Scene light intensities and prepared
+sample corrections remain scene data; this change does not rebake caches.
+
+All probe reflections use the dominant-direction filter and 32 fixed GGX
+visibility samples against up to eight nearby verified solid boxes per receiver.
+Open or non-box geometry is not replaced by solid bounds. This publishes and
+generalizes the sphere correction; it does not provide full reflection tracing.
+
+The live viewer now refreshes reflection captures after geometry changes and
+completed lighting. Its apartment fixture supplies the existing room layout and
+shared-hall boundary blend. Receivers spanning rooms use the hall capture without
+cutting editable geometry or changing lighting UVs. Other models can supply room
+layouts; otherwise a scene-bounds probe is used. This is approximate and has not
+been measured on a phone. Bloom changes the displayed Cycles comparison; the
+existing reference images are retained and have not been rebaked with bloom.
 
 ## Device and acceptance
 

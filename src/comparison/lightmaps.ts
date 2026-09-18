@@ -13,7 +13,7 @@ export interface LightmapState {
 
 /** RGBM stores linear baked radiance, including the fixed surface colour. */
 export class ComparisonLightmaps extends MaterialPluginBase {
-  constructor(material: PBRMaterial, private state: LightmapState) {
+  constructor(material: PBRMaterial, private state: LightmapState, private receivedDiffuse = false) {
     super(material, 'ComparisonLightmaps', 200, {}, true, true);
   }
   isCompatible() { return true; }
@@ -47,6 +47,13 @@ export class ComparisonLightmaps extends MaterialPluginBase {
         #ifdef LIGHTMAP
         if (${weights}.w > 0.5) {
           lightmapColor = ${sample('cascadeMap')};
+          ${this.receivedDiffuse ? `
+          lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb / max(lightmapColor.a, 0.0001), 1.0);
+          #if defined(METALLICWORKFLOW) && !defined(UNLIT)
+          lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb * baseColor * (1.0 - reflectivityOut.metallic), 1.0);
+          #else
+          lightmapColor = ${wgsl ? 'vec4f' : 'vec4'}(lightmapColor.rgb * surfaceAlbedo, 1.0);
+          #endif` : ''}
         } else {
         ${wgsl ? 'let' : 'vec4'} basisA = ${sample('basisLower')};
         ${wgsl ? 'let' : 'vec4'} basisB = ${sample('basisUpper')};

@@ -1,7 +1,11 @@
 # Apartment cached diffuse study
 
+Approved display and reflection changes now use shared defaults across all active
+viewers. See [the current graphics policy](../PROJECT_GOALS.md#shared-graphics-defaults).
+The original viewer is retired; `/` opens the current apartment.
+
 Open `/apartment.html` for the comparison renderer applied to the fixed Bukit
-Merah apartment. `/` remains the original viewer, and `/comparison.html` retains
+Merah apartment. `/` redirects here, and `/comparison.html` retains
 the small scene and its Cycles references.
 
 The apartment uses the same dense diffuse transfer method: 1,024 fixed hemisphere

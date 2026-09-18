@@ -1,5 +1,9 @@
 # Remake comparison scene
 
+Approved display and reflection changes now use shared defaults across all active
+viewers. See [the current graphics policy](../PROJECT_GOALS.md#shared-graphics-defaults).
+The original viewer is retired; `/` opens the current apartment.
+
 `/comparison.html` uses cached dense diffuse lighting with four indirect bounces.
 Select Room, KLIPPAN or ÄPPLARYD. The original apartment viewer at `/` and the
 remake apartment at `/apartment.html` remain separate.

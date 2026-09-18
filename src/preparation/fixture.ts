@@ -1,6 +1,7 @@
 import { Mesh, PBRMaterial, TransformNode, type Scene } from '@babylonjs/core';
 import { ImportMeshAsync } from '@babylonjs/core/Loading/sceneLoader';
 import '@babylonjs/loaders/glTF';
+import { apartmentReflectionLayout } from '../apartment/reflection-rooms';
 import { partitionLightingArchitecture } from '../apartment/lighting-intersections';
 import type { SceneData } from '../comparison/main';
 import { createFurnishings, layoutLabels, type Layout } from './furnishings';
@@ -40,7 +41,7 @@ export async function loadFixture(scene: Scene, base: string, preparation: boole
   const settingsResponse = await fetch(new URL('apartment-transfer/scene.json', base));
   if (!settingsResponse.ok) throw Error('Could not load lighting settings.');
   const { fixtures, sky, views } = await settingsResponse.json() as SceneData;
-  const settings = { fixtures, sky, views };
+  const settings = { fixtures, sky, views, reflectionRooms: apartmentReflectionLayout() };
   return { meshes, settings,
     select(layout: Layout, placement: Placement) {
       if (!Object.hasOwn(layoutLabels, layout)) throw Error('Unknown benchmark layout.');

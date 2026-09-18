@@ -1,6 +1,6 @@
 # Apartment lighting workflow
 
-This guide describes the current Bukit Merah Ridge lighting. It uses the existing model, ceiling, materials, and baked UV atlas. A lighting rebake does not export or change the model.
+This historical guide describes the retired viewer’s baked lighting assets. The model, materials and baked UV atlas remain available. A lighting rebake does not export or change the model. For the active renderer, see [the apartment guide](apartment-transfer.md). The [comparison scene](remake-comparison.md) has its own bake pipeline.
 
 ## How the image is built
 
@@ -27,7 +27,7 @@ The visible sky shader is separate from the uniform sky used for baking. Changin
 - [Directional material plugin](../src/directional-lightmap.ts)
 - [Denoise script](../scripts/denoise-apartment.py)
 - [Material generator](../scripts/prepare-apartment-materials.py)
-- [Babylon lighting setup](../src/main.ts)
+- [Current apartment lighting setup](../src/apartment/main.ts)
 - [Lighting preset and saved preferences](../src/graphics-settings.ts)
 
 UV0 supplies material texture coordinates. UV1 supplies the existing baked-light and AO coordinates. Keep these channels intact. The workflow below updates the lighting textures and their metadata; it leaves AO unchanged.

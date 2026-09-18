@@ -1,6 +1,7 @@
 import { Mesh, Vector3, type PBRMaterial } from '@babylonjs/core';
 import { ApartmentReflectionBlend } from './reflection-blend';
 import type { ReflectionRoom } from '../comparison/reflections';
+import type { ReflectionRegion } from '../graphics/live-reflections';
 
 // X/Z room limits also partition the shared floor and wall meshes for local maps.
 const regions = [
@@ -13,6 +14,13 @@ const regions = [
   { name: 'Kitchen', bounds: [5.85, 8.8, -3, -.3] },
   { name: 'Shelter', bounds: [10.6, 12.4, -4.4, -1.5] },
 ];
+
+export function apartmentReflectionLayout(): ReflectionRegion[] {
+  return [...regions.map(({ name, bounds: [x0, x1, z0, z1] }) => ({
+    name, bounds: [x0, x1, z0, z1], center: [(x0 + x1) / 2, 1.375, (z0 + z1) / 2] as [number, number, number],
+    size: [x1 - x0, 2.75, z1 - z0] as [number, number, number],
+  })), { name: 'Hall', center: [6.8, 1.375, -4.6], size: [7.4, 2.75, 2.5] }];
+}
 
 type Polygon = number[][];
 function split(polygon: Polygon, axis: number, plane: number, sign: number): [Polygon, Polygon] {
@@ -36,10 +44,7 @@ function split(polygon: Polygon, axis: number, plane: number, sign: number): [Po
 
 /** Split only the render geometry. Interpolate every UV set, preserving the GI cache. */
 export function apartmentReflectionRooms(sources: Mesh[], sourceMaterials: PBRMaterial[]) {
-  const rooms: ReflectionRoom[] = regions.map(({ name, bounds: [x0, x1, z0, z1] }) => ({
-    name, center: [(x0 + x1) / 2, 1.375, (z0 + z1) / 2], size: [x1 - x0, 2.75, z1 - z0], materials: [],
-  }));
-  rooms.push({ name: 'Hall', center: [6.8, 1.375, -4.6], size: [7.4, 2.75, 2.5], materials: [] });
+  const rooms: ReflectionRoom[] = apartmentReflectionLayout().map(region => ({ ...region, materials: [] }));
   const meshes: Mesh[] = [], materials: PBRMaterial[] = [];
   for (const source of sources) {
     const kinds = ['position', ...source.getVerticesDataKinds().filter(kind => kind !== 'position')];

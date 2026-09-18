@@ -1,5 +1,5 @@
 import {
-  Color3, Color4, Constants, DirectionalLight, Engine, ImageProcessingConfiguration,
+  Color3, Color4, Constants, DirectionalLight, Engine,
   Light, Material, Mesh, PBRMaterial, PointLight, RawTexture, Scene, ShadowGenerator, Texture,
   UniversalCamera, Vector3, VertexData, WebGPUEngine,
 } from '@babylonjs/core';
@@ -8,6 +8,7 @@ import { lighting, skyDisplay, sunInterval, type SwitchMode } from './lighting';
 import { navigation } from './navigation';
 import { CachedTransfer } from './cached-transfer';
 import { RoomReflections } from './reflections';
+import { configureDisplay, createBloom } from '../graphics/display';
 import { loadCouch } from './couch-study';
 import { ApartmentLightmap } from '../apartment/lightmap';
 import './style.css';
@@ -84,13 +85,9 @@ async function start() {
   const scene = new Scene(engine);
   scene.useRightHandedSystem = true;
   scene.collisionsEnabled = true;
-  const display = scene.imageProcessingConfiguration;
-  display.toneMappingEnabled = true;
-  display.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
-  display.exposure = 1 / .6;
-  display.ditheringEnabled = true;
-  display.ditheringIntensity = 1 / 255;
+  const display = configureDisplay(scene);
   const camera = new UniversalCamera('Comparison camera', Vector3.Zero(), scene);
+  const bloom = query.has('prepareTransfer') ? undefined : createBloom(scene, camera);
   camera.inputs.clear();
   camera.inertia = 0;
   camera.minZ = .05;
@@ -119,7 +116,7 @@ async function start() {
     material.brdf.baseDiffuseModel = Constants.MATERIAL_DIFFUSE_MODEL_LAMBERT;
     material.maxSimultaneousLights = 3;
     material.lightmapTexture = skyMap;
-    new ComparisonLightmaps(material, basis);
+    new ComparisonLightmaps(material, basis, true);
     return material;
   });
   const meshes = (testingCouch ? data.meshes.slice(0, 2) : data.meshes).map(source => {
@@ -147,7 +144,7 @@ async function start() {
       material.maxSimultaneousLights = 3;
       if (!material.needAlphaBlending()) {
         material.lightmapTexture = skyMap;
-        new ApartmentLightmap(material, { get texture() { return basis.cascadeMap; }, get ready() { return basis.useCascades; }, sky: 0 });
+        new ApartmentLightmap(material, { get texture() { return basis.cascadeMap; }, get ready() { return basis.useCascades; }, sky: 0 }, true);
       }
     }
     materials.push(...couch.materials); meshes.push(...couch.meshes);
@@ -175,16 +172,16 @@ async function start() {
     return light;
   });
   const preparingTransfer = new URLSearchParams(location.search).has('prepareTransfer');
-  const reflections = new RoomReflections(scene, meshes.filter(mesh => mesh.material !== materials[0]),
+  const reflections = new RoomReflections(scene, testingCouch ? meshes : meshes.filter(mesh => mesh.material !== materials[0]),
     [{ name: 'Comparison room', center: [0, 1.5, 0], size: [6, 3, 6], materials }], materials);
-  reflections.setEnabled(!preparingTransfer && !testingCouch);
+  reflections.setEnabled(!preparingTransfer);
   let transfer: CachedTransfer | undefined;
   let transferError = '';
   if (engine instanceof WebGPUEngine && !preparingTransfer) {
     try {
       engine.enableGPUTimingMeasurements = !!engine.getCaps().timerQuery;
       const cache = testingCouch ? couchStudy + '/corrected/transfer.bin.gz' : 'transfer.bin.gz';
-      transfer = new CachedTransfer(scene, engine, data, base + cache);
+      transfer = new CachedTransfer(scene, engine, data, base + cache, 1, true, true);
       basis.cascadeMap = transfer.texture;
     } catch (error) { transferError = String(error); console.warn('Cached diffuse unavailable.', error); }
   }
@@ -230,8 +227,8 @@ async function start() {
     sun.diffuse.set(...state.color as Vec3); sun.specular.copyFrom(sun.diffuse);
     sunShadow.getShadowMap()!.resetRefreshCounter();
     fixtures.forEach((light, index) => { light.intensity = state.on ? data.fixtures[index].intensity : 0; });
-    // Clear colour bypasses image processing; show the same exposed sky as the reference.
-    scene.clearColor = new Color4(...skyDisplay(data.sky.map(value => value * state.sky) as Vec3), 1);
+    const sky = data.sky.map(value => value * state.sky) as Vec3;
+    scene.clearColor = new Color4(...(display.applyByPostProcess ? sky : skyDisplay(sky)), 1);
     const minutes = Math.round(hour * 60);
     element('time-label').textContent = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
     updateStatus();
@@ -288,7 +285,7 @@ async function start() {
       },
     });
   }
-  window.addEventListener('pagehide', () => { observer.disconnect(); reflections.dispose(); transfer?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
+  window.addEventListener('pagehide', () => { observer.disconnect(); bloom?.dispose(); reflections.dispose(); transfer?.dispose(); scene.dispose(); activeEngine.dispose(); }, { once: true });
 }
 
 start().catch(error => { console.error(error); status.textContent = String(error); });
